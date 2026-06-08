@@ -33,10 +33,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter{
             return;
         }
         String token = header.substring(7); // strip "Bearer "
+        // If the token is valid, extract the username and load user details, 
+        // then set the authentication in the security context.
         if (jwtService.isValid(token)) {
             String username = jwtService.extractUsername(token);
+            // Load user details from the database using the username extracted from the token.
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-
+            // Create an authentication token with the user details and set it in the security context.
             UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
                     userDetails, null, userDetails.getAuthorities());

@@ -18,8 +18,9 @@ public class JWTUtil {
         private final static SecretKey key = new SecretKeySpec(
             System.getenv("AUTHENTICATION_SECRET_KEY")==null?"test-secret-key-for-junit-only-1234567890".getBytes(StandardCharsets.UTF_8):System.getenv("AUTHENTICATION_SECRET_KEY").getBytes(StandardCharsets.UTF_8),
             "HmacSHA256");
+        // Token valid for 7 days
         private static final long EXPIRATION_MS = 1000 * 60 * 60 * 24 * 7;
-        
+        // Generate a JWT token for the given username
         public static String generateToken(String username) {
             long now = System.currentTimeMillis();
             return Jwts.builder()
@@ -30,11 +31,11 @@ public class JWTUtil {
                 .compact();
         }
 
-        public String extractUsername(String token) {
+    public String extractUsername(String token) {
             return parseClaims(token).getSubject();
-        }
-
-        public boolean isValid(String token) {
+    }
+    // Check if the token is valid (signature is correct and not expired)
+    public boolean isValid(String token) {
         try {
             parseClaims(token); // throws if signature is wrong or token expired
             return true;
@@ -42,7 +43,7 @@ public class JWTUtil {
             return false;
         }
     }
-
+    // Parse the JWT token and return the claims
         private Claims parseClaims(String token) {
         return Jwts.parser()
             .verifyWith(key)

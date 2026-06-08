@@ -1,0 +1,322 @@
+2026-06-07T00:17:15.894-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=1h1m6s475ms).
+2026-06-07T00:34:31.851-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m15s926ms).
+2026-06-07T00:51:22.557-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s701ms).
+2026-06-07T00:52:17.476-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s920ms).
+2026-06-07T01:00:01.303-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=7m43s827ms).
+2026-06-07T01:00:56.215-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s912ms).
+2026-06-07T01:01:51.147-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s931ms).
+2026-06-07T01:18:18.778-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m27s632ms).
+2026-06-07T01:34:14.518-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m55s740ms).
+2026-06-07T01:51:05.235-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s708ms).
+2026-06-07T01:52:00.166-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s931ms).
+2026-06-07T02:08:20.805-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s639ms).
+2026-06-07T02:11:33.526-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=2m42s713ms).
+2026-06-07T02:27:28.515-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m54s989ms).
+2026-06-07T02:44:37.756-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=17m9s241ms).
+2026-06-07T03:15:58.771-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=31m21s15ms).
+2026-06-07T03:50:49.223-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=34m50s452ms).
+2026-06-07T04:07:45.023-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m55s792ms).
+2026-06-07T04:23:40.005-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m54s982ms).
+2026-06-07T04:24:34.932-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s927ms).
+2026-06-07T04:40:29.910-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m54s978ms).
+2026-06-07T04:57:29.522-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m29s582ms).
+2026-06-07T05:11:05.272-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=13m5s739ms).
+2026-06-07T05:12:00.180-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s907ms).
+2026-06-07T05:27:56.044-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m55s865ms).
+2026-06-07T05:28:50.343-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s299ms).
+2026-06-07T05:29:45.257-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s913ms).
+2026-06-07T05:46:23.615-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m38s359ms).
+2026-06-07T05:47:18.528-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s913ms).
+2026-06-07T06:00:59.708-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=13m41s180ms).
+2026-06-07T06:01:54.631-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s923ms).
+2026-06-07T06:19:19.999-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=17m25s368ms).
+2026-06-07T06:35:08.668-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m48s668ms).
+2026-06-07T06:49:44.149-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=14m35s482ms).
+2026-06-07T07:06:10.857-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m55s922ms).
+2026-06-07T07:07:30.706-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=1m19s849ms).
+2026-06-07T07:27:32.916-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=19m32s199ms).
+2026-06-07T07:28:27.848-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s931ms).
+2026-06-07T07:44:53.010-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m54s973ms).
+2026-06-07T07:48:52.905-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=3m29s877ms).
+2026-06-07T08:02:33.803-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=13m40s898ms).
+2026-06-07T08:19:23.504-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m19s699ms).
+2026-06-07T08:36:13.417-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m19s910ms).
+2026-06-07T08:37:33.217-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=1m19s801ms).
+2026-06-07T08:53:59.087-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m55s862ms).
+2026-06-07T09:03:12.688-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=9m13s602ms).
+2026-06-07T09:20:34.408-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=17m21s720ms).
+2026-06-07T09:37:49.964-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m45s554ms).
+2026-06-07T09:54:40.697-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s725ms).
+2026-06-07T10:04:04.390-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=9m23s694ms).
+2026-06-07T10:20:55.221-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s741ms).
+2026-06-07T10:36:50.897-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m55s676ms).
+2026-06-07T10:37:45.817-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s920ms).
+2026-06-07T10:53:41.549-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m55s732ms).
+2026-06-07T10:55:01.390-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=1m19s841ms).
+2026-06-07T11:00:04.258-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=4m32s858ms).
+2026-06-07T11:05:23.201-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=4m48s931ms).
+2026-06-07T11:21:43.833-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s632ms).
+2026-06-07T11:38:33.854-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m19s900ms).
+2026-06-07T11:55:24.463-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s602ms).
+2026-06-07T12:06:20.760-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=10m26s298ms).
+2026-06-07T12:16:45.572-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=9m24s807ms).
+2026-06-07T12:33:36.183-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s609ms).
+2026-06-07T12:34:31.104-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s921ms).
+2026-06-07T12:50:38.366-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m7s262ms).
+2026-06-07T13:07:29.083-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s707ms).
+2026-06-07T13:23:54.848-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m55s756ms).
+2026-06-07T13:40:15.557-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s709ms).
+2026-06-07T13:57:05.437-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m19s869ms).
+2026-06-07T14:07:46.412-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=10m40s975ms).
+2026-06-07T14:08:41.323-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s911ms).
+2026-06-07T14:25:06.301-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m54s969ms).
+2026-06-07T14:41:26.191-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m19s890ms).
+2026-06-07T14:58:42.817-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m46s614ms).
+2026-06-07T15:02:53.521-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=3m40s692ms).
+2026-06-07T15:09:11.967-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=5m48s439ms).
+2026-06-07T15:25:32.711-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s744ms).
+2026-06-07T15:42:23.436-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s719ms).
+2026-06-07T15:59:08.081-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m14s638ms).
+2026-06-07T16:10:06.521-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=10m58s440ms).
+2026-06-07T16:26:02.345-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m55s824ms).
+2026-06-07T16:26:57.269-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s924ms).
+2026-06-07T16:43:18.059-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s790ms).
+2026-06-07T17:00:07.960-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m19s889ms).
+2026-06-07T17:11:01.250-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=10m23s286ms).
+2026-06-07T17:27:02.101-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m851ms).
+2026-06-07T17:27:56.900-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s799ms).
+2026-06-07T17:43:52.745-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m55s845ms).
+2026-06-07T17:44:47.673-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s928ms).
+2026-06-07T18:01:08.241-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m20s568ms).
+2026-06-07T18:28:20.885-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=26m42s633ms).
+2026-06-07T19:13:11.164-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=44m20s278ms).
+2026-06-07T19:29:06.930-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m55s766ms).
+2026-06-07T19:30:01.874-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s944ms).
+2026-06-07T19:46:22.186-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=15m40s148ms).
+2026-06-07T20:04:30.362-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=16m8s150ms).
+2026-06-07T20:05:25.262-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=54s900ms).
+2026-06-07T20:14:16.766-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=8m51s503ms).
+2026-06-07T20:24:57.032-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=10m10s263ms).
+2026-06-07T20:30:29.950-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=5m32s918ms).
+2026-06-07T20:33:44.737-04:00  WARN 52430 --- [generic_erp] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=2m42s159ms).
+2026-06-07T20:54:13.180-04:00 DEBUG 52430 --- [generic_erp] [http-nio-8080-exec-9] org.hibernate.SQL                        : 
+    /* SELECT
+        u 
+    FROM
+        User u 
+    WHERE
+        u.username = :username */ select
+            u1_0.id,
+            u1_0.create_date,
+            u1_0.display_name,
+            u1_0.email,
+            u1_0.failed_attempted,
+            u1_0.locked_until,
+            u1_0.password,
+            u1_0.status,
+            u1_0.username 
+        from
+            user_tb u1_0 
+        where
+            u1_0.username=?
+2026-06-07T20:54:13.225-04:00 DEBUG 52430 --- [generic_erp] [http-nio-8080-exec-9] org.hibernate.SQL                        : 
+    /* SELECT
+        u 
+    FROM
+        UserRole u 
+    WHERE
+        u.userId = :userId */ select
+            ur1_0.id,
+            ur1_0.create_date,
+            ur1_0.role_id,
+            ur1_0.user_id 
+        from
+            user_roles_tb ur1_0 
+        where
+            ur1_0.user_id=?
+2026-06-07T20:54:13.233-04:00 DEBUG 52430 --- [generic_erp] [http-nio-8080-exec-9] o.s.web.servlet.DispatcherServlet        : POST "/api/auth/login", parameters={}
+2026-06-07T20:54:13.235-04:00 DEBUG 52430 --- [generic_erp] [http-nio-8080-exec-9] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped to com.gsgd.generic_erp.controller.AuthenticationController#postMethodName(AuthenticationRequest)
+2026-06-07T20:54:13.268-04:00 DEBUG 52430 --- [generic_erp] [http-nio-8080-exec-9] m.m.a.RequestResponseBodyMethodProcessor : Read "application/json;charset=UTF-8" to [AuthenticationRequest[username=genesisyoung, password=admin0904]]
+2026-06-07T20:54:13.585-04:00 DEBUG 52430 --- [generic_erp] [http-nio-8080-exec-9] org.hibernate.SQL                        : 
+    /* SELECT
+        u 
+    FROM
+        User u 
+    WHERE
+        u.username = :username */ select
+            u1_0.id,
+            u1_0.create_date,
+            u1_0.display_name,
+            u1_0.email,
+            u1_0.failed_attempted,
+            u1_0.locked_until,
+            u1_0.password,
+            u1_0.status,
+            u1_0.username 
+        from
+            user_tb u1_0 
+        where
+            u1_0.username=?
+2026-06-07T20:54:13.587-04:00 DEBUG 52430 --- [generic_erp] [http-nio-8080-exec-9] org.hibernate.SQL                        : 
+    /* SELECT
+        u 
+    FROM
+        UserRole u 
+    WHERE
+        u.userId = :userId */ select
+            ur1_0.id,
+            ur1_0.create_date,
+            ur1_0.role_id,
+            ur1_0.user_id 
+        from
+            user_roles_tb ur1_0 
+        where
+            ur1_0.user_id=?
+2026-06-07T20:54:13.785-04:00 DEBUG 52430 --- [generic_erp] [http-nio-8080-exec-9] m.m.a.RequestResponseBodyMethodProcessor : Using 'application/json', given [*/*] and supported [application/json, application/*+json]
+2026-06-07T20:54:13.786-04:00 DEBUG 52430 --- [generic_erp] [http-nio-8080-exec-9] m.m.a.RequestResponseBodyMethodProcessor : Writing [BasicResponse(status=200, message=Login successful, data=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJnZW5lc2lzeW (truncated)...]
+2026-06-07T20:54:13.791-04:00 DEBUG 52430 --- [generic_erp] [http-nio-8080-exec-9] o.s.web.servlet.DispatcherServlet        : Completed 200 OK
+2026-06-07T21:01:43.179-04:00  INFO 52430 --- [generic_erp] [SpringApplicationShutdownHook] o.s.boot.tomcat.GracefulShutdown         : Commencing graceful shutdown. Waiting for active requests to complete
+2026-06-07T21:01:45.195-04:00  INFO 52430 --- [generic_erp] [tomcat-shutdown] o.s.boot.tomcat.GracefulShutdown         : Graceful shutdown complete
+2026-06-07T21:01:45.223-04:00  INFO 52430 --- [generic_erp] [SpringApplicationShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-06-07T21:01:45.226-04:00  INFO 52430 --- [generic_erp] [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-06-07T21:01:45.228-04:00  INFO 52430 --- [generic_erp] [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+2026-06-07T21:01:54.812-04:00  INFO 55754 --- [generic_erp] [main] c.g.generic_erp.GenericErpApplication    : Starting GenericErpApplication using Java 17.0.12 with PID 55754 (/Users/genesisyoung/Documents/Workstation/generic_erp/target/classes started by genesisyoung in /Users/genesisyoung/Documents/Workstation/generic_erp)
+2026-06-07T21:01:54.816-04:00  INFO 55754 --- [generic_erp] [main] c.g.generic_erp.GenericErpApplication    : No active profile set, falling back to 1 default profile: "default"
+2026-06-07T21:01:55.286-04:00  INFO 55754 --- [generic_erp] [main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-06-07T21:01:55.287-04:00  INFO 55754 --- [generic_erp] [main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JDBC repositories in DEFAULT mode.
+2026-06-07T21:01:55.312-04:00  INFO 55754 --- [generic_erp] [main] .RepositoryConfigurationExtensionSupport : Spring Data JDBC - Could not safely identify store assignment for repository candidate interface com.gsgd.generic_erp.repository.user.ActionPermissionRepository; If you want this repository to be a JDBC repository, consider annotating your entities with one of these annotations: org.springframework.data.relational.core.mapping.Table.
+2026-06-07T21:01:55.313-04:00  INFO 55754 --- [generic_erp] [main] .RepositoryConfigurationExtensionSupport : Spring Data JDBC - Could not safely identify store assignment for repository candidate interface com.gsgd.generic_erp.repository.user.ActionRepository; If you want this repository to be a JDBC repository, consider annotating your entities with one of these annotations: org.springframework.data.relational.core.mapping.Table.
+2026-06-07T21:01:55.313-04:00  INFO 55754 --- [generic_erp] [main] .RepositoryConfigurationExtensionSupport : Spring Data JDBC - Could not safely identify store assignment for repository candidate interface com.gsgd.generic_erp.repository.user.DepartmentRepository; If you want this repository to be a JDBC repository, consider annotating your entities with one of these annotations: org.springframework.data.relational.core.mapping.Table.
+2026-06-07T21:01:55.314-04:00  INFO 55754 --- [generic_erp] [main] .RepositoryConfigurationExtensionSupport : Spring Data JDBC - Could not safely identify store assignment for repository candidate interface com.gsgd.generic_erp.repository.user.PermissionRepository; If you want this repository to be a JDBC repository, consider annotating your entities with one of these annotations: org.springframework.data.relational.core.mapping.Table.
+2026-06-07T21:01:55.314-04:00  INFO 55754 --- [generic_erp] [main] .RepositoryConfigurationExtensionSupport : Spring Data JDBC - Could not safely identify store assignment for repository candidate interface com.gsgd.generic_erp.repository.user.RolePermissionRepository; If you want this repository to be a JDBC repository, consider annotating your entities with one of these annotations: org.springframework.data.relational.core.mapping.Table.
+2026-06-07T21:01:55.315-04:00  INFO 55754 --- [generic_erp] [main] .RepositoryConfigurationExtensionSupport : Spring Data JDBC - Could not safely identify store assignment for repository candidate interface com.gsgd.generic_erp.repository.user.RoleRepository; If you want this repository to be a JDBC repository, consider annotating your entities with one of these annotations: org.springframework.data.relational.core.mapping.Table.
+2026-06-07T21:01:55.315-04:00  INFO 55754 --- [generic_erp] [main] .RepositoryConfigurationExtensionSupport : Spring Data JDBC - Could not safely identify store assignment for repository candidate interface com.gsgd.generic_erp.repository.user.UserDepartmentRepository; If you want this repository to be a JDBC repository, consider annotating your entities with one of these annotations: org.springframework.data.relational.core.mapping.Table.
+2026-06-07T21:01:55.316-04:00  INFO 55754 --- [generic_erp] [main] .RepositoryConfigurationExtensionSupport : Spring Data JDBC - Could not safely identify store assignment for repository candidate interface com.gsgd.generic_erp.repository.user.UserInfoRepository; If you want this repository to be a JDBC repository, consider annotating your entities with one of these annotations: org.springframework.data.relational.core.mapping.Table.
+2026-06-07T21:01:55.316-04:00  INFO 55754 --- [generic_erp] [main] .RepositoryConfigurationExtensionSupport : Spring Data JDBC - Could not safely identify store assignment for repository candidate interface com.gsgd.generic_erp.repository.user.UserRepository; If you want this repository to be a JDBC repository, consider annotating your entities with one of these annotations: org.springframework.data.relational.core.mapping.Table.
+2026-06-07T21:01:55.317-04:00  INFO 55754 --- [generic_erp] [main] .RepositoryConfigurationExtensionSupport : Spring Data JDBC - Could not safely identify store assignment for repository candidate interface com.gsgd.generic_erp.repository.user.UserRoleRepository; If you want this repository to be a JDBC repository, consider annotating your entities with one of these annotations: org.springframework.data.relational.core.mapping.Table.
+2026-06-07T21:01:55.317-04:00  INFO 55754 --- [generic_erp] [main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 27 ms. Found 0 JDBC repository interfaces.
+2026-06-07T21:01:55.323-04:00  INFO 55754 --- [generic_erp] [main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-06-07T21:01:55.323-04:00  INFO 55754 --- [generic_erp] [main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-06-07T21:01:55.347-04:00  INFO 55754 --- [generic_erp] [main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 19 ms. Found 10 JPA repository interfaces.
+2026-06-07T21:01:55.644-04:00  INFO 55754 --- [generic_erp] [main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-06-07T21:01:55.650-04:00  INFO 55754 --- [generic_erp] [main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-06-07T21:01:55.650-04:00  INFO 55754 --- [generic_erp] [main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-06-07T21:01:55.677-04:00  INFO 55754 --- [generic_erp] [main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 823 ms
+2026-06-07T21:01:55.996-04:00  INFO 55754 --- [generic_erp] [main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-06-07T21:01:56.012-04:00  INFO 55754 --- [generic_erp] [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-06-07T21:01:56.194-04:00  INFO 55754 --- [generic_erp] [main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@1c382179
+2026-06-07T21:01:56.195-04:00  INFO 55754 --- [generic_erp] [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-06-07T21:01:56.774-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table action_permission_tb 
+       modify column action_id bigint not null
+2026-06-07T21:01:56.801-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table action_permission_tb 
+       modify column permission_id bigint not null
+2026-06-07T21:01:56.803-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table actions_tb 
+       modify column id bigint not null auto_increment
+2026-06-07T21:01:56.805-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table department_tb 
+       modify column id bigint not null auto_increment
+2026-06-07T21:01:56.806-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table permission_tb 
+       modify column id bigint not null auto_increment
+2026-06-07T21:01:56.807-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table role_permission_tb 
+       modify column permission_id bigint not null
+2026-06-07T21:01:56.809-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table role_permission_tb 
+       modify column role_id bigint not null
+2026-06-07T21:01:56.809-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table role_tb 
+       modify column id bigint not null auto_increment
+2026-06-07T21:01:56.810-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table user_departments_tb 
+       modify column dept_id bigint not null
+2026-06-07T21:01:56.811-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table user_departments_tb 
+       modify column user_id bigint not null
+2026-06-07T21:01:56.812-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table user_info_tb 
+       modify column user_id bigint not null
+2026-06-07T21:01:56.813-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table user_login_log_tb 
+       modify column user_id bigint
+2026-06-07T21:01:56.813-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table user_refresh_token_tb 
+       modify column user_id bigint not null
+2026-06-07T21:01:56.814-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table user_roles_tb 
+       modify column role_id bigint not null
+2026-06-07T21:01:56.815-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table user_roles_tb 
+       modify column user_id bigint not null
+2026-06-07T21:01:56.816-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table user_tb 
+       modify column id bigint not null auto_increment
+2026-06-07T21:01:56.817-04:00 DEBUG 55754 --- [generic_erp] [main] org.hibernate.SQL                        : 
+    alter table user_tb 
+       modify column password varchar(50) not null
+2026-06-07T21:01:56.850-04:00  INFO 55754 --- [generic_erp] [main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-06-07T21:01:56.880-04:00  INFO 55754 --- [generic_erp] [main] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-06-07T21:01:56.971-04:00 DEBUG 55754 --- [generic_erp] [main] o.s.b.w.s.ServletContextInitializerBeans : Mapping filters: webMvcObservationFilter urls=[/*] order=-2147483647, springSecurityFilterChain urls=[/*] order=-100, characterEncodingFilter urls=[/*] order=-2147483648, formContentFilter urls=[/*] order=-9900, requestContextFilter urls=[/*] order=-105, jwtAuthenticationFilter urls=[/*] order=2147483647
+2026-06-07T21:01:56.972-04:00 DEBUG 55754 --- [generic_erp] [main] o.s.b.w.s.ServletContextInitializerBeans : Mapping servlets: dispatcherServlet urls=[/]
+2026-06-07T21:01:56.984-04:00 DEBUG 55754 --- [generic_erp] [main] o.s.w.f.ServerHttpObservationFilter      : Filter 'webMvcObservationFilter' configured for use
+2026-06-07T21:01:57.023-04:00  WARN 55754 --- [generic_erp] [main] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-06-07T21:01:57.062-04:00  INFO 55754 --- [generic_erp] [main] eAuthenticationProviderManagerConfigurer : Global AuthenticationManager configured with AuthenticationProvider bean with name authenticationProvider
+2026-06-07T21:01:57.062-04:00  WARN 55754 --- [generic_erp] [main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with an AuthenticationProvider bean. UserDetailsService beans will not be used by Spring Security for automatically configuring username/password login. Consider removing the AuthenticationProvider bean. Alternatively, consider using the UserDetailsService in a manually instantiated DaoAuthenticationProvider. If the current configuration is intentional, to turn off this warning, increase the logging level of 'org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer' to ERROR
+2026-06-07T21:01:57.161-04:00 DEBUG 55754 --- [generic_erp] [main] s.w.s.m.m.a.RequestMappingHandlerMapping : 4 mappings in 'requestMappingHandlerMapping'
+2026-06-07T21:01:57.180-04:00 DEBUG 55754 --- [generic_erp] [main] o.s.w.s.handler.SimpleUrlHandlerMapping  : Patterns [/webjars/**, /**] in 'resourceHandlerMapping'
+2026-06-07T21:01:57.195-04:00 DEBUG 55754 --- [generic_erp] [main] s.w.s.m.m.a.RequestMappingHandlerAdapter : ControllerAdvice beans: 0 @ModelAttribute, 0 @InitBinder, 2 RequestBodyAdvice, 1 ResponseBodyAdvice
+2026-06-07T21:01:57.217-04:00 DEBUG 55754 --- [generic_erp] [main] .m.m.a.ExceptionHandlerExceptionResolver : ControllerAdvice beans: 0 @ExceptionHandler, 1 ResponseBodyAdvice
+2026-06-07T21:01:57.442-04:00  INFO 55754 --- [generic_erp] [main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint beneath base path '/actuator'
+2026-06-07T21:01:57.480-04:00  INFO 55754 --- [generic_erp] [main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
+2026-06-07T21:01:57.486-04:00  INFO 55754 --- [generic_erp] [main] c.g.generic_erp.GenericErpApplication    : Started GenericErpApplication in 2.894 seconds (process running for 3.257)
+2026-06-07T21:01:58.001-04:00  INFO 55754 --- [generic_erp] [RMI TCP Connection(2)-127.0.0.1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-06-07T21:01:58.001-04:00  INFO 55754 --- [generic_erp] [RMI TCP Connection(2)-127.0.0.1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-06-07T21:01:58.001-04:00 DEBUG 55754 --- [generic_erp] [RMI TCP Connection(2)-127.0.0.1] o.s.web.servlet.DispatcherServlet        : Detected StandardServletMultipartResolver
+2026-06-07T21:01:58.001-04:00 DEBUG 55754 --- [generic_erp] [RMI TCP Connection(2)-127.0.0.1] o.s.web.servlet.DispatcherServlet        : Detected AcceptHeaderLocaleResolver
+2026-06-07T21:01:58.002-04:00 DEBUG 55754 --- [generic_erp] [RMI TCP Connection(2)-127.0.0.1] o.s.web.servlet.DispatcherServlet        : Detected org.springframework.web.servlet.view.DefaultRequestToViewNameTranslator@55154761
+2026-06-07T21:01:58.003-04:00 DEBUG 55754 --- [generic_erp] [RMI TCP Connection(2)-127.0.0.1] o.s.web.servlet.DispatcherServlet        : Detected org.springframework.web.servlet.support.SessionFlashMapManager@e7529ac
+2026-06-07T21:01:58.003-04:00 DEBUG 55754 --- [generic_erp] [RMI TCP Connection(2)-127.0.0.1] o.s.web.servlet.DispatcherServlet        : enableLoggingRequestDetails='false': request parameters and headers will be masked to prevent unsafe logging of potentially sensitive data
+2026-06-07T21:01:58.003-04:00  INFO 55754 --- [generic_erp] [RMI TCP Connection(2)-127.0.0.1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 2 ms
+2026-06-07T21:02:23.823-04:00 DEBUG 55754 --- [generic_erp] [http-nio-8080-exec-2] org.hibernate.SQL                        : 
+    /* SELECT
+        u 
+    FROM
+        User u 
+    WHERE
+        u.username = :username */ select
+            u1_0.id,
+            u1_0.create_date,
+            u1_0.display_name,
+            u1_0.email,
+            u1_0.failed_attempted,
+            u1_0.locked_until,
+            u1_0.password,
+            u1_0.status,
+            u1_0.username 
+        from
+            user_tb u1_0 
+        where
+            u1_0.username=?
+2026-06-07T21:02:23.841-04:00 DEBUG 55754 --- [generic_erp] [http-nio-8080-exec-2] org.hibernate.SQL                        : 
+    /* SELECT
+        u 
+    FROM
+        UserRole u 
+    WHERE
+        u.userId = :userId */ select
+            ur1_0.id,
+            ur1_0.create_date,
+            ur1_0.role_id,
+            ur1_0.user_id 
+        from
+            user_roles_tb ur1_0 
+        where
+            ur1_0.user_id=?
+2026-06-07T21:02:23.848-04:00 DEBUG 55754 --- [generic_erp] [http-nio-8080-exec-2] o.s.web.servlet.DispatcherServlet        : GET "/api/users/test", parameters={}
+2026-06-07T21:02:23.851-04:00 DEBUG 55754 --- [generic_erp] [http-nio-8080-exec-2] s.w.s.m.m.a.RequestMappingHandlerMapping : Mapped to com.gsgd.generic_erp.controller.UserController#testRequest()
+2026-06-07T21:02:23.861-04:00 DEBUG 55754 --- [generic_erp] [http-nio-8080-exec-2] m.m.a.RequestResponseBodyMethodProcessor : Using 'text/plain', given [*/*] and supported [text/plain, */*, application/json, application/*+json]
+2026-06-07T21:02:23.861-04:00 DEBUG 55754 --- [generic_erp] [http-nio-8080-exec-2] m.m.a.RequestResponseBodyMethodProcessor : Writing ["Acessed protected endpoint successfully!"]
+2026-06-07T21:02:23.864-04:00 DEBUG 55754 --- [generic_erp] [http-nio-8080-exec-2] o.s.web.servlet.DispatcherServlet        : Completed 200 OK

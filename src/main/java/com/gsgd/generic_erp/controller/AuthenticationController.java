@@ -20,9 +20,13 @@ public class AuthenticationController {
     private  AuthenticationManager authenticationManager;
     @PostMapping("/login")
     public BasicResponse postMethodName(@RequestBody AuthenticationRequest entity) {
-        Authentication auth= authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(entity.username, entity.password));
-        String token=JWTUtil.generateToken(auth.getName()) ;
-        return new BasicResponse(200, "Login successful", token);
+        try {
+            Authentication auth= authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(entity.username, entity.password));
+            String token=JWTUtil.generateToken(auth.getName()) ;
+            return new BasicResponse(200, "Login successful", token);
+        } catch (Exception e) {
+            return new BasicResponse(401, "Authentication failed", null);
+        }
     }
     public record AuthenticationRequest(String username, String password) {
     }     

@@ -15,6 +15,8 @@ spring:
         "[use_sql_comments]": true
         "[dialect]": org.hibernate.dialect.MySQLDialect
 logging:
+  file:
+    name: generic_erp.log
   level:
     "[org.hibernate.SQL]": DEBUG
     "[org.hibernate.type.descriptor.sql.BasicBinder]": TRACE
