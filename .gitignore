@@ -34,3 +34,7 @@ build/
 
 # Environment variables
 .env
+
+
+# Log
+generic_erp.log*

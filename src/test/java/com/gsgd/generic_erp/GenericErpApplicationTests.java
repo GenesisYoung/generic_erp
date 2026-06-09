@@ -10,7 +10,8 @@ import org.springframework.test.context.ContextConfiguration;
 @ActiveProfiles("test")
 @ContextConfiguration(classes = { GenericErpApplication.class })
 class GenericErpApplicationTests {
-	private Argon2PasswordEncoder passwordEncoder=new Argon2PasswordEncoder(64, 50, 2, 1 << 16, 4);
+	private Argon2PasswordEncoder passwordEncoder = new Argon2PasswordEncoder(64, 50, 2, 1 << 16, 4);
+
 	@Test
 	void contextLoads() {
 		String password = passwordEncoder.encode("admin0904");

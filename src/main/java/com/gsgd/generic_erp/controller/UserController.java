@@ -6,8 +6,4 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
-    @RequestMapping("/test")
-    public String testRequest() {
-        return "Acessed protected endpoint successfully!";
-    }
 }

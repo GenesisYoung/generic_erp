@@ -1,10 +1,22 @@
 package com.gsgd.generic_erp.entity.user;
 
-import jakarta.persistence.*;
-import lombok.*;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 
 /**
  * Core user account entity.
@@ -34,18 +46,18 @@ public class User {
     @Column(name = "email", length = 50)
     private String email;
 
-    /**
-     * ⚠️ Your schema defines this as varchar(50). BCrypt hashes are exactly 60 chars.
-     * You MUST widen this column to at least varchar(60), ideally varchar(255).
-     */
-    @Column(name = "password", length = 50, nullable = false)
+    @Column(name = "password", length = 255, nullable = false)
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) // Allow setting but not getting the password in JSON
     private String password;
 
     /** true = active, false = disabled */
     @Column(name = "status")
     private Boolean status;
 
-    /** How many consecutive failed login attempts. Reset to 0 after successful login. */
+    /**
+     * How many consecutive failed login attempts. Reset to 0 after successful
+     * login.
+     */
     @Column(name = "failed_attempted")
     private Byte failedAttempted;
 
