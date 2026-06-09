@@ -8,8 +8,8 @@ import javax.crypto.spec.SecretKeySpec;
 
 import org.springframework.stereotype.Service;
 
-import com.gsgd.generic_erp.entity.user.User;
-import com.gsgd.generic_erp.repository.user.UserRepository;
+import com.gsgd.generic_erp.entity.auth.User;
+import com.gsgd.generic_erp.repository.auth.UserRepository;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;

@@ -9,8 +9,8 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import com.gsgd.generic_erp.entity.user.Role;
-import com.gsgd.generic_erp.entity.user.User;
+import com.gsgd.generic_erp.entity.auth.Role;
+import com.gsgd.generic_erp.entity.auth.User;
 
 // This class implements the UserDetails interface 
 // from Spring Security. It serves as a bridge between 
@@ -20,8 +20,7 @@ import com.gsgd.generic_erp.entity.user.User;
 // and their associated roles, which are converted into 
 // GrantedAuthority objects that Spring Security can use 
 // to make access control decisions.
-public class UserDetail implements UserDetails{
-
+public class UserDetail implements UserDetails {
 
     private final User user;
     private final List<Role> roles;
@@ -31,12 +30,11 @@ public class UserDetail implements UserDetails{
         this.roles = roles;
     }
 
-
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return roles.stream()
-        .map(role->new SimpleGrantedAuthority("ROLE_"+role.getRoleName()))
-        .collect(Collectors.toList());
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getRoleName()))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -48,5 +46,5 @@ public class UserDetail implements UserDetails{
     public String getUsername() {
         return user.getUsername();
     }
-    
+
 }

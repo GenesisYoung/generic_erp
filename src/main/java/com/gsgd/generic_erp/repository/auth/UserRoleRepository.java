@@ -1,12 +1,14 @@
-package com.gsgd.generic_erp.repository.user;
+package com.gsgd.generic_erp.repository.auth;
 
-import com.gsgd.generic_erp.entity.user.UserRole;
-import jakarta.transaction.Transactional;
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import com.gsgd.generic_erp.entity.auth.UserRole;
+
+import jakarta.transaction.Transactional;
 
 /**
  * Repository for the UserRole join entity (user_roles_tb).

@@ -1,4 +1,4 @@
-package com.gsgd.generic_erp.entity.user;
+package com.gsgd.generic_erp.entity.auth;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

@@ -1,11 +1,12 @@
-package com.gsgd.generic_erp.repository.user;
-
-import com.gsgd.generic_erp.entity.user.Department;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
+package com.gsgd.generic_erp.repository.auth;
 
 import java.util.List;
 import java.util.Optional;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import com.gsgd.generic_erp.entity.auth.Department;
 
 /**
  * Repository for the Department entity (department_tb).

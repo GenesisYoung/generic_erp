@@ -1,12 +1,14 @@
-package com.gsgd.generic_erp.repository.user;
+package com.gsgd.generic_erp.repository.auth;
 
-import com.gsgd.generic_erp.entity.user.ActionPermission;
-import jakarta.transaction.Transactional;
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import com.gsgd.generic_erp.entity.auth.ActionPermission;
+
+import jakarta.transaction.Transactional;
 
 /**
  * Repository for the ActionPermission join entity (action_permission_tb).

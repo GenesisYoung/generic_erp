@@ -1,10 +1,11 @@
-package com.gsgd.generic_erp.repository.user;
+package com.gsgd.generic_erp.repository.auth;
 
-import com.gsgd.generic_erp.entity.user.UserInfo;
+import java.util.Optional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.Optional;
+import com.gsgd.generic_erp.entity.auth.UserInfo;
 
 /**
  * Repository for the UserInfo entity (user_info_tb).
