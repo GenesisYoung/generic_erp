@@ -1,0 +1,14 @@
+{
+  "properties": [
+    {
+      "name": "security.token.expiracy.refresh",
+      "type": "java.lang.Long",
+      "description": "A description for 'security.token.expiracy.refresh'"
+    },
+    {
+      "name": "security.token.expiracy.access",
+      "type": "java.lang.Long",
+      "description": "A description for 'security.token.expiracy.access'"
+    }
+  ]
+}

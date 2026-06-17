@@ -4,7 +4,6 @@ import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.stereotype.Repository;
 
 import com.gsgd.generic_erp.entity.auth.ActionPermission;
 
@@ -13,7 +12,6 @@ import jakarta.transaction.Transactional;
 /**
  * Repository for the ActionPermission join entity (action_permission_tb).
  */
-@Repository
 public interface ActionPermissionRepository extends JpaRepository<ActionPermission, Long> {
 
     List<ActionPermission> findByPermissionId(Long permissionId);

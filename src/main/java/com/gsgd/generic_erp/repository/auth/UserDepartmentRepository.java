@@ -4,7 +4,6 @@ import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.stereotype.Repository;
 
 import com.gsgd.generic_erp.entity.auth.UserDepartment;
 
@@ -13,7 +12,6 @@ import jakarta.transaction.Transactional;
 /**
  * Repository for the UserDepartment join entity (user_departments_tb).
  */
-@Repository
 public interface UserDepartmentRepository extends JpaRepository<UserDepartment, Long> {
 
     List<UserDepartment> findByUserId(Long userId);

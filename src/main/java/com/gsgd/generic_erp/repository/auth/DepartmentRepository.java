@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 
 import com.gsgd.generic_erp.entity.auth.Department;
 
@@ -13,7 +12,6 @@ import com.gsgd.generic_erp.entity.auth.Department;
  *
  * Departments form a tree via parent_id (null = root).
  */
-@Repository
 public interface DepartmentRepository extends JpaRepository<Department, Long> {
 
     Optional<Department> findByDeptName(String deptName);

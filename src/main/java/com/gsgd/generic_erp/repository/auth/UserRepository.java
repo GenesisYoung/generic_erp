@@ -3,7 +3,6 @@ package com.gsgd.generic_erp.repository.auth;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 
 import com.gsgd.generic_erp.entity.auth.User;
 
@@ -12,7 +11,6 @@ import com.gsgd.generic_erp.entity.auth.User;
  *
  * Primary use case: authentication — look up by username during login.
  */
-@Repository
 public interface UserRepository extends JpaRepository<User, Long> {
 
     /** Used by the authentication provider during login. */
