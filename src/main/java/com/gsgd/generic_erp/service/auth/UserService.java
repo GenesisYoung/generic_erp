@@ -3,7 +3,6 @@ package com.gsgd.generic_erp.service.auth;
 import java.util.List;
 import java.util.stream.Stream;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.dto.UserNavMenuDTO;
@@ -15,13 +14,18 @@ import com.gsgd.generic_erp.util.BasicResponse;
 @Service
 public class UserService {
 
-    @Autowired
-    private UserNavMenuRepository userNavMenuRepository;
-    @Autowired
-    private NavigationMenuRepository navigationMenuRepository;
+    private final UserNavMenuRepository userNavMenuRepository;
+    private final NavigationMenuRepository navigationMenuRepository;
 
+    UserService(UserNavMenuRepository userNavMenuRepository, NavigationMenuRepository navigationMenuRepository) {
+        this.userNavMenuRepository = userNavMenuRepository;
+        this.navigationMenuRepository = navigationMenuRepository;
+    }
+
+    // Fetch side bar menu by using user id
     public BasicResponse fetchNavMenu(Long id) {
-        Stream<Long> userIds = userNavMenuRepository.fetchByUserId(id)
+        // Get u
+        Stream<Long> userIds = userNavMenuRepository.findByUserId(id)
                 .stream()
                 .map(ele -> ele.getNavId());
         List<NavigationMenu> nav = navigationMenuRepository.findAllById(userIds.toList());
@@ -29,4 +33,5 @@ public class UserService {
                 ele.getTitleKey(), ele.getIcon(), ele.getRoute(), ele.getColor())).toList();
         return new BasicResponse(200, "Navigation Menu", menu);
     }
+
 }

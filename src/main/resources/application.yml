@@ -1,5 +1,6 @@
-spring.application.name: generic_erp
 spring:
+  application:
+    name: generic_erp
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -14,6 +15,13 @@ spring:
         "[format_sql]": true
         "[use_sql_comments]": true
         "[dialect]": org.hibernate.dialect.MySQLDialect
+
+security:
+  token:
+    expiracy:
+      access: ${ACCESS_TIMEOUT}
+      refresh: ${REFRESH_TIMEOUT}
+
 logging:
   file:
     name: generic_erp.log

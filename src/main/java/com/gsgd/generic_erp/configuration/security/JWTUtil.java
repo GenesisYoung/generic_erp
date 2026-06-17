@@ -6,6 +6,7 @@ import java.util.Date;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.entity.auth.User;
@@ -24,9 +25,11 @@ public class JWTUtil {
                     : System.getenv("AUTHENTICATION_SECRET_KEY").getBytes(StandardCharsets.UTF_8),
             "HmacSHA256");
     // Refresh token valid for 7 days
-    private static final long REFRESH_TOKEN_EXPIRATION_MS = 1000 * 60 * 60 * 24 * 7;
+    @Value("${security.token.expiracy.refresh}")
+    private static long REFRESH_TOKEN_EXPIRATION_MS;
     // Access token valid for 15 mins
-    private static final long ACCESS_TOKEN_EXPIRATION_MS = 1000 * 60 * 15;
+    @Value("${security.token.expiracy.access}")
+    private static long ACCESS_TOKEN_EXPIRATION_MS;
 
     private UserRepository userRepository;
 

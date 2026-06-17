@@ -11,6 +11,6 @@ import com.gsgd.generic_erp.entity.auth.UserNavMenu;
 @Repository
 public interface UserNavMenuRepository extends JpaRepository<UserNavMenu, Long> {
 
-    @NativeQuery("SELECT * FROM UserNavMenu AS m WHERE m.userId = ?1")
-    List<UserNavMenu> fetchByUserId(Long id);
+    @NativeQuery("SELECT * FROM user_nav_menu AS m WHERE m.user_id = ?1")
+    List<UserNavMenu> findByUserId(Long id);
 }
