@@ -54,6 +54,9 @@ public class User {
     @Column(name = "status")
     private Boolean status;
 
+    @Column(name = "current_session_id", length = 36)
+    private String currentSessionId;
+
     /**
      * How many consecutive failed login attempts. Reset to 0 after successful
      * login.

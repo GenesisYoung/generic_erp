@@ -31,10 +31,11 @@ public class AuthenticationService {
         try {
             Authentication auth = authenticationManager
                     .authenticate(new UsernamePasswordAuthenticationToken(entity.username(), entity.password()));
-            String refreshToken = JWTUtil.generateRefreshToken(auth.getName());
-            String accessToken = JWTUtil.generateAccessToken(auth.getName());
+            String refreshToken = jwtUtil.generateRefreshToken(auth.getName());
+            String accessToken = jwtUtil.generateAccessToken(auth.getName());
             User user = jwtUtil.getUser(entity.username());
-            UserDTO userDTO = new UserDTO(user.getId(), user.getUsername(), user.getEmail(), user.getDisplayName());
+            UserDTO userDTO = new UserDTO(user.getId(), user.getUsername(), user.getEmail(), user.getDisplayName(),
+                    null);
             return new BasicResponse(200, "Login successful",
                     new AuthenticationResponse(new TokenPair(refreshToken, accessToken), userDTO));
         } catch (Exception e) {
@@ -44,9 +45,9 @@ public class AuthenticationService {
 
     public long getExpirationRemaining(HttpServletRequest request) {
         String refreshToken = request.getHeader("Authorization").substring(7);
-        if (jwtUtil.isValid(refreshToken.trim())) {
+        if (jwtUtil.isValid(1, refreshToken.trim())) {
             String token = request.getHeader("Authorization").substring(7); // Remove "Bearer " prefix
-            return JWTUtil.expirationRemaining(token.trim());
+            return jwtUtil.expirationRemaining(1, token.trim());
         } else {
             return -1; // Invalid token
         }
@@ -54,12 +55,12 @@ public class AuthenticationService {
 
     public BasicResponse refreshAccessToken(HttpServletRequest request) {
         String refreshToken = request.getHeader("Authorization").substring(7); // Remove "Bearer " prefix
-        if (!jwtUtil.isValid(refreshToken.trim())) {
+        if (!jwtUtil.isValid(1, refreshToken.trim())) {
             return new BasicResponse(401, "Invalid refresh token", null);
         }
-        String username = jwtUtil.extractUsername(refreshToken.trim());
+        String username = jwtUtil.extractUsername(1, refreshToken.trim());
         if (username != null) {
-            String newAccessToken = JWTUtil.generateAccessToken(username);
+            String newAccessToken = jwtUtil.generateAccessToken(username);
             return new BasicResponse(200, "Token refreshed successfully", newAccessToken);
         } else {
             return new BasicResponse(401, "Invalid refresh token", null);
@@ -68,12 +69,12 @@ public class AuthenticationService {
 
     public BasicResponse refreshRefreshToken(HttpServletRequest request) {
         String refreshToken = request.getHeader("Authorization").substring(7); // Remove "Bearer " prefix
-        if (!jwtUtil.isValid(refreshToken.trim())) {
+        if (!jwtUtil.isValid(1, refreshToken.trim())) {
             return new BasicResponse(401, "Invalid refresh token", null);
         }
-        String username = jwtUtil.extractUsername(refreshToken.trim());
+        String username = jwtUtil.extractUsername(1, refreshToken.trim());
         if (username != null) {
-            String newRefreshToken = JWTUtil.generateRefreshToken(username);
+            String newRefreshToken = jwtUtil.generateRefreshToken(username);
             return new BasicResponse(200, "Token refreshed successfully", newRefreshToken);
         } else {
             return new BasicResponse(401, "Invalid refresh token", null);

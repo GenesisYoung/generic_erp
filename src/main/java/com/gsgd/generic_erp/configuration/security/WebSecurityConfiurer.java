@@ -30,20 +30,21 @@ public class WebSecurityConfiurer {
     }
 
     @Bean
-    SecurityFilterChain filterChain(org.springframework.security.config.annotation.web.builders.HttpSecurity http) throws Exception {
-        http.cors(cors->cors.configurationSource(corsConfigurationSource()))
-        .csrf(csrf->csrf.disable())
-        .sessionManagement(sm->sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests((authz) -> authz
-            // Allow unauthenticated access to login and registration endpoints
-                .requestMatchers("/api/auth/login", "/api/auth/register")
-                .permitAll()
-                // All other endpoints require authentication
-                .anyRequest()
-                .authenticated()
-            )
-            // Add the JWT authentication filter before the default username/password filter
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+    SecurityFilterChain filterChain(org.springframework.security.config.annotation.web.builders.HttpSecurity http)
+            throws Exception {
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests((authz) -> authz
+                        // Allow unauthenticated access to login and registration endpoints
+                        .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh/access",
+                                "/api/auth/refresh/refresh")
+                        .permitAll()
+                        // All other endpoints require authentication
+                        .anyRequest()
+                        .authenticated())
+                // Add the JWT authentication filter before the default username/password filter
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
@@ -57,7 +58,8 @@ public class WebSecurityConfiurer {
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         // Allow all headers
         config.setAllowedHeaders(List.of("*"));
-        // Allow credentials (cookies, authorization headers, etc.) to be included in requests
+        // Allow credentials (cookies, authorization headers, etc.) to be included in
+        // requests
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -65,27 +67,33 @@ public class WebSecurityConfiurer {
         source.registerCorsConfiguration("/**", config);
         return source;
     }
+
     // Configure the authentication provider to use our custom
     // UserDetailsService and password encoder(CustomizedUserDetailServiceImpl)
     @Bean
     public AuthenticationProvider authenticationProvider(
-        UserDetailsService userDetailsService,
-        PasswordEncoder passwordEncoder) {
-        //This userDetailsService is the CustomizedUserDetailServiceImpl class 
-        //that we created to load user details from the database.
+            UserDetailsService userDetailsService,
+            PasswordEncoder passwordEncoder) {
+        // This userDetailsService is the CustomizedUserDetailServiceImpl class
+        // that we created to load user details from the database.
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
         return provider;
     }
 
-    // Configure the authentication manager to use our custom authentication provider
+    // Configure the authentication manager to use our custom authentication
+    // provider
     @Bean
     AuthenticationManager authenticationManager(AuthenticationProvider authenticationProvider) throws Exception {
         return new ProviderManager(authenticationProvider);
     }
-    // Configure the password encoder to use Argon2, which is a secure hashing algorithm for passwords.
-    // The encrytion parameters is the same as the AuthenticationImpl(generate password when creating user) class,
-    // it ensures that the password hashing and verification processes are consistent across the application.
+
+    // Configure the password encoder to use Argon2, which is a secure hashing
+    // algorithm for passwords.
+    // The encrytion parameters is the same as the AuthenticationImpl(generate
+    // password when creating user) class,
+    // it ensures that the password hashing and verification processes are
+    // consistent across the application.
     @Bean
     PasswordEncoder passwordEncoder() {
         return new Argon2PasswordEncoder(64, 128, 2, 1 << 16, 4);

@@ -39,8 +39,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = header.substring(7); // strip "Bearer "
         // If the token is valid, extract the username and load user details,
         // then set the authentication in the security context.
-        if (jwtService.isValid(token)) {
-            String username = jwtService.extractUsername(token);
+        if (jwtService.isValid(0, token)) {
+            String username = jwtService.extractUsername(0, token);
             // Load user details from the database using the username extracted from the
             // token.
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);

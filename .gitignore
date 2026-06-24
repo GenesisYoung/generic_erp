@@ -38,3 +38,6 @@ build/
 
 # Log
 generic_erp.log*
+
+#repository
+/Documents

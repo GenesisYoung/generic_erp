@@ -18,66 +18,75 @@ import io.jsonwebtoken.Jwts;
 
 @Service
 public class JWTUtil {
-    // Replace with a secure, sufficiently long random key in production
-    private final static SecretKey key = new SecretKeySpec(
-            System.getenv("AUTHENTICATION_SECRET_KEY") == null
-                    ? "test-secret-key-for-junit-only-1234567890".getBytes(StandardCharsets.UTF_8)
-                    : System.getenv("AUTHENTICATION_SECRET_KEY").getBytes(StandardCharsets.UTF_8),
-            "HmacSHA256");
-    // Refresh token valid for 7 days
-    @Value("${security.token.expiracy.refresh}")
-    private static long REFRESH_TOKEN_EXPIRATION_MS;
-    // Access token valid for 15 mins
-    @Value("${security.token.expiracy.access}")
-    private static long ACCESS_TOKEN_EXPIRATION_MS;
 
-    private UserRepository userRepository;
+    private final SecretKey keyRefresh;
+    private final SecretKey keyAccess;
+
+    @Value("${security.token.expiracy.refresh}")
+    private long refreshTokenExpirationMs;
+
+    @Value("${security.token.expiracy.access}")
+    private long accessTokenExpirationMs;
+
+    private final UserRepository userRepository;
 
     public JWTUtil(UserRepository userRepository) {
         this.userRepository = userRepository;
+        this.keyRefresh = new SecretKeySpec(
+                System.getenv("AUTHENTICATION_SECRET_KEY_REFRESH") == null
+                        ? "alternative_key_for_refresh_token_732dwddw32cioniso1".getBytes(StandardCharsets.UTF_8)
+                        : System.getenv("AUTHENTICATION_SECRET_KEY_REFRESH").getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256");
+        this.keyAccess = new SecretKeySpec(
+                System.getenv("AUTHENTICATION_SECRET_KEY_ACCESS") == null
+                        ? "alternative_key_for_access_token_21kj414k1flscbh".getBytes(StandardCharsets.UTF_8)
+                        : System.getenv("AUTHENTICATION_SECRET_KEY_ACCESS").getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256");
     }
 
-    // Generate a JWT refresh token for the given username
-    public static String generateRefreshToken(String username) {
+    public String generateRefreshToken(String username) {
         long now = System.currentTimeMillis();
         return Jwts.builder()
                 .subject(username)
                 .issuedAt(new Date(now))
-                .expiration(new Date(now + REFRESH_TOKEN_EXPIRATION_MS))
-                .signWith(key)
+                .expiration(new Date(now + refreshTokenExpirationMs))
+                .signWith(keyRefresh)
                 .compact();
     }
 
-    public static String generateAccessToken(String username) {
+    public String generateAccessToken(String username) {
         long now = System.currentTimeMillis();
         return Jwts.builder()
                 .subject(username)
                 .issuedAt(new Date(now))
-                .expiration(new Date(now + ACCESS_TOKEN_EXPIRATION_MS))
-                .signWith(key)
+                .expiration(new Date(now + accessTokenExpirationMs))
+                .signWith(keyAccess)
                 .compact();
     }
 
     public User getUser(String username) {
-        return userRepository.findByUsername(username).orElse(null); // Password is not stored in the token
+        return userRepository.findByUsername(username).orElse(null);
     }
 
-    public String extractUsername(String token) {
-        return parseClaims(token).getSubject();
+    public String extractUsername(int type, String token) {
+        return parseClaims(type, token).getSubject();
     }
 
-    // Check if the token is valid (signature is correct and not expired)
-    public boolean isValid(String token) {
+    /**
+     * @param type 0 represents access code, 1 represents refresh code
+     * @param type target code
+     */
+    public boolean isValid(int type, String token) {
         try {
-            parseClaims(token); // throws if signature is wrong or token expired
+            parseClaims(type, token);
             return true;
         } catch (JwtException e) {
             return false;
         }
     }
 
-    // Parse the JWT token and return the claims
-    private static Claims parseClaims(String token) {
+    private Claims parseClaims(int type, String token) {
+        SecretKey key = (type == 0) ? keyAccess : keyRefresh;
         return Jwts.parser()
                 .verifyWith(key)
                 .build()
@@ -85,12 +94,10 @@ public class JWTUtil {
                 .getPayload();
     }
 
-    // Calculate the remaining time until the token expires (in milliseconds)
-    public static long expirationRemaining(String token) {
-        Claims claims = parseClaims(token);
+    public long expirationRemaining(int type, String token) {
+        Claims claims = parseClaims(type, token);
         long exp = claims.getExpiration().getTime();
         long now = System.currentTimeMillis();
-        return exp - now <= 0 ? 0 : exp - now;
+        return Math.max(exp - now, 0);
     }
-
 }
