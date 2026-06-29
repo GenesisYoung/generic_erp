@@ -35,7 +35,7 @@ public class AuthenticationService {
             String accessToken = jwtUtil.generateAccessToken(auth.getName());
             User user = jwtUtil.getUser(entity.username());
             UserDTO userDTO = new UserDTO(user.getId(), user.getUsername(), user.getEmail(), user.getDisplayName(),
-                    null);
+                    null, user.getStatus());
             return new BasicResponse(200, "Login successful",
                     new AuthenticationResponse(new TokenPair(refreshToken, accessToken), userDTO));
         } catch (Exception e) {

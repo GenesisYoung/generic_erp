@@ -12,5 +12,6 @@ public class UserDTO {
     private String name;
     private String email;
     private String displayName;
-    private List<String> roles;
+    private List<Integer> roles;
+    private boolean active;
 }

@@ -34,4 +34,7 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
     @Modifying
     @Transactional
     void deleteByUserIdAndRoleId(Long userId, Long roleId);
+
+    UserRole findByBothRoleAndUser(Long id, Long id2);
+
 }
