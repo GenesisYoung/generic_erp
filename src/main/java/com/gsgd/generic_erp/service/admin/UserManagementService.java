@@ -3,11 +3,14 @@ package com.gsgd.generic_erp.service.admin;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import com.gsgd.generic_erp.configuration.security.JWTUtil;
+import com.gsgd.generic_erp.configuration.security.impl.AuthenticationImpl;
 import com.gsgd.generic_erp.dto.UserDTO;
 import com.gsgd.generic_erp.entity.auth.Role;
 import com.gsgd.generic_erp.entity.auth.User;
@@ -20,14 +23,22 @@ import com.gsgd.generic_erp.util.SimpleResponse;
 
 @Service
 public class UserManagementService {
+    private final JWTUtil JWTUtil;
     private UserRepository repository;
     private RoleRepository roleRepository;
     private UserRoleRepository userRoleRepository;
+    private UserRepository userRepository;
+    private AuthenticationImpl authenticationService;
 
     public UserManagementService(UserRepository repository, RoleRepository roleRepository,
-            UserRoleRepository userRoleRepository) {
+            UserRoleRepository userRoleRepository, UserRepository userRepository, JWTUtil JWTUtil,
+            AuthenticationImpl aService) {
         this.repository = repository;
         this.roleRepository = roleRepository;
+        this.userRoleRepository = userRoleRepository;
+        this.userRepository = userRepository;
+        this.JWTUtil = JWTUtil;
+        this.authenticationService = aService;
     }
 
     public BasicPageResponse<User, UserDTO> fetchUserList(Pageable pageable) {
@@ -51,37 +62,55 @@ public class UserManagementService {
                 }
                 return new SimpleResponse(200, "Successfully created");
             } else {
-                User saved = repository.saveAndFlush(injectUserDTO(user, userId));
-                List<Role> existedRoles = roleRepository.findIdsByValue(user.getRoles(), saved.getId());
-                user.getRoles().forEach(ele -> {
-                    existedRoles.forEach(role -> {
-                        if (!user.getRoles().contains(role.getVal())) {
-                            UserRole userRole = new UserRole();
-                            userRole.setRoleId(role.getId());
-                            userRole.setUserId(saved.getId());
-                            userRoleRepository.save(userRole);
-                        } else {
-                            UserRole target = userRoleRepository.findByBothRoleAndUser(saved.getId(), role.getId());
-                            userRoleRepository.delete(target);
-                        }
-                    });
-                });
+                repository.saveAndFlush(injectUserDTO(user, userId));
+                // Latest roles
+                List<Role> latestRoles = roleRepository.findObjByValue(user.getRoles());
+                // Current roles
+                List<UserRole> uRoles = userRoleRepository.findByUserId(userId);
+                List<Long> ids = uRoles.stream().map(ele -> ele.getRoleId()).toList();
+                List<Role> currentRoles = roleRepository
+                        .findObjByIds(ids);
+                for (Role r : currentRoles) {
+                    if (!latestRoles.contains(r)) {
+                        userRoleRepository.deleteByUserIdAndRoleId(userId, r.getId());
+                    } else if (currentRoles.contains(r)) {
+                        latestRoles.remove(r);
+                    }
+                }
+                for (Role r : latestRoles) {
+                    UserRole userRole = new UserRole();
+                    userRole.setRoleId(r.getId());
+                    userRole.setUserId(userId);
+                    userRoleRepository.save(userRole);
+                }
                 return new SimpleResponse(200, "Successfully created");
             }
         } catch (Exception e) {
-            return new SimpleResponse(201, "Failed to save");
+
+            return new SimpleResponse(201, "Failed to save" + e.getMessage());
         }
     }
 
     private User injectUserDTO(UserDTO user, Long id) {
-        User result = new User();
-        if (id != 0)
-            result.setId(id);
-        result.setUsername(user.getName());
-        result.setDisplayName(user.getDisplayName());
-        result.setEmail(user.getEmail());
-        result.setStatus(true);
-        return result;
+        if (id != 0) {
+            Optional<User> result = userRepository.findById(id);
+            if (id != 0)
+                result.get().setId(id);
+            result.get().setUsername(user.getName());
+            result.get().setDisplayName(user.getDisplayName());
+            result.get().setEmail(user.getEmail());
+            result.get().setStatus(user.getActive());
+            return result.get();
+        } else {
+            User u = new User();
+            u.setUsername(user.getName());
+            u.setDisplayName(user.getDisplayName());
+            u.setEmail(user.getEmail());
+            u.setStatus(user.getActive());
+            u.setPassword(authenticationService.generatePass("userpass"));
+            return u;
+        }
+
     }
 
 }

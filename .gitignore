@@ -41,3 +41,5 @@ generic_erp.log*
 
 #repository
 /Documents
+
+.DS_Store

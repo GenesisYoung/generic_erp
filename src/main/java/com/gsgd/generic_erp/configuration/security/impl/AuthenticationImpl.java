@@ -10,7 +10,7 @@ public class AuthenticationImpl implements AuthenticationService {
 
     @Override
     public String generatePass(String password) {
-        return new Argon2PasswordEncoder(64, 128, 2, 1 << 16, 4).encode(password);
+        return new Argon2PasswordEncoder(64, 50, 2, 1 << 16, 4).encode(password);
     }
-    
+
 }

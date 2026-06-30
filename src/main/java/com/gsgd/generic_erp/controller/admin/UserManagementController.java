@@ -2,7 +2,7 @@ package com.gsgd.generic_erp.controller.admin;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,9 +34,9 @@ class UserManagementController {
         return new String();
     }
 
-    @RequestMapping(path = "/users/{id}", method = RequestMethod.PUT)
-    public SimpleResponse saveOrUpdate(@PathVariable("id") Long userId, UserDTO user) {
-        return service.saveOrUpdate(userId, user);
+    @RequestMapping(path = "/users")
+    public SimpleResponse saveOrUpdate(@RequestBody UserDTO user) {
+        return service.saveOrUpdate(user.getId(), user);
     }
 
 }

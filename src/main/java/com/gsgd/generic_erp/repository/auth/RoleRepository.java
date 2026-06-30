@@ -23,6 +23,9 @@ public interface RoleRepository extends JpaRepository<Role, Long> {
     @NativeQuery(value = "SELECT r.id FROM role_tb r WHERE r.val=?1")
     Long getIdByVal(Integer role);
 
-    @NativeQuery(value = "SELECT * FROM role_tb r WHERE r.val IN (?1) AND r.val = ?2")
-    List<Role> findIdsByValue(List<Integer> roles, Long id);
+    @NativeQuery(value = "SELECT * FROM role_tb r WHERE r.val IN (?1) ")
+    List<Role> findObjByValue(List<Integer> roles);
+
+    @NativeQuery(value = "SELECT * FROM role_tb r WHERE r.id IN (?1) ")
+    List<Role> findObjByIds(List<Long> ids);
 }
