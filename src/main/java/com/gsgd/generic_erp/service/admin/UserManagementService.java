@@ -2,14 +2,17 @@ package com.gsgd.generic_erp.service.admin;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
-import com.gsgd.generic_erp.configuration.security.JWTUtil;
 import com.gsgd.generic_erp.configuration.security.impl.AuthenticationImpl;
 import com.gsgd.generic_erp.dto.UserDTO;
 import com.gsgd.generic_erp.entity.auth.Role;
@@ -18,12 +21,15 @@ import com.gsgd.generic_erp.entity.auth.UserRole;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.repository.auth.UserRoleRepository;
+import com.gsgd.generic_erp.spec.UserSpecification;
 import com.gsgd.generic_erp.util.BasicPageResponse;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
+import jakarta.transaction.Transactional;
+
 @Service
 public class UserManagementService {
-    private final JWTUtil JWTUtil;
+    // private final JWTUtil JWTUtil;
     private UserRepository repository;
     private RoleRepository roleRepository;
     private UserRoleRepository userRoleRepository;
@@ -31,18 +37,18 @@ public class UserManagementService {
     private AuthenticationImpl authenticationService;
 
     public UserManagementService(UserRepository repository, RoleRepository roleRepository,
-            UserRoleRepository userRoleRepository, UserRepository userRepository, JWTUtil JWTUtil,
+            UserRoleRepository userRoleRepository, UserRepository userRepository,
             AuthenticationImpl aService) {
         this.repository = repository;
         this.roleRepository = roleRepository;
         this.userRoleRepository = userRoleRepository;
         this.userRepository = userRepository;
-        this.JWTUtil = JWTUtil;
+        // this.JWTUtil = JWTUtil;
         this.authenticationService = aService;
     }
 
     public BasicPageResponse<User, UserDTO> fetchUserList(Pageable pageable) {
-        Page<User> users = repository.findAll(pageable);
+        Page<User> users = repository.findAll(UserSpecification.excludeDisabled((byte) 1), pageable);
         List<UserDTO> dto = new ArrayList<>();
         users.stream().forEach((User ele) -> {
             dto.add(new UserDTO(ele.getId(), ele.getUsername(), ele.getEmail(), ele.getDisplayName(),
@@ -62,33 +68,65 @@ public class UserManagementService {
                 }
                 return new SimpleResponse(200, "Successfully created");
             } else {
-                repository.saveAndFlush(injectUserDTO(user, userId));
-                // Latest roles
-                List<Role> latestRoles = roleRepository.findObjByValue(user.getRoles());
-                // Current roles
-                List<UserRole> uRoles = userRoleRepository.findByUserId(userId);
-                List<Long> ids = uRoles.stream().map(ele -> ele.getRoleId()).toList();
-                List<Role> currentRoles = roleRepository
-                        .findObjByIds(ids);
-                for (Role r : currentRoles) {
-                    if (!latestRoles.contains(r)) {
-                        userRoleRepository.deleteByUserIdAndRoleId(userId, r.getId());
-                    } else if (currentRoles.contains(r)) {
-                        latestRoles.remove(r);
-                    }
+                // 1. Resolve the latest roles to a Set of IDs (one query)
+                Set<Long> latestIds = roleRepository.findObjByValue(user.getRoles())
+                        .stream()
+                        .map(Role::getId)
+                        .collect(Collectors.toSet());
+
+                // 2. Resolve the current role IDs (one query)
+                Set<Long> currentIds = userRoleRepository.findByUserId(userId)
+                        .stream()
+                        .map(UserRole::getRoleId)
+                        .collect(Collectors.toSet());
+
+                // 3. Compute the diff
+                // toRemove = current - latest
+                Set<Long> toRemove = new HashSet<>(currentIds);
+                toRemove.removeAll(latestIds);
+
+                // toAdd = latest - current
+                Set<Long> toAdd = new HashSet<>(latestIds);
+                toAdd.removeAll(currentIds);
+
+                // 4. Bulk delete (one query)
+                if (!toRemove.isEmpty()) {
+                    userRoleRepository.deleteByUserIdAndRoleIdIn(userId, toRemove);
                 }
-                for (Role r : latestRoles) {
-                    UserRole userRole = new UserRole();
-                    userRole.setRoleId(r.getId());
-                    userRole.setUserId(userId);
-                    userRoleRepository.save(userRole);
+
+                // 5. Bulk insert (one query)
+                if (!toAdd.isEmpty()) {
+                    List<UserRole> newLinks = toAdd.stream()
+                            .map(roleId -> {
+                                UserRole ur = new UserRole();
+                                ur.setUserId(userId);
+                                ur.setRoleId(roleId);
+                                return ur;
+                            })
+                            .toList();
+                    userRoleRepository.saveAll(newLinks);
                 }
+
                 return new SimpleResponse(200, "Successfully created");
             }
         } catch (Exception e) {
-
+            Logger.getGlobal().info("User saving error--->" + e.getMessage());
             return new SimpleResponse(201, "Failed to save" + e.getMessage());
         }
+    }
+
+    @Transactional
+    public SimpleResponse deleteUser(Long id) {
+        try {
+            userRepository.updateIsEnabled(id, (byte) 0);
+        } catch (Exception e) {
+            if (id == 1) {
+                Logger.getGlobal().info("User saving error--->" + e.getMessage());
+                return new SimpleResponse(202, "Cannot delete root user");
+            }
+            return new SimpleResponse(201, "failed to delete user");
+        }
+        return new SimpleResponse(200, "successfully deleted");
     }
 
     private User injectUserDTO(UserDTO user, Long id) {

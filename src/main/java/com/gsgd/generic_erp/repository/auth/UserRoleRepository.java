@@ -1,10 +1,13 @@
 package com.gsgd.generic_erp.repository.auth;
 
+import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.NativeQuery;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.gsgd.generic_erp.entity.auth.UserRole;
 
@@ -38,5 +41,11 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
 
     @NativeQuery("SELECT * FROM user_roles_tb ur WHERE ur.role_id=?1 AND ur.user_id=?2")
     UserRole findByBothRoleAndUser(Long roleId, Long userId);
+
+    // Spring Data derives a "WHERE user_id = ? AND role_id IN (?, ?, ...)" delete
+    @Modifying
+    @Query("DELETE FROM UserRole ur WHERE ur.userId = :userId AND ur.roleId IN :roleIds")
+    void deleteByUserIdAndRoleIdIn(@Param("userId") Long userId,
+            @Param("roleIds") Collection<Long> roleIds);
 
 }

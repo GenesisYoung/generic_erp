@@ -70,4 +70,7 @@ public class User {
 
     @Column(name = "create_date")
     private LocalDate createDate;
+
+    @Column(name = "is_enabled")
+    private Byte isEnabled;
 }
