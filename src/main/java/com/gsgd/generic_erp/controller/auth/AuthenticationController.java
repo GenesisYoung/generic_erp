@@ -28,11 +28,11 @@ public class AuthenticationController {
         return service.handleLogin(entity);
     }
 
-    // Token expiration remaining endpoint
-    @RequestMapping(path = "/expiration/remaining", method = RequestMethod.GET)
-    public long expirationRemaining(HttpServletRequest request) {
-        return service.getExpirationRemaining(request);
-    }
+    // // Token expiration remaining endpoint
+    // @RequestMapping(path = "/expiration/remaining", method = RequestMethod.GET)
+    // public long expirationRemaining(HttpServletRequest request) {
+    // return service.getExpirationRemaining(request);
+    // }
 
     // Refresh access token endpoint
     @RequestMapping(path = "/refresh/access", method = RequestMethod.POST)

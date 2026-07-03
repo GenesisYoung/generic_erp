@@ -11,8 +11,10 @@ import com.gsgd.generic_erp.controller.auth.AuthenticationController.Authenticat
 import com.gsgd.generic_erp.controller.auth.AuthenticationController.TokenPair;
 import com.gsgd.generic_erp.dto.UserDTO;
 import com.gsgd.generic_erp.entity.auth.User;
+import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
 
+import io.jsonwebtoken.lang.Objects;
 import jakarta.servlet.http.HttpServletRequest;
 
 @Service
@@ -22,13 +24,23 @@ public class AuthenticationService {
 
     private final JWTUtil jwtUtil;
 
-    AuthenticationService(AuthenticationManager authenticationManager, JWTUtil jwtUtil) {
+    private final UserRepository userRepository;
+
+    AuthenticationService(AuthenticationManager authenticationManager, JWTUtil jwtUtil, UserRepository userRepository) {
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
+        this.userRepository = userRepository;
     }
 
     public BasicResponse handleLogin(AuthenticationRequest entity) {
         try {
+            String username = entity.username().trim();
+            User exist = userRepository.findByUsername(username)
+                    .filter(user -> user.getIsEnabled() != null && user.getIsEnabled() == 1)
+                    .orElseThrow(() -> new RuntimeException("User not available!"));
+            if (Objects.isEmpty(exist)) {
+                return new BasicResponse(402, "User is disabled", null);
+            }
             Authentication auth = authenticationManager
                     .authenticate(new UsernamePasswordAuthenticationToken(entity.username(), entity.password()));
             String refreshToken = jwtUtil.generateRefreshToken(auth.getName());

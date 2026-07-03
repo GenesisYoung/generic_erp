@@ -73,8 +73,9 @@ public class JWTUtil {
     }
 
     /**
-     * @param type 0 represents access code, 1 represents refresh code
-     * @param type target code
+     * @param type  0 represents access code, 1 represents refresh code
+     * @param token target token to be validated
+     * @return true if the token is valid, false otherwise
      */
     public boolean isValid(int type, String token) {
         try {
@@ -90,7 +91,7 @@ public class JWTUtil {
         return Jwts.parser()
                 .verifyWith(key)
                 .build()
-                .parseSignedClaims(token)
+                .parseSignedClaims(token.trim())
                 .getPayload();
     }
 

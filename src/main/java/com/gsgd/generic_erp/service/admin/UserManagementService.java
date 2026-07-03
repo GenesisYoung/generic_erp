@@ -69,12 +69,14 @@ public class UserManagementService {
                 return new SimpleResponse(200, "Successfully created");
             } else {
                 // 1. Resolve the latest roles to a Set of IDs (one query)
+                @SuppressWarnings("null")
                 Set<Long> latestIds = roleRepository.findObjByValue(user.getRoles())
                         .stream()
                         .map(Role::getId)
                         .collect(Collectors.toSet());
 
                 // 2. Resolve the current role IDs (one query)
+                @SuppressWarnings("null")
                 Set<Long> currentIds = userRoleRepository.findByUserId(userId)
                         .stream()
                         .map(UserRole::getRoleId)
@@ -106,6 +108,8 @@ public class UserManagementService {
                             .toList();
                     userRoleRepository.saveAll(newLinks);
                 }
+
+                repository.save(injectUserDTO(user, userId));
 
                 return new SimpleResponse(200, "Successfully created");
             }

@@ -30,6 +30,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String header = request.getHeader("Authorization");
+        String refreshToken = request.getHeader("Refresh-Token");
         // No token? Just continue; the AuthorizationFilter will reject it later if
         // needed.
         if (header == null || !header.startsWith("Bearer ")) {
@@ -51,6 +52,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
         }
+
+        long tokenRemainingTime = jwtService.expirationRemaining(1, refreshToken);
+        response.addHeader("Refresh-Token-Remaining",
+                String.valueOf(tokenRemainingTime));
 
         filterChain.doFilter(request, response);
     }
