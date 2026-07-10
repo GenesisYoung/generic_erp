@@ -3,7 +3,7 @@ package com.gsgd.generic_erp.configuration.security.impl;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import com.gsgd.generic_erp.configuration.AuthenticationService;
+import com.gsgd.generic_erp.configuration.security.AuthenticationService;
 
 @Service
 public class AuthenticationImpl implements AuthenticationService {

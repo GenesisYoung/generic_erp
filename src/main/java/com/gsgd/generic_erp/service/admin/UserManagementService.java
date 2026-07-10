@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -52,12 +53,13 @@ public class UserManagementService {
         List<UserDTO> dto = new ArrayList<>();
         users.stream().forEach((User ele) -> {
             dto.add(new UserDTO(ele.getId(), ele.getUsername(), ele.getEmail(), ele.getDisplayName(),
-                    roleRepository.findByUserId(ele.getId()), ele.getStatus()));
+                    roleRepository.findByUserId(ele.getId()), ele.getStatus(), ele.getIsEnabled()));
         });
         ;
         return new BasicPageResponse<>(dto, users);
     }
 
+    @Transactional
     public SimpleResponse saveOrUpdate(Long userId, UserDTO user) {
         try {
             if (userId == 0) {
@@ -114,6 +116,7 @@ public class UserManagementService {
                 return new SimpleResponse(200, "Successfully created");
             }
         } catch (Exception e) {
+            Logger.getGlobal().log(Level.SEVERE, "User saving error", e);
             Logger.getGlobal().info("User saving error--->" + e.getMessage());
             return new SimpleResponse(201, "Failed to save" + e.getMessage());
         }
@@ -142,6 +145,7 @@ public class UserManagementService {
             result.get().setDisplayName(user.getDisplayName());
             result.get().setEmail(user.getEmail());
             result.get().setStatus(user.getActive());
+            result.get().setIsEnabled(user.getIsEnabled());
             return result.get();
         } else {
             User u = new User();
@@ -150,6 +154,7 @@ public class UserManagementService {
             u.setEmail(user.getEmail());
             u.setStatus(user.getActive());
             u.setPassword(authenticationService.generatePass("userpass"));
+            u.setIsEnabled((byte) 1);
             return u;
         }
 

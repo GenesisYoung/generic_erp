@@ -1,4 +1,4 @@
-package com.gsgd.generic_erp.configuration;
+package com.gsgd.generic_erp.configuration.security;
 
 import org.springframework.stereotype.Service;
 

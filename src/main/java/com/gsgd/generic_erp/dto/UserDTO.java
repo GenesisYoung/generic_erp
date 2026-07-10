@@ -16,4 +16,5 @@ public class UserDTO {
     private String displayName;
     private List<Integer> roles;
     private Boolean active;
+    private Byte isEnabled;
 }

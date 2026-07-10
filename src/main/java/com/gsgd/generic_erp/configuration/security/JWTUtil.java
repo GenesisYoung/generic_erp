@@ -44,10 +44,11 @@ public class JWTUtil {
                 "HmacSHA256");
     }
 
-    public String generateRefreshToken(String username) {
+    public String generateRefreshToken(String username, String sessionId) {
         long now = System.currentTimeMillis();
         return Jwts.builder()
                 .subject(username)
+                .claim("sid", sessionId)
                 .issuedAt(new Date(now))
                 .expiration(new Date(now + refreshTokenExpirationMs))
                 .signWith(keyRefresh)
@@ -91,7 +92,7 @@ public class JWTUtil {
         return Jwts.parser()
                 .verifyWith(key)
                 .build()
-                .parseSignedClaims(token.trim())
+                .parseSignedClaims(token)
                 .getPayload();
     }
 
@@ -100,5 +101,9 @@ public class JWTUtil {
         long exp = claims.getExpiration().getTime();
         long now = System.currentTimeMillis();
         return Math.max(exp - now, 0);
+    }
+
+    public String extractSessionId(String token) {
+        return parseClaims(1, token).get("sid", String.class);
     }
 }
