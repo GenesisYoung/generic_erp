@@ -4,6 +4,12 @@ import java.util.List;
 
 import org.springframework.data.domain.Page;
 
+/**
+ * A basic page response wrapper for handling paginated data.
+ * T - The type of the entity being paginated.
+ * R - The type of the DTO (Data Transfer Object) that will be returned in the
+ * response.
+ */
 public class BasicPageResponse<T, R> {
 
     private List<R> content;
