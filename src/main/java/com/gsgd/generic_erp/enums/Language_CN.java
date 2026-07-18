@@ -11,7 +11,8 @@ public enum Language_CN implements Language {
     TOKEN_REFRESH_FAILED("令牌刷新失败"),
     TOKEN_EXPIRED("令牌已过期"),
     INTERNAL_SERVER_ERROR("后台服务器错误"),
-    SEEESION_EXPIRED("会话已过期，请重新登录");
+    SEEESION_EXPIRED("会话已过期，请重新登录"),
+    NAME_DULICATED("异常，名称重复!");
 
     private final String value;
 

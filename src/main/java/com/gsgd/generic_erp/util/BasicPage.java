@@ -23,6 +23,10 @@ public class BasicPage implements Pageable {
         this.sort = sort;
     }
 
+    public static BasicPage of(int pageNumber, int pageSize, Sort sort) {
+        return new BasicPage(pageNumber, pageSize, sort);
+    }
+
     public void defineSort(Sort sort) {
         this.sort = sort;
     }

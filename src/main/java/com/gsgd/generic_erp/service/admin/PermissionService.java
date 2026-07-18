@@ -1,15 +1,20 @@
 package com.gsgd.generic_erp.service.admin;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.dto.PermissionDTO;
 import com.gsgd.generic_erp.entity.auth.Permission;
+import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.repository.auth.PermissionRepository;
 import com.gsgd.generic_erp.spec.PermissionSpecification;
+import com.gsgd.generic_erp.util.BasicPageResponse;
+import com.gsgd.generic_erp.util.SimpleResponse;
 
 @Service
 public class PermissionService {
@@ -20,11 +25,13 @@ public class PermissionService {
         this.permissionRepository = permissionRepository;
     }
 
-    public List<Permission> getAllPermissions(Pageable pageable, String name) {
+    public BasicPageResponse<Permission, PermissionDTO> getAllPermissions(Pageable pageable, String name) {
         if (name == null || name.isEmpty()) {
-            return permissionRepository.findAll(pageable).getContent();
+            Page<Permission> page = permissionRepository.findAll(pageable);
+            return new BasicPageResponse<>(transferDTO(page.getContent()), page);
         }
-        return permissionRepository.findAll(PermissionSpecification.hasPermissionName(name), pageable).getContent();
+        Page<Permission> page = permissionRepository.findAll(PermissionSpecification.hasPermissionName(name), pageable);
+        return new BasicPageResponse<>(transferDTO(page.getContent()), page);
     }
 
     public List<PermissionDTO> transferDTO(List<Permission> permissions) {
@@ -45,7 +52,14 @@ public class PermissionService {
         }
     }
 
-    public void saveOrUpdate(Permission transferObj) {
+    public SimpleResponse saveOrUpdate(Permission transferObj) {
+        Boolean exist = permissionRepository.existsByPermissionName(transferObj.getPermissionName());
+        if (exist) {
+            return new SimpleResponse(201, Language_CN.NAME_DULICATED.getMessage());
+        }
+        transferObj.setCreateDate(LocalDate.now());
+        transferObj.setVal(System.nanoTime());
         permissionRepository.saveAndFlush(transferObj);
+        return new SimpleResponse(200, "");
     }
 }

@@ -10,5 +10,5 @@ import lombok.NoArgsConstructor;
 public class PermissionDTO {
     private Long id;
     private String permissionName;
-    private Integer val;
+    private Long val;
 }

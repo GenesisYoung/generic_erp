@@ -1,7 +1,5 @@
 package com.gsgd.generic_erp.controller.admin;
 
-import java.util.List;
-
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,7 +12,7 @@ import com.gsgd.generic_erp.dto.PermissionDTO;
 import com.gsgd.generic_erp.entity.auth.Permission;
 import com.gsgd.generic_erp.service.admin.PermissionService;
 import com.gsgd.generic_erp.util.BasicPage;
-import com.gsgd.generic_erp.util.BasicResponse;
+import com.gsgd.generic_erp.util.BasicPageResponse;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
 @RestController
@@ -27,18 +25,16 @@ public class PermissionController {
     }
 
     @GetMapping("/fetch")
-    public BasicResponse getMethodName(int page, int size, @RequestParam(required = false) String name) {
+    public BasicPageResponse<Permission, PermissionDTO> getMethodName(int page, int size,
+            @RequestParam(required = false) String name) {
         BasicPage p = new BasicPage(page, size);
-        p.defineSort(Sort.by("createDate").descending());
-        List<Permission> permissions = permissionService.getAllPermissions(p, name);
-        return new BasicResponse(200, "Success", permissionService.transferDTO(permissions));
-
+        p.defineSort(Sort.by("permissionName").ascending().and(Sort.by("createDate").descending()));
+        return permissionService.getAllPermissions(p, name);
     }
 
     @PostMapping("/save")
     public SimpleResponse postMethodName(@RequestBody PermissionDTO entity) {
-        permissionService.saveOrUpdate(permissionService.transferObj(entity));
-        return null;
+        return permissionService.saveOrUpdate(permissionService.transferObj(entity));
     }
 
 }

@@ -40,7 +40,7 @@ public class Permission {
 
     /** Numeric value — often used as a bitmask for fast permission checks. */
     @Column(name = "val")
-    private Integer val;
+    private Long val;
 
     @Column(name = "create_date")
     private LocalDate createDate;
