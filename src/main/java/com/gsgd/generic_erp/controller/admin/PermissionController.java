@@ -13,6 +13,7 @@ import com.gsgd.generic_erp.entity.auth.Permission;
 import com.gsgd.generic_erp.service.admin.PermissionService;
 import com.gsgd.generic_erp.util.BasicPage;
 import com.gsgd.generic_erp.util.BasicPageResponse;
+import com.gsgd.generic_erp.util.BasicResponse;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
 @RestController
@@ -32,9 +33,22 @@ public class PermissionController {
         return permissionService.getAllPermissions(p, name);
     }
 
+    @PostMapping("/delete")
+    public BasicResponse deleteByVal(@RequestBody DeleteRecord record) {
+        try {
+            long b = permissionService.deleteByGroup(record.deleteVal());
+            return new BasicResponse(200, "success", b);
+        } catch (Exception e) {
+            return new BasicResponse(403, "error", e.getStackTrace().toString());
+        }
+    }
+
     @PostMapping("/save")
     public SimpleResponse postMethodName(@RequestBody PermissionDTO entity) {
         return permissionService.saveOrUpdate(permissionService.transferObj(entity));
     }
 
+}
+
+record DeleteRecord(Long[] deleteVal) {
 }

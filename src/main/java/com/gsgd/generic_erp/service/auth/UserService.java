@@ -7,8 +7,8 @@ import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.dto.UserNavMenuDTO;
 import com.gsgd.generic_erp.entity.auth.NavigationMenu;
-import com.gsgd.generic_erp.repository.auth.NavigationMenuRepository;
-import com.gsgd.generic_erp.repository.auth.UserNavMenuRepository;
+import com.gsgd.generic_erp.repository.NavigationMenuRepository;
+import com.gsgd.generic_erp.repository.UserNavMenuRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
 
 @Service

@@ -1,4 +1,4 @@
-package com.gsgd.generic_erp.repository.auth;
+package com.gsgd.generic_erp.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;

@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 import com.gsgd.generic_erp.dto.PermissionDTO;
 import com.gsgd.generic_erp.entity.auth.Permission;
 import com.gsgd.generic_erp.enums.Language_CN;
-import com.gsgd.generic_erp.repository.auth.PermissionRepository;
+import com.gsgd.generic_erp.repository.PermissionRepository;
 import com.gsgd.generic_erp.spec.PermissionSpecification;
 import com.gsgd.generic_erp.util.BasicPageResponse;
 import com.gsgd.generic_erp.util.SimpleResponse;
@@ -61,5 +61,10 @@ public class PermissionService {
         transferObj.setVal(System.nanoTime());
         permissionRepository.saveAndFlush(transferObj);
         return new SimpleResponse(200, "");
+    }
+
+    public long deleteByGroup(Long[] deleteVal) {
+        long number = permissionRepository.delete(PermissionSpecification.deleteByVal(deleteVal));
+        return number;
     }
 }
