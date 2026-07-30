@@ -24,6 +24,6 @@ public class NavigationMenutViewService {
         Page<NavigationPermissionView> p = repository.findAll(
                 NavigationMenuSpecification.findByFilter(filter.getFilter()),
                 PageRequest.of(filter.getPage(), filter.getSize()));
-        return new BasicPageResponse<>(null, null);
+        return new BasicPageResponse<>(p.getContent(), p);
     }
 }
