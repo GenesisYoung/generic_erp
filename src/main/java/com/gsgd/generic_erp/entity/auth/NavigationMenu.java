@@ -34,6 +34,9 @@ public class NavigationMenu {
     @Column(name = "id")
     private Long id;
 
+    @Column(name = "parent_id")
+    private Long parentId;
+
     /** i18n key used to resolve the display title on the frontend */
     @Column(name = "title_key", length = 50, nullable = false)
     private String titleKey;

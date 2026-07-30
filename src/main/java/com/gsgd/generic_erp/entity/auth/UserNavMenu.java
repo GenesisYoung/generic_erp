@@ -39,6 +39,10 @@ public class UserNavMenu {
     @Column(name = "nav_id", nullable = false)
     private Long navId;
 
+    /** FK → permission_tb.id */
+    @Column(name = "permission_id")
+    private Long permissionId;
+
     /** FK → user_tb.id */
     @Column(name = "user_id", nullable = false)
     private Long userId;

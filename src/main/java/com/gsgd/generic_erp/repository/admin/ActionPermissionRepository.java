@@ -1,4 +1,4 @@
-package com.gsgd.generic_erp.repository;
+package com.gsgd.generic_erp.repository.admin;
 
 import java.util.List;
 

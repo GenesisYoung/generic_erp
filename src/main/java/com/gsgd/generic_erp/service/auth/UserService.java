@@ -7,8 +7,8 @@ import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.dto.UserNavMenuDTO;
 import com.gsgd.generic_erp.entity.auth.NavigationMenu;
-import com.gsgd.generic_erp.repository.NavigationMenuRepository;
-import com.gsgd.generic_erp.repository.UserNavMenuRepository;
+import com.gsgd.generic_erp.repository.admin.NavigationMenuRepository;
+import com.gsgd.generic_erp.repository.admin.UserNavMenuRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
 
 @Service
@@ -29,7 +29,7 @@ public class UserService {
                 .stream()
                 .map(ele -> ele.getNavId());
         List<NavigationMenu> nav = navigationMenuRepository.findAllById(userIds.toList());
-        List<UserNavMenuDTO> menu = nav.stream().map(ele -> new UserNavMenuDTO(ele.getId(),
+        List<UserNavMenuDTO> menu = nav.stream().map(ele -> new UserNavMenuDTO(ele.getId(), ele.getParentId(),
                 ele.getTitleKey(), ele.getIcon(), ele.getRoute(), ele.getColor())).toList();
         return new BasicResponse(200, "Navigation Menu", menu);
     }

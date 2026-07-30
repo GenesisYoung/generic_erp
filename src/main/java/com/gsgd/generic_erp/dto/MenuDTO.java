@@ -7,6 +7,7 @@ import lombok.Data;
 @AllArgsConstructor
 public class MenuDTO {
     private Long id;
+    private Long parentId;
     private String titleKey;
     private String icon;
     private String route;

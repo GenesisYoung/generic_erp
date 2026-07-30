@@ -36,4 +36,21 @@ public class MenuController {
         return new SimpleResponse(200, "Susccess");
     }
 
+    @PostMapping("/delete")
+    public SimpleResponse getMethodName(@RequestBody SimpleBody request) {
+        try {
+            service.delete(request.deleteVal());
+        } catch (Exception e) {
+            return new SimpleResponse(500, e.getMessage());
+        }
+        return new SimpleResponse(200, null);
+    }
+
+}
+
+/**
+ * SimpleBody
+ * Long[] deleteVal
+ */
+record SimpleBody(Long[] deleteVal) {
 }

@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class UserNavMenuDTO {
     private Long id;
+    private Long parentId;
     private String titleKey;
     private String icon;
     private String route;
