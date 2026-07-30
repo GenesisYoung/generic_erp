@@ -15,7 +15,7 @@ public class NavigationMenuSpecification {
     private static Specification<NavigationPermissionView> filterBynavName(String navName) {
         return !StringUtils.hasText(
                 navName) ? (root, query, builder) -> builder.conjunction()
-                        : (root, query, builder) -> builder.like(root.get("navName"), navName);
+                        : (root, query, builder) -> builder.like(root.get("navKey"), navName);
     }
 
     private static Specification<NavigationPermissionView> filterBypName(String pName) {
@@ -24,8 +24,14 @@ public class NavigationMenuSpecification {
                         : (root, query, builder) -> builder.like(root.get("pName"), pName);
     }
 
+    private static Specification<NavigationPermissionView> filterByRoute(String route) {
+        return !StringUtils.hasText(
+                route) ? (root, query, builder) -> builder.conjunction()
+                        : (root, query, builder) -> builder.like(root.get("route"), route);
+    }
+
     public static Specification<NavigationPermissionView> findByFilter(PermissionMenuViewFilter filter) {
         return Specification.allOf(filterByUserName(filter.uName()), filterBynavName(filter.navName()),
-                filterBypName(filter.pName()));
+                filterBypName(filter.pName()), filterByRoute(filter.route()));
     }
 }
