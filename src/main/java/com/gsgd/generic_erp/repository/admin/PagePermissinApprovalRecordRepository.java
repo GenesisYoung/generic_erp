@@ -25,4 +25,7 @@ public interface PagePermissinApprovalRecordRepository
     /** Which of the given (registered) permissions a user holds for one menu. */
     List<PagePermissionApprovalsRecord> findByUserIdAndMenuIdAndPermissionIdIn(Long userId, Long menuId,
             Collection<Long> permissionIds);
+
+    /** Every user's approval of one permission for one menu — cleared when the permission is de-registered. */
+    List<PagePermissionApprovalsRecord> findByMenuIdAndPermissionId(Long menuId, Long permissionId);
 }

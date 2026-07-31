@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.gsgd.generic_erp.dto.PermissionAccessDTO;
+import com.gsgd.generic_erp.dto.PermissionRegistrationDTO;
 import com.gsgd.generic_erp.dto.UserAccessDTO;
 import com.gsgd.generic_erp.dto.filter.PermissionMenuViewFilter;
 import com.gsgd.generic_erp.service.admin.MenuAccessService;
@@ -48,5 +49,11 @@ public class PermissionManagementController {
     public List<PermissionAccessDTO> fetchPermissionsForMenu(@RequestParam Long navId,
             @RequestParam Long userId) {
         return menuAccessService.listPermissionsForMenu(navId, userId);
+    }
+
+    /** Every permission, with whether it's currently registered against this menu. */
+    @GetMapping("/menu/registration")
+    public List<PermissionRegistrationDTO> fetchRegistrationsForMenu(@RequestParam Long navId) {
+        return menuAccessService.listRegistrationsForMenu(navId);
     }
 }

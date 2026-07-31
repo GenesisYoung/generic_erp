@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.dto.PermissionAccessDTO;
+import com.gsgd.generic_erp.dto.PermissionRegistrationDTO;
 import com.gsgd.generic_erp.dto.UserAccessDTO;
 import com.gsgd.generic_erp.entity.auth.MenuRegisteredPermissionsRecord;
 import com.gsgd.generic_erp.entity.auth.PagePermissionApprovalsRecord;
@@ -132,6 +133,46 @@ public class MenuAccessService {
             }
         } else if (!rows.isEmpty()) {
             approvalRepository.deleteAll(rows);
+        }
+        return new SimpleResponse(200, "");
+    }
+
+    /** Every permission, with whether it's currently registered against this menu. */
+    public List<PermissionRegistrationDTO> listRegistrationsForMenu(Long navId) {
+        Set<Long> registeredPermissionIds = registeredPermissionRepository.findByMenuId(navId).stream()
+                .map(MenuRegisteredPermissionsRecord::getPermissionId)
+                .collect(Collectors.toSet());
+        return permissionRepository.findAll().stream()
+                .sorted(Comparator.comparing(Permission::getPermissionName, String.CASE_INSENSITIVE_ORDER))
+                .map(p -> new PermissionRegistrationDTO(p.getId(), p.getPermissionName(), p.getVal(),
+                        registeredPermissionIds.contains(p.getId())))
+                .toList();
+    }
+
+    /**
+     * Register or de-register a permission against a menu. De-registering also
+     * clears every user's approval of that permission for this menu — otherwise
+     * a de-registered permission could still silently grant sidebar access via
+     * an orphaned approval row that this UI can no longer show or manage.
+     */
+    @Transactional
+    public SimpleResponse setPermissionRegistration(Long navId, Long permissionId, boolean registered) {
+        List<MenuRegisteredPermissionsRecord> rows = registeredPermissionRepository
+                .findByMenuIdAndPermissionId(navId, permissionId);
+        if (registered) {
+            if (rows.isEmpty()) {
+                registeredPermissionRepository.save(new MenuRegisteredPermissionsRecord(null, navId, permissionId,
+                        null));
+            }
+        } else {
+            if (!rows.isEmpty()) {
+                registeredPermissionRepository.deleteAll(rows);
+            }
+            List<PagePermissionApprovalsRecord> approvals = approvalRepository.findByMenuIdAndPermissionId(navId,
+                    permissionId);
+            if (!approvals.isEmpty()) {
+                approvalRepository.deleteAll(approvals);
+            }
         }
         return new SimpleResponse(200, "");
     }

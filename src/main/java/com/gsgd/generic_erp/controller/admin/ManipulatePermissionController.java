@@ -38,10 +38,24 @@ public class ManipulatePermissionController {
             return new SimpleResponse(500, e.getMessage());
         }
     }
+
+    /** Register or de-register a permission against a menu. */
+    @PostMapping("/registration")
+    public SimpleResponse setPermissionRegistration(@RequestBody PermissionRegistrationRequest request) {
+        try {
+            return service.setPermissionRegistration(request.navId(), request.permissionId(),
+                    request.registered());
+        } catch (Exception e) {
+            return new SimpleResponse(500, e.getMessage());
+        }
+    }
 }
 
 record UserAccessRequest(Long navId, Long userId, boolean granted) {
 }
 
 record PermissionAccessRequest(Long navId, Long userId, Long permissionId, boolean granted) {
+}
+
+record PermissionRegistrationRequest(Long navId, Long permissionId, boolean registered) {
 }
