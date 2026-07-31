@@ -5,15 +5,24 @@ import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import org.springframework.data.jpa.repository.NativeQuery;
 
 import com.gsgd.generic_erp.entity.auth.PagePermissionApprovalsRecord;
 
 public interface PagePermissinApprovalRecordRepository
         extends JpaRepository<PagePermissionApprovalsRecord, Long>,
-        JpaSpecificationExecutor<PagePermissinApprovalRecordRepository> {
+        JpaSpecificationExecutor<PagePermissionApprovalsRecord> {
 
-    @NativeQuery("SELECT * FROM page_permission_approvals_record WHERE user_id=?1 AND menu_id=?2 AND permission_id IN (?3)")
-    List<PagePermissionApprovalsRecord> findRegisteredByUserIdAndMenuIdAndPermissionIdIn(Long userId, Long navId,
-            Collection<Long> registeredPermissionIds);
+    /** Every permission a user has been approved for, across all menus. */
+    List<PagePermissionApprovalsRecord> findByUserId(Long userId);
+
+    /** Every approval a user holds for one menu — the cascade-revoke target set. */
+    List<PagePermissionApprovalsRecord> findByUserIdAndMenuId(Long userId, Long menuId);
+
+    /** The specific approval row for a (user, menu, permission) triple. */
+    List<PagePermissionApprovalsRecord> findByUserIdAndMenuIdAndPermissionId(Long userId, Long menuId,
+            Long permissionId);
+
+    /** Which of the given (registered) permissions a user holds for one menu. */
+    List<PagePermissionApprovalsRecord> findByUserIdAndMenuIdAndPermissionIdIn(Long userId, Long menuId,
+            Collection<Long> permissionIds);
 }

@@ -3,7 +3,6 @@ package com.gsgd.generic_erp.service.admin;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -31,11 +30,18 @@ import jakarta.transaction.Transactional;
  * user (or every permission held by one user) alongside whether they
  * currently have access, and grant/revoke that access.
  *
- * Access is recorded directly on user_nav_menu. A row with permission_id =
- * null is baseline "this user can open this menu" access; a row with a
- * permission_id scopes that access to one specific permission. Either kind
- * of row makes the menu visible to the user (see UserService#fetchNavMenu),
- * so granting a specific permission implicitly grants baseline access too.
+ * Two independent access paths, either sufficient on its own (see
+ * UserService#fetchNavMenu):
+ * - Direct: a row in user_nav_menu grants a user baseline access to a menu.
+ * - Via permission: a permission must first be registered against a menu
+ * (menu_registered_permissions_record) before it can grant anything there;
+ * a user then holds it for that menu via a row in
+ * page_permission_approvals_record. Only registered permissions are ever
+ * offered for approval.
+ *
+ * Revoking a user's direct access also clears their permission approvals for
+ * that menu — otherwise they'd keep seeing the menu through the other path,
+ * which would make "revoke" a no-op from the admin's point of view.
  */
 @Service
 public class MenuAccessService {
@@ -43,17 +49,18 @@ public class MenuAccessService {
     private final UserNavMenuRepository userNavMenuRepository;
     private final UserRepository userRepository;
     private final PermissionRepository permissionRepository;
-    private final MenuRegisteredPermissionRecordRepository mRecordRepository;
-    private final PagePermissinApprovalRecordRepository pRecordRepository;
+    private final MenuRegisteredPermissionRecordRepository registeredPermissionRepository;
+    private final PagePermissinApprovalRecordRepository approvalRepository;
 
     public MenuAccessService(UserNavMenuRepository userNavMenuRepository, UserRepository userRepository,
-            PermissionRepository permissionRepository, MenuRegisteredPermissionRecordRepository mRecordRepository,
-            PagePermissinApprovalRecordRepository pRecordRepository) {
+            PermissionRepository permissionRepository,
+            MenuRegisteredPermissionRecordRepository registeredPermissionRepository,
+            PagePermissinApprovalRecordRepository approvalRepository) {
         this.userNavMenuRepository = userNavMenuRepository;
         this.userRepository = userRepository;
         this.permissionRepository = permissionRepository;
-        this.mRecordRepository = mRecordRepository;
-        this.pRecordRepository = pRecordRepository;
+        this.registeredPermissionRepository = registeredPermissionRepository;
+        this.approvalRepository = approvalRepository;
     }
 
     public List<UserAccessDTO> listUsersForMenu(Long navId) {
@@ -68,18 +75,18 @@ public class MenuAccessService {
     }
 
     public List<PermissionAccessDTO> listPermissionsForMenu(Long navId, Long userId) {
-        Set<Long> registeredPermissionIds = mRecordRepository.findByMenuId(userId).stream()
+        Set<Long> registeredPermissionIds = registeredPermissionRepository.findByMenuId(navId).stream()
                 .map(MenuRegisteredPermissionsRecord::getPermissionId)
-                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Set<Long> grantedPermissionIds = pRecordRepository
-                .findRegisteredByUserIdAndMenuIdAndPermissionIdIn(userId, navId, registeredPermissionIds)
+        if (registeredPermissionIds.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> grantedPermissionIds = approvalRepository
+                .findByUserIdAndMenuIdAndPermissionIdIn(userId, navId, registeredPermissionIds)
                 .stream()
                 .map(PagePermissionApprovalsRecord::getPermissionId)
-                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        return permissionRepository.findAllById(
-                registeredPermissionIds).stream()
+        return permissionRepository.findAllById(registeredPermissionIds).stream()
                 .sorted(Comparator.comparing(Permission::getPermissionName, String.CASE_INSENSITIVE_ORDER))
                 .map(p -> new PermissionAccessDTO(p.getId(), p.getPermissionName(), p.getVal(),
                         grantedPermissionIds.contains(p.getId())))
@@ -103,32 +110,28 @@ public class MenuAccessService {
                 baseline.setIsEnabled(true);
                 userNavMenuRepository.save(baseline);
             }
-        } else if (!rows.isEmpty()) {
-            // Revoking menu access revokes every permission scoped to this menu too.
-            userNavMenuRepository.deleteAll(rows);
+        } else {
+            if (!rows.isEmpty()) {
+                userNavMenuRepository.deleteAll(rows);
+            }
+            List<PagePermissionApprovalsRecord> approvals = approvalRepository.findByUserIdAndMenuId(userId, navId);
+            if (!approvals.isEmpty()) {
+                approvalRepository.deleteAll(approvals);
+            }
         }
         return new SimpleResponse(200, "");
     }
 
     @Transactional
     public SimpleResponse setPermissionAccess(Long navId, Long userId, Long permissionId, boolean granted) {
-        List<UserNavMenu> rows = userNavMenuRepository.findByNavIdAndUserIdAndPermissionId(navId, userId,
-                permissionId);
+        List<PagePermissionApprovalsRecord> rows = approvalRepository.findByUserIdAndMenuIdAndPermissionId(userId,
+                navId, permissionId);
         if (granted) {
             if (rows.isEmpty()) {
-                userNavMenuRepository.save(UserNavMenu.builder()
-                        .navId(navId)
-                        .userId(userId)
-                        .permissionId(permissionId)
-                        .isEnabled(true)
-                        .createDate(LocalDateTime.now())
-                        .build());
-            } else {
-                rows.forEach(r -> r.setIsEnabled(true));
-                userNavMenuRepository.saveAll(rows);
+                approvalRepository.save(new PagePermissionApprovalsRecord(null, userId, permissionId, navId, null));
             }
         } else if (!rows.isEmpty()) {
-            userNavMenuRepository.deleteAll(rows);
+            approvalRepository.deleteAll(rows);
         }
         return new SimpleResponse(200, "");
     }
