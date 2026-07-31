@@ -23,20 +23,9 @@ public interface UserNavMenuRepository extends JpaRepository<UserNavMenu, Long>,
     @NativeQuery("DELETE FROM user_nav_menu WHERE nav_id IN (:navIds)")
     int deleteByNavIds(@Param("navIds") Collection<Long> navIds);
 
-    /** Every enabled grant for a menu, across all users and permissions. */
+    /** Every enabled grant for a menu, across all users. */
     List<UserNavMenu> findByNavIdAndIsEnabledTrue(Long navId);
 
     /** Every grant (enabled or not) a user holds for a menu — the toggle target set. */
     List<UserNavMenu> findByNavIdAndUserId(Long navId, Long userId);
-
-    /** Every enabled grant a user holds for a menu, used to derive granted permissions. */
-    List<UserNavMenu> findByNavIdAndUserIdAndIsEnabledTrue(Long navId, Long userId);
-
-    /**
-     * The specific grant row for a (menu, user, permission) triple.
-     * Passing permissionId = null resolves to the baseline "has access, no
-     * specific permission" row (Spring Data rewrites the equality check to
-     * IS NULL for a null bind value).
-     */
-    List<UserNavMenu> findByNavIdAndUserIdAndPermissionId(Long navId, Long userId, Long permissionId);
 }
