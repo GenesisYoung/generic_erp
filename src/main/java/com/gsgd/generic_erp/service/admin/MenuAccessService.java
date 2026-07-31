@@ -11,9 +11,13 @@ import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.dto.PermissionAccessDTO;
 import com.gsgd.generic_erp.dto.UserAccessDTO;
+import com.gsgd.generic_erp.entity.auth.MenuRegisteredPermissionsRecord;
+import com.gsgd.generic_erp.entity.auth.PagePermissionApprovalsRecord;
 import com.gsgd.generic_erp.entity.auth.Permission;
 import com.gsgd.generic_erp.entity.auth.User;
 import com.gsgd.generic_erp.entity.auth.UserNavMenu;
+import com.gsgd.generic_erp.repository.admin.MenuRegisteredPermissionRecordRepository;
+import com.gsgd.generic_erp.repository.admin.PagePermissinApprovalRecordRepository;
 import com.gsgd.generic_erp.repository.admin.PermissionRepository;
 import com.gsgd.generic_erp.repository.admin.UserNavMenuRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
@@ -39,12 +43,17 @@ public class MenuAccessService {
     private final UserNavMenuRepository userNavMenuRepository;
     private final UserRepository userRepository;
     private final PermissionRepository permissionRepository;
+    private final MenuRegisteredPermissionRecordRepository mRecordRepository;
+    private final PagePermissinApprovalRecordRepository pRecordRepository;
 
     public MenuAccessService(UserNavMenuRepository userNavMenuRepository, UserRepository userRepository,
-            PermissionRepository permissionRepository) {
+            PermissionRepository permissionRepository, MenuRegisteredPermissionRecordRepository mRecordRepository,
+            PagePermissinApprovalRecordRepository pRecordRepository) {
         this.userNavMenuRepository = userNavMenuRepository;
         this.userRepository = userRepository;
         this.permissionRepository = permissionRepository;
+        this.mRecordRepository = mRecordRepository;
+        this.pRecordRepository = pRecordRepository;
     }
 
     public List<UserAccessDTO> listUsersForMenu(Long navId) {
@@ -59,12 +68,18 @@ public class MenuAccessService {
     }
 
     public List<PermissionAccessDTO> listPermissionsForMenu(Long navId, Long userId) {
-        Set<Long> grantedPermissionIds = userNavMenuRepository.findByNavIdAndUserIdAndIsEnabledTrue(navId, userId)
-                .stream()
-                .map(UserNavMenu::getPermissionId)
+        Set<Long> registeredPermissionIds = mRecordRepository.findByMenuId(userId).stream()
+                .map(MenuRegisteredPermissionsRecord::getPermissionId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        return permissionRepository.findAll().stream()
+        Set<Long> grantedPermissionIds = pRecordRepository
+                .findRegisteredByUserIdAndMenuIdAndPermissionIdIn(userId, navId, registeredPermissionIds)
+                .stream()
+                .map(PagePermissionApprovalsRecord::getPermissionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        return permissionRepository.findAllById(
+                registeredPermissionIds).stream()
                 .sorted(Comparator.comparing(Permission::getPermissionName, String.CASE_INSENSITIVE_ORDER))
                 .map(p -> new PermissionAccessDTO(p.getId(), p.getPermissionName(), p.getVal(),
                         grantedPermissionIds.contains(p.getId())))

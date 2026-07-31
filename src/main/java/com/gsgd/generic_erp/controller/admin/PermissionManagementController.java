@@ -44,8 +44,8 @@ public class PermissionManagementController {
     }
 
     /** Every permission, with whether the given user holds it for this menu. */
-    @GetMapping("/menu/{navId}/permissions")
-    public List<PermissionAccessDTO> fetchPermissionsForMenu(@PathVariable Long navId,
+    @GetMapping("/menu/permission")
+    public List<PermissionAccessDTO> fetchPermissionsForMenu(@RequestParam Long navId,
             @RequestParam Long userId) {
         return menuAccessService.listPermissionsForMenu(navId, userId);
     }
