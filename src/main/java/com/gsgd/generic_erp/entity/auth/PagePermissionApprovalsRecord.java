@@ -23,13 +23,13 @@ public class PagePermissionApprovalsRecord {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "user_id", nullable = false, columnDefinition = "MEDIUMTEXT")
+    @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(name = "permission_id", nullable = false, columnDefinition = "MEDIUMTEXT")
+    @Column(name = "permission_id", nullable = false)
     private Long permissionId;
 
-    @Column(name = "menu_id", nullable = false, columnDefinition = "MEDIUMTEXT")
+    @Column(name = "menu_id", nullable = false)
     private Long menuId;
 
     @Column(name = "create_date", nullable = false, insertable = false, updatable = false)
