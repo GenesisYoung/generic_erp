@@ -14,7 +14,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class PermissionRegistrationDTO {
     private Long id;
-    private String permissionName;
-    private Long val;
+    private String permissionCode;
     private boolean registered;
 }

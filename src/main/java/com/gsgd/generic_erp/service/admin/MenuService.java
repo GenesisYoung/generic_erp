@@ -68,4 +68,9 @@ public class MenuService {
         }
     }
 
+    public BasicPageResponse<NavigationMenu, MenuDTO> fetchValidData(int page, int size, MenuDTO filter) {
+        Page<NavigationMenu> m = repository.findAll(MenuSpecification.filterValid(filter), PageRequest.of(page, size));
+        return new BasicPageResponse<NavigationMenu, MenuDTO>(transferData(m.getContent()), m);
+    }
+
 }

@@ -88,8 +88,8 @@ public class MenuAccessService {
                 .map(PagePermissionApprovalsRecord::getPermissionId)
                 .collect(Collectors.toSet());
         return permissionRepository.findAllById(registeredPermissionIds).stream()
-                .sorted(Comparator.comparing(Permission::getPermissionName, String.CASE_INSENSITIVE_ORDER))
-                .map(p -> new PermissionAccessDTO(p.getId(), p.getPermissionName(), p.getVal(),
+                .sorted(Comparator.comparing(Permission::getPermissionCode, String.CASE_INSENSITIVE_ORDER))
+                .map(p -> new PermissionAccessDTO(p.getId(), p.getPermissionCode(),
                         grantedPermissionIds.contains(p.getId())))
                 .toList();
     }
@@ -137,14 +137,16 @@ public class MenuAccessService {
         return new SimpleResponse(200, "");
     }
 
-    /** Every permission, with whether it's currently registered against this menu. */
+    /**
+     * Every permission, with whether it's currently registered against this menu.
+     */
     public List<PermissionRegistrationDTO> listRegistrationsForMenu(Long navId) {
         Set<Long> registeredPermissionIds = registeredPermissionRepository.findByMenuId(navId).stream()
                 .map(MenuRegisteredPermissionsRecord::getPermissionId)
                 .collect(Collectors.toSet());
         return permissionRepository.findAll().stream()
-                .sorted(Comparator.comparing(Permission::getPermissionName, String.CASE_INSENSITIVE_ORDER))
-                .map(p -> new PermissionRegistrationDTO(p.getId(), p.getPermissionName(), p.getVal(),
+                .sorted(Comparator.comparing(Permission::getPermissionCode, String.CASE_INSENSITIVE_ORDER))
+                .map(p -> new PermissionRegistrationDTO(p.getId(), p.getPermissionCode(),
                         registeredPermissionIds.contains(p.getId())))
                 .toList();
     }

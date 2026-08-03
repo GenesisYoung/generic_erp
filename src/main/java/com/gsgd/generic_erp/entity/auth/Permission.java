@@ -35,12 +35,8 @@ public class Permission {
     @Column(name = "id")
     private Long id;
 
-    @Column(name = "permission_name", length = 50, nullable = false)
-    private String permissionName;
-
-    /** Numeric value — often used as a bitmask for fast permission checks. */
-    @Column(name = "val")
-    private Long val;
+    @Column(name = "permission_code", length = 50, nullable = false)
+    private String permissionCode;
 
     @Column(name = "create_date")
     private LocalDate createDate;

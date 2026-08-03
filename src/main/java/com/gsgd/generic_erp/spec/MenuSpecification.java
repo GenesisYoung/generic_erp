@@ -20,8 +20,19 @@ public class MenuSpecification {
                 : (root, query, builder) -> builder.like(root.get("route"), "%" + route.trim() + "%");
     }
 
+    public static Specification<NavigationMenu> valid() {
+        return (root, query, builder) -> builder.and(root.isNotNull(), root.get("route").notEqualTo(""));
+    }
+
     public static Specification<NavigationMenu> filter(MenuDTO f) {
         return Specification.allOf( // Spring Data JPA 3.x
+                titleKeyContains(f.getTitleKey()),
+                routeContains(f.getRoute()));
+    }
+
+    public static Specification<NavigationMenu> filterValid(MenuDTO f) {
+        return Specification.allOf( // Spring Data JPA 3.x
+                valid(),
                 titleKeyContains(f.getTitleKey()),
                 routeContains(f.getRoute()));
     }

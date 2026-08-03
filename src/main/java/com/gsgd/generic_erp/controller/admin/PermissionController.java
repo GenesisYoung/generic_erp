@@ -29,13 +29,24 @@ public class PermissionController {
     public BasicPageResponse<Permission, PermissionDTO> getMethodName(int page, int size,
             @RequestParam(required = false) String name) {
         BasicPage p = new BasicPage(page, size);
-        p.defineSort(Sort.by("permissionName").ascending().and(Sort.by("createDate").descending()));
+        p.defineSort(Sort.by("permissionCode").ascending().and(Sort.by("createDate").descending()));
         return permissionService.getAllPermissions(p, name);
     }
 
     @PostMapping("/delete")
     public BasicResponse deleteByVal(@RequestBody DeleteRecord record) {
         try {
+            long b = permissionService.deleteByGroup(record.deleteVal());
+            return new BasicResponse(200, "success", b);
+        } catch (Exception e) {
+            return new BasicResponse(403, "error", e.getStackTrace().toString());
+        }
+    }
+
+    @PostMapping("/deleteRoot")
+    public BasicResponse deleteRoot(@RequestBody DeleteRootRecord record) {
+        try {
+            permissionService.findAndDeleteSubPermission(record.deleteVal());
             long b = permissionService.deleteByGroup(record.deleteVal());
             return new BasicResponse(200, "success", b);
         } catch (Exception e) {
@@ -51,4 +62,7 @@ public class PermissionController {
 }
 
 record DeleteRecord(Long[] deleteVal) {
+}
+
+record DeleteRootRecord(String[] deleteVal) {
 }

@@ -2,6 +2,7 @@ package com.gsgd.generic_erp.service.admin;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -37,34 +38,52 @@ public class PermissionService {
     public List<PermissionDTO> transferDTO(List<Permission> permissions) {
         List<PermissionDTO> result = new ArrayList<>();
         for (Permission p : permissions) {
-            result.add(new PermissionDTO(p.getId(), p.getPermissionName(), p.getVal()));
+            result.add(new PermissionDTO(p.getId(), p.getPermissionCode()));
         }
         return result;
     }
 
     public Permission transferObj(PermissionDTO dto) {
         if (dto.getId() == null)
-            return new Permission(null, dto.getPermissionName(), dto.getVal(), null);
+            return new Permission(null, dto.getPermissionCode(), null);
         else {
             Permission p = permissionRepository.findById(dto.getId()).get();
-            p.setPermissionName(dto.getPermissionName());
+            p.setPermissionCode(dto.getPermissionCode());
             return p;
         }
     }
 
     public SimpleResponse saveOrUpdate(Permission transferObj) {
-        Boolean exist = permissionRepository.existsByPermissionName(transferObj.getPermissionName());
+        Boolean exist = permissionRepository.existsByPermissionCode(transferObj.getPermissionCode());
         if (exist) {
             return new SimpleResponse(201, Language_CN.NAME_DULICATED.getMessage());
         }
         transferObj.setCreateDate(LocalDate.now());
-        transferObj.setVal(System.nanoTime());
         permissionRepository.saveAndFlush(transferObj);
         return new SimpleResponse(200, "");
     }
 
     public long deleteByGroup(Long[] deleteVal) {
-        long number = permissionRepository.delete(PermissionSpecification.deleteByVal(deleteVal));
-        return number;
+        for (Long id : deleteVal) {
+            permissionRepository.deleteById(id);
+        }
+        return deleteVal.length;
+    }
+
+    public long deleteByGroup(String[] deleteVal) {
+        for (String id : deleteVal) {
+            permissionRepository.deleteByPermissionCode(id);
+        }
+        return deleteVal.length;
+    }
+
+    public void findAndDeleteSubPermission(String[] deleteVal) {
+        Arrays.asList(deleteVal).stream()
+                .forEach(ele -> {
+                    List<Permission> children = permissionRepository.findChildrenPermission(ele + "%");
+                    children.stream().forEach(e -> {
+                        permissionRepository.deleteById(e.getId());
+                    });
+                });
     }
 }

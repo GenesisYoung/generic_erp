@@ -26,6 +26,11 @@ public class MenuController {
         return service.fetchData(page, size, filter);
     }
 
+    @GetMapping("/fetch/valid")
+    public BasicPageResponse<NavigationMenu, MenuDTO> fetchValid(int page, int size, MenuDTO filter) {
+        return service.fetchValidData(page, size, filter);
+    }
+
     @PostMapping("/save")
     public SimpleResponse postMethodName(@RequestBody MenuDTO entity) {
         try {
