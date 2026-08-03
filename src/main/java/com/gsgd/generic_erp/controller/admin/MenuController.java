@@ -12,6 +12,10 @@ import com.gsgd.generic_erp.service.admin.MenuService;
 import com.gsgd.generic_erp.util.BasicPageResponse;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
+/**
+ * Navigation-menu management endpoints ({@code /api/manager/menu}):
+ * paginated listing (all or valid-only), save/update, and batch deletion.
+ */
 @RestController
 @RequestMapping("/api/manager/menu")
 public class MenuController {
@@ -21,16 +25,19 @@ public class MenuController {
         this.service = m;
     }
 
+    /** Returns a page of menu items matching the given filter. */
     @GetMapping("/fetch")
     public BasicPageResponse<NavigationMenu, MenuDTO> fetch(int page, int size, MenuDTO filter) {
         return service.fetchData(page, size, filter);
     }
 
+    /** Same as {@link #fetch}, but restricted to menu items marked valid. */
     @GetMapping("/fetch/valid")
     public BasicPageResponse<NavigationMenu, MenuDTO> fetchValid(int page, int size, MenuDTO filter) {
         return service.fetchValidData(page, size, filter);
     }
 
+    /** Creates or updates a menu item. */
     @PostMapping("/save")
     public SimpleResponse postMethodName(@RequestBody MenuDTO entity) {
         try {
@@ -41,6 +48,7 @@ public class MenuController {
         return new SimpleResponse(200, "Susccess");
     }
 
+    /** Deletes the menu items whose ids are listed in the request body. */
     @PostMapping("/delete")
     public SimpleResponse getMethodName(@RequestBody SimpleBody request) {
         try {
@@ -53,9 +61,6 @@ public class MenuController {
 
 }
 
-/**
- * SimpleBody
- * Long[] deleteVal
- */
+/** Request body carrying the ids of menu items to delete. */
 record SimpleBody(Long[] deleteVal) {
 }

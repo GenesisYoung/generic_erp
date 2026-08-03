@@ -1,5 +1,7 @@
 package com.gsgd.generic_erp.service.auth;
 
+import java.sql.Date;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.springframework.security.authentication.AuthenticationManager;
@@ -13,9 +15,11 @@ import com.gsgd.generic_erp.controller.auth.AuthenticationController.Authenticat
 import com.gsgd.generic_erp.controller.auth.AuthenticationController.AuthenticationResponse;
 import com.gsgd.generic_erp.controller.auth.AuthenticationController.TokenPair;
 import com.gsgd.generic_erp.dto.UserDTO;
+import com.gsgd.generic_erp.entity.auth.LoginLog;
 import com.gsgd.generic_erp.entity.auth.User;
 import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.enums.Language_EN;
+import com.gsgd.generic_erp.repository.auth.LoginLogRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
 import com.gsgd.generic_erp.util.GlobalVariable;
@@ -23,6 +27,15 @@ import com.gsgd.generic_erp.util.GlobalVariable;
 import io.jsonwebtoken.lang.Objects;
 import jakarta.servlet.http.HttpServletRequest;
 
+/**
+ * Business logic for login and token rotation.
+ * <p>
+ * Responsibilities: credential verification through Spring Security's
+ * {@link AuthenticationManager}, failed-attempt tracking with automatic
+ * account locking (3 strikes), single-session enforcement via a per-login
+ * session id embedded in the refresh token, login audit logging, and
+ * localized (EN/CN) response messages.
+ */
 @Service
 public class AuthenticationService {
 
@@ -32,19 +45,37 @@ public class AuthenticationService {
 
         private final UserRepository userRepository;
 
+        private final LoginLogRepository loginLogRepository;
+
         private final GlobalVariable globalVariable;
 
         AuthenticationService(AuthenticationManager authenticationManager, JWTUtil jwtUtil,
                         UserRepository userRepository,
+                        LoginLogRepository loginLogRepository,
                         GlobalVariable globalVariable)
                         throws ClassNotFoundException {
                 this.authenticationManager = authenticationManager;
                 this.jwtUtil = jwtUtil;
                 this.userRepository = userRepository;
+                this.loginLogRepository = loginLogRepository;
                 this.globalVariable = globalVariable;
 
         }
 
+        /**
+         * Full login flow:
+         * <ol>
+         * <li>Reject unknown or disabled accounts.</li>
+         * <li>Verify the password via the AuthenticationManager (Argon2).</li>
+         * <li>Reset the failed-attempt counter on success; on a bad password,
+         * increment it and disable the account after 3 failures.</li>
+         * <li>Issue a new session id + token pair (invalidates older sessions,
+         * since the refresh token's {@code sid} must match the stored one).</li>
+         * <li>Record a login audit log entry.</li>
+         * </ol>
+         *
+         * @return 200 with tokens and user info; 401/402 on failure
+         */
         public BasicResponse handleLogin(AuthenticationRequest entity) {
                 try {
                         String username = entity.username().trim();
@@ -84,12 +115,23 @@ public class AuthenticationService {
                         UserDTO userDTO = new UserDTO(user.getId(), user.getUsername(), user.getEmail(),
                                         user.getDisplayName(),
                                         null, user.getStatus(), user.getIsEnabled());
+                        LoginLog loginLog = LoginLog.builder()
+                                        .userId(user.getId())
+                                        .loginIp(System.getenv("REMOTE_ADDR") != null ? System.getenv("REMOTE_ADDR")
+                                                        : "Unknown")
+                                        .loginTime(LocalDateTime.now())
+                                        .status(1)
+                                        .createDate(new Date(new java.util.Date().getTime()))
+                                        .build();
+                        loginLogRepository.save(loginLog);
                         return new BasicResponse(200,
                                         globalVariable.getDEFAULT_LANGUAGE().equals("EN")
                                                         ? Language_EN.LOGIN_SUCCESSFUL.getMessage()
                                                         : Language_CN.LOGIN_SUCCESSFUL.getMessage(),
                                         new AuthenticationResponse(new TokenPair(refreshToken, accessToken), userDTO));
                 } catch (BadCredentialsException e) {
+                        // Wrong password: increment the failed-attempt counter and lock the
+                        // account (isEnabled = 0) once it reaches 3 consecutive failures.
                         String username = entity.username().trim();
                         User user = userRepository.findByUsername(username)
                                         .filter(u -> u.getIsEnabled() != null && u.getIsEnabled() == 1)
@@ -125,6 +167,10 @@ public class AuthenticationService {
                 }
         }
 
+        /**
+         * Returns the remaining validity (ms) of the refresh token carried in the
+         * {@code Authorization} header, or -1 if the token is invalid.
+         */
         public long getExpirationRemaining(HttpServletRequest request) {
                 String refreshToken = request.getHeader("Authorization").substring(7);
                 if (jwtUtil.isValid(1, refreshToken.trim())) {
@@ -135,6 +181,11 @@ public class AuthenticationService {
                 }
         }
 
+        /**
+         * Issues a new access token in exchange for a valid refresh token.
+         * The token's embedded session id must match the user's current session id —
+         * this rejects refresh tokens from older logins (single-session enforcement).
+         */
         public BasicResponse refreshAccessToken(HttpServletRequest request) {
                 String refreshToken = request.getHeader("Authorization").substring(7); // Remove "Bearer " prefix
                 if (!jwtUtil.isValid(1, refreshToken.trim())) {
@@ -176,6 +227,10 @@ public class AuthenticationService {
                 }
         }
 
+        /**
+         * Rotates the refresh token: validates the presented one and issues a new
+         * refresh token bound to the same session id.
+         */
         public BasicResponse refreshRefreshToken(HttpServletRequest request) {
                 String refreshToken = request.getHeader("Authorization").substring(7); // Remove "Bearer " prefix
                 if (!jwtUtil.isValid(1, refreshToken.trim())) {

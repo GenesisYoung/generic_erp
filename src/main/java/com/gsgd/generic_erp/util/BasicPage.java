@@ -3,6 +3,11 @@ package com.gsgd.generic_erp.util;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
+/**
+ * Lightweight {@link Pageable} implementation with a mutable sort, used when a
+ * controller builds pagination manually instead of binding a Spring Pageable.
+ * Defaults: page 0, size 20, unsorted.
+ */
 public class BasicPage implements Pageable {
 
     private int pageNumber = 0;

@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.enums;
 
+/** Simplified Chinese user-facing messages for auth and error responses. */
 public enum Language_CN implements Language {
 
     MULTIPLE_FAILURE("多次登录失败，账号已停用"),

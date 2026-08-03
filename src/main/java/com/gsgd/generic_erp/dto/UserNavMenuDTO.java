@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/** Sidebar menu item as delivered to the frontend (i18n title key, icon, route). */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor

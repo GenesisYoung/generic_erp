@@ -13,11 +13,14 @@ import com.gsgd.generic_erp.entity.auth.UserNavMenu;
 
 import jakarta.transaction.Transactional;
 
+/** Repository for direct user-to-menu grants ({@code user_nav_menu}). */
 public interface UserNavMenuRepository extends JpaRepository<UserNavMenu, Long>, JpaSpecificationExecutor<UserNavMenu> {
 
+    /** All enabled menu grants for one user. */
     @NativeQuery("SELECT * FROM user_nav_menu AS m WHERE m.user_id = ?1 and m.is_enabled = 1")
     List<UserNavMenu> findByUserId(Long id);
 
+    /** Removes every user's grant for the given menus; used before menu deletion. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @NativeQuery("DELETE FROM user_nav_menu WHERE nav_id IN (:navIds)")

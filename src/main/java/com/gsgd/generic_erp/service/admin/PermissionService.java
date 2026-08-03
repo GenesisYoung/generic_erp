@@ -17,6 +17,11 @@ import com.gsgd.generic_erp.spec.PermissionSpecification;
 import com.gsgd.generic_erp.util.BasicPageResponse;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
+/**
+ * CRUD operations for {@link Permission} records. Permission codes are
+ * hierarchical strings (children share their parent's code as a prefix),
+ * which is what enables cascading deletion of sub-permissions.
+ */
 @Service
 public class PermissionService {
 
@@ -26,6 +31,7 @@ public class PermissionService {
         this.permissionRepository = permissionRepository;
     }
 
+    /** Returns a page of permissions, filtered by name when one is provided. */
     public BasicPageResponse<Permission, PermissionDTO> getAllPermissions(Pageable pageable, String name) {
         if (name == null || name.isEmpty()) {
             Page<Permission> page = permissionRepository.findAll(pageable);
@@ -43,6 +49,7 @@ public class PermissionService {
         return result;
     }
 
+    /** Maps a DTO to an entity: loads the existing row when an id is present. */
     public Permission transferObj(PermissionDTO dto) {
         if (dto.getId() == null)
             return new Permission(null, dto.getPermissionCode(), null);
@@ -53,6 +60,7 @@ public class PermissionService {
         }
     }
 
+    /** Saves a permission, rejecting duplicate permission codes. */
     public SimpleResponse saveOrUpdate(Permission transferObj) {
         Boolean exist = permissionRepository.existsByPermissionCode(transferObj.getPermissionCode());
         if (exist) {
@@ -63,6 +71,7 @@ public class PermissionService {
         return new SimpleResponse(200, "");
     }
 
+    /** Deletes permissions by id; returns the number requested. */
     public long deleteByGroup(Long[] deleteVal) {
         for (Long id : deleteVal) {
             permissionRepository.deleteById(id);
@@ -70,6 +79,7 @@ public class PermissionService {
         return deleteVal.length;
     }
 
+    /** Deletes permissions by exact permission code. */
     public long deleteByGroup(String[] deleteVal) {
         for (String id : deleteVal) {
             permissionRepository.deleteByPermissionCode(id);
@@ -77,6 +87,10 @@ public class PermissionService {
         return deleteVal.length;
     }
 
+    /**
+     * Deletes all sub-permissions of the given root codes, matched by the
+     * {@code code%} prefix pattern. Called before deleting the roots themselves.
+     */
     public void findAndDeleteSubPermission(String[] deleteVal) {
         Arrays.asList(deleteVal).stream()
                 .forEach(ele -> {

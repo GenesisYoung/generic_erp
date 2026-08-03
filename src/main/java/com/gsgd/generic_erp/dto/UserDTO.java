@@ -6,6 +6,10 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * User DTO for listing and save/update requests. Carries role values (not ids)
+ * and account flags; never the password.
+ */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor

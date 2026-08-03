@@ -11,6 +11,10 @@ import com.gsgd.generic_erp.util.BasicPageRequest;
 import com.gsgd.generic_erp.util.BasicPageResponse;
 import com.gsgd.generic_erp.view.NavigationPermissionView;
 
+/**
+ * Read-only queries over the {@link NavigationPermissionView} database view,
+ * which joins menus, users, and permissions for the permission-management UI.
+ */
 @Service
 public class NavigationMenutViewService {
     private NavigationPermissionViewRepository repository;
@@ -19,6 +23,7 @@ public class NavigationMenutViewService {
         this.repository = repo;
     }
 
+    /** Paginated, specification-filtered query over the view. */
     public BasicPageResponse<NavigationPermissionView, NavigationPermissionView> query(
             BasicPageRequest<PermissionMenuViewFilter> filter) {
         Page<NavigationPermissionView> p = repository.findAll(

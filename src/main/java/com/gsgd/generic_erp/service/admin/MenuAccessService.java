@@ -64,6 +64,7 @@ public class MenuAccessService {
         this.approvalRepository = approvalRepository;
     }
 
+    /** Every enabled user, flagged with whether they hold direct access to this menu. */
     public List<UserAccessDTO> listUsersForMenu(Long navId) {
         Set<Long> grantedUserIds = userNavMenuRepository.findByNavIdAndIsEnabledTrue(navId).stream()
                 .map(UserNavMenu::getUserId)
@@ -75,6 +76,10 @@ public class MenuAccessService {
                 .toList();
     }
 
+    /**
+     * Permissions registered against this menu, each flagged with whether the
+     * given user currently holds it. Unregistered permissions are never offered.
+     */
     public List<PermissionAccessDTO> listPermissionsForMenu(Long navId, Long userId) {
         Set<Long> registeredPermissionIds = registeredPermissionRepository.findByMenuId(navId).stream()
                 .map(MenuRegisteredPermissionsRecord::getPermissionId)
@@ -94,6 +99,11 @@ public class MenuAccessService {
                 .toList();
     }
 
+    /**
+     * Grants or revokes a user's direct (baseline) access to a menu. Revoking
+     * also clears the user's permission approvals for the menu so access does
+     * not survive through the other path (see class doc).
+     */
     @Transactional
     public SimpleResponse setUserAccess(Long navId, Long userId, boolean granted) {
         List<UserNavMenu> rows = userNavMenuRepository.findByNavIdAndUserId(navId, userId);
@@ -123,6 +133,7 @@ public class MenuAccessService {
         return new SimpleResponse(200, "");
     }
 
+    /** Grants or revokes a single permission approval for a user on a menu (idempotent). */
     @Transactional
     public SimpleResponse setPermissionAccess(Long navId, Long userId, Long permissionId, boolean granted) {
         List<PagePermissionApprovalsRecord> rows = approvalRepository.findByUserIdAndMenuIdAndPermissionId(userId,

@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import com.gsgd.generic_erp.entity.auth.NavigationMenu;
 
+/** Repository for sidebar navigation menu items. */
 public interface NavigationMenuRepository
         extends JpaRepository<NavigationMenu, Long>, JpaSpecificationExecutor<NavigationMenu> {
 }

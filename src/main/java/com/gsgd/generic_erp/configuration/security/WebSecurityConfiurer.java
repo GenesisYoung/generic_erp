@@ -19,6 +19,15 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+/**
+ * Central Spring Security configuration.
+ * <p>
+ * Defines a stateless (no HTTP session) security filter chain: CSRF is disabled
+ * because authentication is JWT-based, CORS is restricted to local frontend
+ * origins, and only the login/refresh endpoints are publicly accessible. The
+ * {@link JwtAuthenticationFilter} is inserted before the standard
+ * username/password filter so every request is authenticated from its token.
+ */
 @Configuration
 @EnableWebSecurity
 public class WebSecurityConfiurer {

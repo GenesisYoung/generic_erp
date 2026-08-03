@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/** Permission DTO exposing only the id and hierarchical permission code. */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor

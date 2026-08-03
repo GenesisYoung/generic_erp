@@ -28,6 +28,10 @@ import com.gsgd.generic_erp.util.SimpleResponse;
 
 import jakarta.transaction.Transactional;
 
+/**
+ * Administrative user management: paginated listing (disabled users excluded),
+ * create/update with role diffing, and soft deletion.
+ */
 @Service
 public class UserManagementService {
     // private final JWTUtil JWTUtil;
@@ -48,6 +52,7 @@ public class UserManagementService {
         this.authenticationService = aService;
     }
 
+    /** Returns a page of enabled users, each mapped to a DTO with its roles attached. */
     public BasicPageResponse<User, UserDTO> fetchUserList(Pageable pageable) {
         Page<User> users = repository.findAll(UserSpecification.excludeDisabled((byte) 1), pageable);
         List<UserDTO> dto = new ArrayList<>();
@@ -59,6 +64,14 @@ public class UserManagementService {
         return new BasicPageResponse<>(dto, users);
     }
 
+    /**
+     * Creates a user ({@code userId == 0}) or updates an existing one.
+     * <p>
+     * On update, the user's role links are reconciled with a set diff:
+     * roles no longer selected are bulk-deleted and newly selected roles are
+     * bulk-inserted, keeping the whole operation to a handful of queries.
+     * New users get a default password ({@code "userpass"}) hashed with Argon2.
+     */
     @Transactional
     public SimpleResponse saveOrUpdate(Long userId, UserDTO user) {
         try {
@@ -122,6 +135,10 @@ public class UserManagementService {
         }
     }
 
+    /**
+     * Soft-deletes a user by setting {@code isEnabled = 0}; the row is kept for
+     * audit history. The root user (id 1) cannot be deleted.
+     */
     @Transactional
     public SimpleResponse deleteUser(Long id) {
         try {
@@ -136,6 +153,11 @@ public class UserManagementService {
         return new SimpleResponse(200, "successfully deleted");
     }
 
+    /**
+     * Maps a {@link UserDTO} onto a {@link User} entity: loads and mutates the
+     * existing entity when {@code id != 0}, otherwise builds a fresh one with a
+     * default hashed password.
+     */
     private User injectUserDTO(UserDTO user, Long id) {
         if (id != 0) {
             Optional<User> result = userRepository.findById(id);

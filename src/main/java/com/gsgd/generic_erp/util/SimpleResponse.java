@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/** Minimal API response: an application status code and a message, no payload. */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor

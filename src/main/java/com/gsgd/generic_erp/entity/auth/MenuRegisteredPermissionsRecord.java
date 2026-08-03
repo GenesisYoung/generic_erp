@@ -12,6 +12,10 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * Registration of a permission against a navigation menu. A permission must be
+ * registered here before it can be approved for any user on that menu.
+ */
 @Entity
 @Table(name = "menu_registered_permissions_record")
 @Data

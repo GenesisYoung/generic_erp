@@ -8,6 +8,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.gsgd.generic_erp.service.auth.UserService;
 import com.gsgd.generic_erp.util.BasicResponse;
 
+/**
+ * User-facing endpoints ({@code /api/users}) for data belonging to the
+ * authenticated user, e.g. the sidebar navigation menu.
+ */
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
@@ -18,7 +22,7 @@ public class UserController {
         this.service = service;
     }
 
-    // Response all available sidebar menu options through user id
+    /** Returns all sidebar menu items visible to the given user. */
     @RequestMapping(path = "/fetch/sidebar/menu", method = RequestMethod.GET)
     public BasicResponse fetchSideMenu(@RequestParam Long id) {
         return service.fetchNavMenu(id);

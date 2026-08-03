@@ -8,6 +8,12 @@ import org.springframework.web.bind.annotation.RestController;
 import com.gsgd.generic_erp.service.admin.MenuAccessService;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
+/**
+ * Write-side endpoints ({@code /api/permission/manipulate}) for granting and
+ * revoking menu access: user-level access, per-user permission grants, and
+ * permission-to-menu registrations. Read queries live in
+ * {@link PermissionManagementController}.
+ */
 @RestController
 @RequestMapping("/api/permission/manipulate")
 public class ManipulatePermissionController {
@@ -51,11 +57,14 @@ public class ManipulatePermissionController {
     }
 }
 
+/** Request body: grant/revoke a user's access to a menu. */
 record UserAccessRequest(Long navId, Long userId, boolean granted) {
 }
 
+/** Request body: grant/revoke one permission for a user on a menu. */
 record PermissionAccessRequest(Long navId, Long userId, Long permissionId, boolean granted) {
 }
 
+/** Request body: register/de-register a permission against a menu. */
 record PermissionRegistrationRequest(Long navId, Long permissionId, boolean registered) {
 }

@@ -12,6 +12,10 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * Approval of one (registered) permission for one user on one menu — the
+ * "via permission" path that makes a menu visible to a user.
+ */
 @Entity
 @Table(name = "page_permission_approvals_record")
 @Data

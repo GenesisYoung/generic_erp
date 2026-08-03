@@ -14,6 +14,10 @@ import com.gsgd.generic_erp.repository.admin.PagePermissinApprovalRecordReposito
 import com.gsgd.generic_erp.repository.admin.UserNavMenuRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
 
+/**
+ * User-scoped business logic — currently resolving which sidebar
+ * navigation menu items are visible to a given user.
+ */
 @Service
 public class UserService {
 
@@ -28,9 +32,12 @@ public class UserService {
         this.approvalRepository = approvalRepository;
     }
 
-    // Fetch side bar menu by using user id. A menu is visible either through a
-    // direct user_nav_menu grant, or because the user holds at least one
-    // permission approved for that menu.
+    /**
+     * Fetches the sidebar menu for a user. A menu is visible either through a
+     * direct {@code user_nav_menu} grant, or because the user holds at least one
+     * permission approved for that menu; the two sources are merged and
+     * de-duplicated before mapping to DTOs.
+     */
     public BasicResponse fetchNavMenu(Long id) {
         Stream<Long> directNavIds = userNavMenuRepository.findByUserId(id)
                 .stream()

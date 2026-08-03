@@ -6,6 +6,10 @@ import org.springframework.util.StringUtils;
 import com.gsgd.generic_erp.dto.filter.PermissionMenuViewFilter;
 import com.gsgd.generic_erp.view.NavigationPermissionView;
 
+/**
+ * JPA Specifications for filtering the {@link NavigationPermissionView} by
+ * username, menu key, permission name, and route. Blank values are ignored.
+ */
 public class NavigationMenuSpecification {
     private static Specification<NavigationPermissionView> filterByUserName(String uName) {
         return !StringUtils.hasText(uName) ? (root, query, builder) -> builder.conjunction()

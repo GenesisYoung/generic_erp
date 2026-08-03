@@ -20,6 +20,12 @@ import com.gsgd.generic_erp.util.BasicPageRequest;
 import com.gsgd.generic_erp.util.BasicPageResponse;
 import com.gsgd.generic_erp.view.NavigationPermissionView;
 
+/**
+ * Read-side endpoints ({@code /api/permission}) for the permission-management
+ * screens: paginated queries over the menu/permission database view, plus
+ * per-menu listings of users, permissions, and registrations with their
+ * current grant status. Mutations live in {@link ManipulatePermissionController}.
+ */
 @RestController
 @RequestMapping("/api/permission")
 public class PermissionManagementController {
@@ -32,6 +38,7 @@ public class PermissionManagementController {
         this.menuAccessService = menuAccessService;
     }
 
+    /** Paginated, filterable query over the navigation/permission view. */
     @PostMapping("/fetch")
     public BasicPageResponse<NavigationPermissionView, NavigationPermissionView> fetchPermissionThrouthUser(
             @RequestBody BasicPageRequest<PermissionMenuViewFilter> filter) {

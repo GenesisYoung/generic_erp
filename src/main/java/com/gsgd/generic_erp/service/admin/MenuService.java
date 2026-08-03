@@ -16,6 +16,10 @@ import com.gsgd.generic_erp.repository.admin.UserNavMenuRepository;
 import com.gsgd.generic_erp.spec.MenuSpecification;
 import com.gsgd.generic_erp.util.BasicPageResponse;
 
+/**
+ * CRUD operations for sidebar navigation menu items, with
+ * specification-based filtering and pagination.
+ */
 @Service
 public class MenuService {
 
@@ -28,6 +32,7 @@ public class MenuService {
         this.navMenuRepository = navMenuRepository;
     }
 
+    /** Returns a page of menu items matching the filter (enabled or not). */
     public BasicPageResponse<NavigationMenu, MenuDTO> fetchData(int page, int size, MenuDTO filter) {
         Page<NavigationMenu> m = repository.findAll(MenuSpecification.filter(filter), PageRequest.of(page, size));
         return new BasicPageResponse<NavigationMenu, MenuDTO>(transferData(m.getContent()), m);
@@ -61,6 +66,10 @@ public class MenuService {
         return m;
     }
 
+    /**
+     * Deletes menu items in batch. User-to-menu links are removed first so no
+     * orphaned {@code user_nav_menu} rows are left behind.
+     */
     public void delete(Long[] ids) {
         if (ids != null) {
             navMenuRepository.deleteByNavIds(Arrays.asList(ids));
@@ -68,6 +77,7 @@ public class MenuService {
         }
     }
 
+    /** Same as {@link #fetchData}, restricted to enabled ("valid") menu items. */
     public BasicPageResponse<NavigationMenu, MenuDTO> fetchValidData(int page, int size, MenuDTO filter) {
         Page<NavigationMenu> m = repository.findAll(MenuSpecification.filterValid(filter), PageRequest.of(page, size));
         return new BasicPageResponse<NavigationMenu, MenuDTO>(transferData(m.getContent()), m);

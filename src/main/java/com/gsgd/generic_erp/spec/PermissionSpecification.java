@@ -5,6 +5,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import com.gsgd.generic_erp.entity.auth.Permission;
 
+/** JPA Specifications for {@link Permission} queries (name search, batch delete). */
 public class PermissionSpecification {
     public static Specification<Permission> hasPermissionName(String permissionName) {
         return (root, query, criteriaBuilder) -> criteriaBuilder.like(root.get("permissionName"),

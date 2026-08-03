@@ -6,6 +6,11 @@ import org.springframework.util.StringUtils;
 import com.gsgd.generic_erp.dto.MenuDTO;
 import com.gsgd.generic_erp.entity.auth.NavigationMenu;
 
+/**
+ * JPA Specifications for filtering {@link NavigationMenu} queries.
+ * Blank filter values degrade to a no-op conjunction so they can always be
+ * combined with {@code Specification.allOf}.
+ */
 public class MenuSpecification {
 
     public static Specification<NavigationMenu> titleKeyContains(String titleKey) {

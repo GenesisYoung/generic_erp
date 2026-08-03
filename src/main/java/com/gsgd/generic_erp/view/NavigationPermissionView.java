@@ -10,6 +10,11 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+/**
+ * Read-only entity mapped to the {@code navigation_permission_view} database
+ * view, which flattens user ↔ menu ↔ permission grants into one row per grant
+ * for the permission-management screens.
+ */
 @Entity
 @Immutable
 @Table(name = "navigation_permission_view")

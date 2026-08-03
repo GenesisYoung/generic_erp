@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.enums;
 
+/** English user-facing messages for auth and error responses. */
 public enum Language_EN implements Language {
 
     MULTIPLE_FAILURE("Multiple failures, please try again later"),

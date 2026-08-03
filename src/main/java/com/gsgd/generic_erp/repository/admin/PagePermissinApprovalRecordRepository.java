@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import com.gsgd.generic_erp.entity.auth.PagePermissionApprovalsRecord;
 
+/** Repository for per-user permission approvals on menus. */
 public interface PagePermissinApprovalRecordRepository
         extends JpaRepository<PagePermissionApprovalsRecord, Long>,
         JpaSpecificationExecutor<PagePermissionApprovalsRecord> {

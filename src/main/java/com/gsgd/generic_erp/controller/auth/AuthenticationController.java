@@ -12,6 +12,13 @@ import com.gsgd.generic_erp.util.BasicResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+/**
+ * Public authentication endpoints ({@code /api/auth}).
+ * <p>
+ * Handles login and both halves of the token-rotation flow: exchanging a
+ * refresh token for a new access token, and rotating the refresh token itself.
+ * These are the only endpoints (besides registration) permitted without a JWT.
+ */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthenticationController {
@@ -22,7 +29,7 @@ public class AuthenticationController {
         this.service = service;
     }
 
-    // Login endpoint
+    /** Authenticates with username/password; returns a token pair plus user info. */
     @PostMapping("/login")
     public BasicResponse login(@RequestBody AuthenticationRequest entity) {
         return service.handleLogin(entity);
@@ -34,25 +41,27 @@ public class AuthenticationController {
     // return service.getExpirationRemaining(request);
     // }
 
-    // Refresh access token endpoint
+    /** Exchanges a valid refresh token (from the request header) for a new access token. */
     @RequestMapping(path = "/refresh/access", method = RequestMethod.POST)
     public BasicResponse accessToken(HttpServletRequest request) {
         return service.refreshAccessToken(request);
     }
 
-    // Refresh refresh token endpoint
+    /** Rotates the refresh token itself, invalidating the previous one. */
     @RequestMapping(path = "/refresh/refresh", method = RequestMethod.POST)
     public BasicResponse refreshToken(HttpServletRequest request) {
         return service.refreshRefreshToken(request);
     }
 
+    /** Access + refresh token pair returned on login and rotation. */
     public record TokenPair(String refreshToken, String accessToken) {
     }
 
-    // Authentication request record
+    /** Login request body. */
     public record AuthenticationRequest(String username, String password) {
     }
 
+    /** Successful login payload: tokens plus the authenticated user's profile. */
     public record AuthenticationResponse(TokenPair tokens, UserDTO user) {
     }
 }

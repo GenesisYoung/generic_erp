@@ -16,6 +16,15 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 
+/**
+ * Utility service for creating, parsing, and validating JWTs.
+ * <p>
+ * Two independent HMAC-SHA256 keys are used: one for short-lived access tokens
+ * and one for long-lived refresh tokens. The keys are read from the
+ * {@code AUTHENTICATION_SECRET_KEY_ACCESS} / {@code AUTHENTICATION_SECRET_KEY_REFRESH}
+ * environment variables, falling back to hard-coded development keys when absent.
+ * Token lifetimes are configured via {@code security.token.expiracy.*} properties.
+ */
 @Service
 public class JWTUtil {
 
@@ -44,6 +53,14 @@ public class JWTUtil {
                 "HmacSHA256");
     }
 
+    /**
+     * Generates a refresh token bound to a specific session.
+     *
+     * @param username  token subject
+     * @param sessionId session identifier stored in the {@code sid} claim, used to
+     *                  match the token against its persisted record on rotation
+     * @return signed compact JWT string
+     */
     public String generateRefreshToken(String username, String sessionId) {
         long now = System.currentTimeMillis();
         return Jwts.builder()
@@ -55,6 +72,7 @@ public class JWTUtil {
                 .compact();
     }
 
+    /** Generates a short-lived access token for the given username. */
     public String generateAccessToken(String username) {
         long now = System.currentTimeMillis();
         return Jwts.builder()
@@ -65,10 +83,16 @@ public class JWTUtil {
                 .compact();
     }
 
+    /** Looks up the {@link User} entity for a username, or {@code null} if absent. */
     public User getUser(String username) {
         return userRepository.findByUsername(username).orElse(null);
     }
 
+    /**
+     * Extracts the subject (username) from a token.
+     *
+     * @param type 0 = access token, 1 = refresh token (selects the verification key)
+     */
     public String extractUsername(int type, String token) {
         return parseClaims(type, token).getSubject();
     }
@@ -87,6 +111,10 @@ public class JWTUtil {
         }
     }
 
+    /**
+     * Parses and verifies a token's signature, returning its claims.
+     * Throws {@link JwtException} if the signature is invalid or the token expired.
+     */
     private Claims parseClaims(int type, String token) {
         SecretKey key = (type == 0) ? keyAccess : keyRefresh;
         return Jwts.parser()
@@ -96,6 +124,10 @@ public class JWTUtil {
                 .getPayload();
     }
 
+    /**
+     * Returns the remaining validity time of a token in milliseconds
+     * (never negative; 0 means already expired).
+     */
     public long expirationRemaining(int type, String token) {
         Claims claims = parseClaims(type, token);
         long exp = claims.getExpiration().getTime();
@@ -103,6 +135,7 @@ public class JWTUtil {
         return Math.max(exp - now, 0);
     }
 
+    /** Extracts the {@code sid} (session id) claim from a refresh token. */
     public String extractSessionId(String token) {
         return parseClaims(1, token).get("sid", String.class);
     }

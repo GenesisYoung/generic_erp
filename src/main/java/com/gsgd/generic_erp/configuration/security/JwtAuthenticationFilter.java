@@ -15,6 +15,16 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+/**
+ * Servlet filter that authenticates every request from its JWT.
+ * <p>
+ * Runs once per request, before Spring Security's username/password filter.
+ * If a valid {@code Authorization: Bearer} access token is present, the
+ * corresponding user is loaded and placed into the {@link SecurityContextHolder}.
+ * It also reports the remaining lifetime of the client's refresh token via the
+ * {@code Refresh-Token-Remaining} response header so the frontend can decide
+ * when to rotate it.
+ */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
