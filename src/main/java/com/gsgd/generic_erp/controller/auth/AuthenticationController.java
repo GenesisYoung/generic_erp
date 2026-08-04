@@ -29,10 +29,12 @@ public class AuthenticationController {
         this.service = service;
     }
 
-    /** Authenticates with username/password; returns a token pair plus user info. */
+    /**
+     * Authenticates with username/password; returns a token pair plus user info.
+     */
     @PostMapping("/login")
-    public BasicResponse login(@RequestBody AuthenticationRequest entity) {
-        return service.handleLogin(entity);
+    public BasicResponse login(@RequestBody AuthenticationRequest entity, HttpServletRequest request) {
+        return service.handleLogin(entity, request);
     }
 
     // // Token expiration remaining endpoint
@@ -41,7 +43,10 @@ public class AuthenticationController {
     // return service.getExpirationRemaining(request);
     // }
 
-    /** Exchanges a valid refresh token (from the request header) for a new access token. */
+    /**
+     * Exchanges a valid refresh token (from the request header) for a new access
+     * token.
+     */
     @RequestMapping(path = "/refresh/access", method = RequestMethod.POST)
     public BasicResponse accessToken(HttpServletRequest request) {
         return service.refreshAccessToken(request);

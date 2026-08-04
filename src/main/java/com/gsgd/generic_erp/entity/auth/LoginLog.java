@@ -4,6 +4,7 @@ import java.sql.Date;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -16,6 +17,7 @@ import lombok.Setter;
 import lombok.ToString;
 
 /** Audit record of a login event: user, source IP, time, and outcome status. */
+@Entity
 @Table(name = "user_login_log_tb")
 @Getter
 @Setter
@@ -27,7 +29,7 @@ public class LoginLog {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false, length = 32)
+    @Column(name = "id", nullable = false, length = 36)
     private String id;
     @Column(name = "user_id", nullable = false)
     private Long userId;

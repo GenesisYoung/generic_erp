@@ -1,7 +1,9 @@
 package com.gsgd.generic_erp.configuration.security;
 
 import java.io.IOException;
+import java.util.List;
 
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -20,7 +22,8 @@ import jakarta.servlet.http.HttpServletResponse;
  * <p>
  * Runs once per request, before Spring Security's username/password filter.
  * If a valid {@code Authorization: Bearer} access token is present, the
- * corresponding user is loaded and placed into the {@link SecurityContextHolder}.
+ * corresponding user is loaded and placed into the
+ * {@link SecurityContextHolder}.
  * It also reports the remaining lifetime of the client's refresh token via the
  * {@code Refresh-Token-Remaining} response header so the frontend can decide
  * when to rotate it.
@@ -28,12 +31,15 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private JWTUtil jwtService;
-    private CustomizedUserDetailServiceImpl userDetailsService;
+    private final JWTUtil jwtService;
+    private final CustomizedUserDetailServiceImpl userDetailsService;
+    private final RedisTemplate<String, Object> redisTemplate;
 
-    public JwtAuthenticationFilter(JWTUtil jwtUtil, CustomizedUserDetailServiceImpl impl) {
-        jwtService = jwtUtil;
-        userDetailsService = impl;
+    public JwtAuthenticationFilter(JWTUtil jwtUtil, CustomizedUserDetailServiceImpl impl,
+            RedisTemplate<String, Object> redisTemplate) {
+        this.jwtService = jwtUtil;
+        this.userDetailsService = impl;
+        this.redisTemplate = redisTemplate;
     }
 
     @Override
@@ -41,6 +47,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String header = request.getHeader("Authorization");
         String refreshToken = request.getHeader("Refresh-Token");
+        List<String> allowedEndpoints = List.of("/api/auth/login", "/api/auth/register", "/api/auth/refresh/access",
+                "/api/auth/refresh/refresh");
+        String requestPath = request.getRequestURI();
+        // If the request is for a public endpoint, skip token validation.
+        if (!allowedEndpoints.contains(requestPath)) {
+            String storedRefreshToken = (String) redisTemplate.opsForValue()
+                    .get("refreshToken:" + jwtService.extractUsername(1, refreshToken));
+            if (refreshToken != null && !refreshToken.equals(storedRefreshToken)) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.getWriter().write("Invalid refresh token");
+                return;
+            }
+        }
         // No token? Just continue; the AuthorizationFilter will reject it later if
         // needed.
         if (header == null || !header.startsWith("Bearer ")) {
@@ -62,11 +81,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
         }
-
         long tokenRemainingTime = jwtService.expirationRemaining(1, refreshToken);
         response.addHeader("Refresh-Token-Remaining",
                 String.valueOf(tokenRemainingTime));
-
         filterChain.doFilter(request, response);
     }
 

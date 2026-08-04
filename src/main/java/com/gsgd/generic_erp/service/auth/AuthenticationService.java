@@ -4,6 +4,7 @@ import java.sql.Date;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -49,17 +50,20 @@ public class AuthenticationService {
 
         private final GlobalVariable globalVariable;
 
+        private final RedisTemplate<String, Object> redisTemplateService;
+
         AuthenticationService(AuthenticationManager authenticationManager, JWTUtil jwtUtil,
                         UserRepository userRepository,
                         LoginLogRepository loginLogRepository,
-                        GlobalVariable globalVariable)
+                        GlobalVariable globalVariable,
+                        RedisTemplate<String, Object> redisTemplateService)
                         throws ClassNotFoundException {
                 this.authenticationManager = authenticationManager;
                 this.jwtUtil = jwtUtil;
                 this.userRepository = userRepository;
                 this.loginLogRepository = loginLogRepository;
                 this.globalVariable = globalVariable;
-
+                this.redisTemplateService = redisTemplateService;
         }
 
         /**
@@ -76,7 +80,8 @@ public class AuthenticationService {
          *
          * @return 200 with tokens and user info; 401/402 on failure
          */
-        public BasicResponse handleLogin(AuthenticationRequest entity) {
+        @SuppressWarnings("null")
+        public BasicResponse handleLogin(AuthenticationRequest entity, HttpServletRequest request) {
                 try {
                         String username = entity.username().trim();
                         User exist = userRepository.findByUsername(username)
@@ -115,10 +120,13 @@ public class AuthenticationService {
                         UserDTO userDTO = new UserDTO(user.getId(), user.getUsername(), user.getEmail(),
                                         user.getDisplayName(),
                                         null, user.getStatus(), user.getIsEnabled());
+                        // Store the refresh token in Redis with a TTL of 7 days, new login will
+                        // overwrite the previous one, enforcing single-session.
+                        redisTemplateService.opsForValue().set("refreshToken:" + user.getUsername(), refreshToken);
+                        redisTemplateService.expire("refreshToken:" + user.getUsername(), java.time.Duration.ofDays(7));
                         LoginLog loginLog = LoginLog.builder()
                                         .userId(user.getId())
-                                        .loginIp(System.getenv("REMOTE_ADDR") != null ? System.getenv("REMOTE_ADDR")
-                                                        : "Unknown")
+                                        .loginIp(getClientIp(request))
                                         .loginTime(LocalDateTime.now())
                                         .status(1)
                                         .createDate(new Date(new java.util.Date().getTime()))
@@ -257,5 +265,28 @@ public class AuthenticationService {
                                         null);
                 }
         }
+
+        public static String getClientIp(HttpServletRequest request) {
+                if (request == null) {
+                        return "unknown";
+                }
+
+                for (String header : IP_HEADERS) {
+                        String ipList = request.getHeader(header);
+                        if (ipList != null && !ipList.isEmpty() && !"unknown".equalsIgnoreCase(ipList)) {
+                                // X-Forwarded-For can contain a comma-separated list of proxy IPs.
+                                // The first IP is generally the original client.
+                                return ipList.split(",")[0].trim();
+                        }
+                }
+
+                // Fallback to direct connection IP if no proxy headers are found
+                return request.getRemoteAddr();
+        }
+
+        private static final String[] IP_HEADERS = {
+                        "HTTP_CLIENT_IP",
+                        "REMOTE_ADDR"
+        };
 
 }
