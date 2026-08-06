@@ -1,11 +1,11 @@
 package com.gsgd.generic_erp.view;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-@Data
-@AllArgsConstructor
+@Getter
+@Setter
 @NoArgsConstructor
 public class UserRoleView {
     private Long userId;
@@ -15,4 +15,5 @@ public class UserRoleView {
     private Integer value;
 
     private String title;
+
 }

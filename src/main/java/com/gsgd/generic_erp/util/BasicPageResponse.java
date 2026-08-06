@@ -4,9 +4,9 @@ import java.util.List;
 
 import org.springframework.data.domain.Page;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * A basic page response wrapper for handling paginated data.
@@ -14,18 +14,20 @@ import lombok.NoArgsConstructor;
  * R - The type of the DTO (Data Transfer Object) that will be returned in the
  * response.
  */
+@Getter
+@Setter
 @NoArgsConstructor
 public class BasicPageResponse<T, R> {
 
-    @JsonProperty("content")
+    // @JsonProperty("content")
     private List<R> content;
-    @JsonProperty("pageNumber")
+    // @JsonProperty("pageNumber")
     private int pageNumber;
-    @JsonProperty("pageSize")
+    // @JsonProperty("pageSize")
     private int pageSize;
-    @JsonProperty("totalElements")
+    // @JsonProperty("totalElements")
     private long totalElements;
-    @JsonProperty("totalPages")
+    // @JsonProperty("totalPages")
     private int totalPages;
 
     public BasicPageResponse(List<R> content, Page<T> page) {
@@ -35,27 +37,4 @@ public class BasicPageResponse<T, R> {
         this.totalElements = page.getTotalElements();
         this.totalPages = page.getTotalPages();
     }
-
-    public List<R> getContent() {
-        return content;
-    }
-
-    public int getPageNumber() {
-        return pageNumber;
-    }
-
-    public int getPageSize() {
-        return pageSize;
-    }
-
-    public long getTotalElements() {
-        return totalElements;
-    }
-
-    public int getTotalPages() {
-        return totalPages;
-    }
-
-    // getters
-
 }
