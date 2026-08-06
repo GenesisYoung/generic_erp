@@ -21,9 +21,12 @@ import io.jsonwebtoken.Jwts;
  * <p>
  * Two independent HMAC-SHA256 keys are used: one for short-lived access tokens
  * and one for long-lived refresh tokens. The keys are read from the
- * {@code AUTHENTICATION_SECRET_KEY_ACCESS} / {@code AUTHENTICATION_SECRET_KEY_REFRESH}
- * environment variables, falling back to hard-coded development keys when absent.
- * Token lifetimes are configured via {@code security.token.expiracy.*} properties.
+ * {@code AUTHENTICATION_SECRET_KEY_ACCESS} /
+ * {@code AUTHENTICATION_SECRET_KEY_REFRESH}
+ * environment variables, falling back to hard-coded development keys when
+ * absent.
+ * Token lifetimes are configured via {@code security.token.expiracy.*}
+ * properties.
  */
 @Service
 public class JWTUtil {
@@ -83,7 +86,9 @@ public class JWTUtil {
                 .compact();
     }
 
-    /** Looks up the {@link User} entity for a username, or {@code null} if absent. */
+    /**
+     * Looks up the {@link User} entity for a username, or {@code null} if absent.
+     */
     public User getUser(String username) {
         return userRepository.findByUsername(username).orElse(null);
     }
@@ -91,7 +96,8 @@ public class JWTUtil {
     /**
      * Extracts the subject (username) from a token.
      *
-     * @param type 0 = access token, 1 = refresh token (selects the verification key)
+     * @param type 0 = access token, 1 = refresh token (selects the verification
+     *             key)
      */
     public String extractUsername(int type, String token) {
         return parseClaims(type, token).getSubject();
@@ -138,5 +144,13 @@ public class JWTUtil {
     /** Extracts the {@code sid} (session id) claim from a refresh token. */
     public String extractSessionId(String token) {
         return parseClaims(1, token).get("sid", String.class);
+    }
+
+    public boolean isSessionCurrent(String username, String sid) {
+        User user = getUser(username);
+        if (user == null) {
+            return false;
+        }
+        return sid.equals(user.getCurrentSessionId());
     }
 }

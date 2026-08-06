@@ -46,3 +46,5 @@ logging:
     "[org.hibernate.type.descriptor.sql.BasicBinder]": TRACE
     web: DEBUG
     "[org.hibernate]": error
+app:
+  language: ${LANGUAGE}

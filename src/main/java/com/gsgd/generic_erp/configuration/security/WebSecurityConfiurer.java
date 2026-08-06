@@ -49,6 +49,7 @@ public class WebSecurityConfiurer {
                         .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh/access",
                                 "/api/auth/refresh/refresh")
                         .permitAll()
+                        .requestMatchers("/ws/**").permitAll() // handshake only; CONNECT is still authenticated
                         // All other endpoints require authentication
                         .anyRequest()
                         .authenticated())

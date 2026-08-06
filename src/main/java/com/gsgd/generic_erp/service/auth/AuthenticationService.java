@@ -119,7 +119,7 @@ public class AuthenticationService {
                         String accessToken = jwtUtil.generateAccessToken(auth.getName());
                         UserDTO userDTO = new UserDTO(user.getId(), user.getUsername(), user.getEmail(),
                                         user.getDisplayName(),
-                                        null, user.getStatus(), user.getIsEnabled());
+                                        null, user.getStatus(), user.getIsEnabled(), null);
                         // Store the refresh token in Redis with a TTL of 7 days, new login will
                         // overwrite the previous one, enforcing single-session.
                         redisTemplateService.opsForValue().set("refreshToken:" + user.getUsername(), refreshToken);
@@ -242,7 +242,7 @@ public class AuthenticationService {
         public BasicResponse refreshRefreshToken(HttpServletRequest request) {
                 String refreshToken = request.getHeader("Authorization").substring(7); // Remove "Bearer " prefix
                 if (!jwtUtil.isValid(1, refreshToken.trim())) {
-                        return new BasicResponse(401,
+                        return new BasicResponse(500,
                                         globalVariable.getDEFAULT_LANGUAGE().equals("EN")
                                                         ? Language_EN.TOKEN_REFRESH_FAILED.getMessage()
                                                         : Language_CN.TOKEN_REFRESH_FAILED.getMessage(),
@@ -258,7 +258,7 @@ public class AuthenticationService {
                                                         : Language_CN.TOKEN_REFRESH_SUCCESSFUL.getMessage(),
                                         newRefreshToken);
                 } else {
-                        return new BasicResponse(401,
+                        return new BasicResponse(500,
                                         globalVariable.getDEFAULT_LANGUAGE().equals("EN")
                                                         ? Language_EN.TOKEN_REFRESH_FAILED.getMessage()
                                                         : Language_CN.TOKEN_REFRESH_FAILED.getMessage(),

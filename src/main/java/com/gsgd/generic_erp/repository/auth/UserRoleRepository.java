@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.gsgd.generic_erp.entity.auth.UserRole;
+import com.gsgd.generic_erp.view.UserRoleView;
 
 import jakarta.transaction.Transactional;
 
@@ -47,5 +48,16 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
     @Query("DELETE FROM UserRole ur WHERE ur.userId = :userId AND ur.roleId IN :roleIds")
     void deleteByUserIdAndRoleIdIn(@Param("userId") Long userId,
             @Param("roleIds") Collection<Long> roleIds);
+
+    @Query("""
+                SELECT ur.userId AS userId,
+                       r.id      AS roleId,
+                       r.val     AS val,
+                       r.roleName    AS name
+                FROM UserRole ur
+                JOIN Role r ON r.id = ur.roleId
+                WHERE ur.userId IN :userIds
+            """)
+    List<UserRoleView> findRoleViewsByUserIds(@Param("userIds") Collection<Long> userIds);
 
 }

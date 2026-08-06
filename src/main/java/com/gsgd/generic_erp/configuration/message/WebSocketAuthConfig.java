@@ -7,6 +7,7 @@ import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -38,6 +39,17 @@ public class WebSocketAuthConfig implements WebSocketMessageBrokerConfigurer {
                     String username = jwtService.extractUsername(0, token);
                     String sid = jwtService.extractSessionId(token);
                     UserDetails user = userDetailsService.loadUserByUsername(username);
+                    if (!jwtService.isValid(0, token)
+                            || !jwtService.isSessionCurrent(username, sid)) {
+                        throw new IllegalArgumentException("Invalid WebSocket credentials");
+                    }
+
+                    var auth = new UsernamePasswordAuthenticationToken(
+                            user, null, user.getAuthorities());
+                    // This is the critical line: it makes accessor.getUser()
+                    // non-null, which is what /user/** destinations depend on.
+                    accessor.setUser(auth);
+
                     return message;
                 }
                 return message;

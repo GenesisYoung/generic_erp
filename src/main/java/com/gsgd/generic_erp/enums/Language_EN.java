@@ -12,7 +12,11 @@ public enum Language_EN implements Language {
     TOKEN_REFRESH_FAILED("Token refresh failed"),
     TOKEN_EXPIRED("Token expired"),
     INTERNAL_SERVER_ERROR("Internal server error"),
-    SEEESION_EXPIRED("Session expired, please login again");
+    SEEESION_EXPIRED("Session expired, please login again"),
+    NAME_DULICATED("Exception, name duplicated!"),
+    USERNAME_DULICATED("Exception, username duplicated!"),
+    EMAIL_DULICATED("Exception, email duplicated!"),
+    CANT_DELETE_ROOT_USER("Can't delete root user");
 
     private final String value;
 

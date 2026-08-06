@@ -13,7 +13,10 @@ public enum Language_CN implements Language {
     TOKEN_EXPIRED("令牌已过期"),
     INTERNAL_SERVER_ERROR("后台服务器错误"),
     SEEESION_EXPIRED("会话已过期，请重新登录"),
-    NAME_DULICATED("异常，名称重复!");
+    NAME_DULICATED("异常，名称重复!"),
+    USERNAME_DULICATED("异常，用户名重复!"),
+    EMAIL_DULICATED("异常，邮箱重复!"),
+    CANT_DELETE_ROOT_USER("无法删除根用户");
 
     private final String value;
 

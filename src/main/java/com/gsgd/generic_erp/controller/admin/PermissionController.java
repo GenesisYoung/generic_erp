@@ -43,12 +43,10 @@ public class PermissionController {
     /** Deletes permissions by id; returns the number of rows removed. */
     @PostMapping("/delete")
     public BasicResponse deleteByVal(@RequestBody DeleteRecord record) {
-        try {
-            long b = permissionService.deleteByGroup(record.deleteVal());
-            return new BasicResponse(200, "success", b);
-        } catch (Exception e) {
-            return new BasicResponse(403, "error", e.getStackTrace().toString());
-        }
+
+        long b = permissionService.deleteByGroup(record.deleteVal());
+        return new BasicResponse(200, "success", b);
+
     }
 
     /**
@@ -57,13 +55,11 @@ public class PermissionController {
      */
     @PostMapping("/deleteRoot")
     public BasicResponse deleteRoot(@RequestBody DeleteRootRecord record) {
-        try {
-            permissionService.findAndDeleteSubPermission(record.deleteVal());
-            long b = permissionService.deleteByGroup(record.deleteVal());
-            return new BasicResponse(200, "success", b);
-        } catch (Exception e) {
-            return new BasicResponse(403, "error", e.getStackTrace().toString());
-        }
+
+        permissionService.findAndDeleteSubPermission(record.deleteVal());
+        long b = permissionService.deleteByGroup(record.deleteVal());
+        return new BasicResponse(200, "success", b);
+
     }
 
     /** Creates or updates a permission from the submitted DTO. */
@@ -78,6 +74,8 @@ public class PermissionController {
 record DeleteRecord(Long[] deleteVal) {
 }
 
-/** Request body carrying root permission codes to delete (with their children). */
+/**
+ * Request body carrying root permission codes to delete (with their children).
+ */
 record DeleteRootRecord(String[] deleteVal) {
 }
