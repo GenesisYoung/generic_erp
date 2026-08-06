@@ -4,6 +4,9 @@ import java.util.List;
 
 import org.springframework.data.domain.Page;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -36,5 +39,21 @@ public class BasicPageResponse<T, R> {
         this.pageSize = page.getSize();
         this.totalElements = page.getTotalElements();
         this.totalPages = page.getTotalPages();
+    }
+
+    // Explicit creator so Jackson never picks the Page-based constructor when
+    // deserializing cached values (Page is absent from the JSON).
+    @JsonCreator
+    public BasicPageResponse(
+            @JsonProperty("content") List<R> content,
+            @JsonProperty("pageNumber") int pageNumber,
+            @JsonProperty("pageSize") int pageSize,
+            @JsonProperty("totalElements") long totalElements,
+            @JsonProperty("totalPages") int totalPages) {
+        this.content = content;
+        this.pageNumber = pageNumber;
+        this.pageSize = pageSize;
+        this.totalElements = totalElements;
+        this.totalPages = totalPages;
     }
 }
