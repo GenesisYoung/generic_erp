@@ -19,6 +19,9 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.http.HttpServletResponse;
+
 /**
  * Central Spring Security configuration.
  * <p>
@@ -45,6 +48,8 @@ public class WebSecurityConfiurer {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests((authz) -> authz
+                        .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD)
+                        .permitAll()
                         // Allow unauthenticated access to login and registration endpoints
                         .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh/access",
                                 "/api/auth/refresh/refresh")
@@ -53,6 +58,15 @@ public class WebSecurityConfiurer {
                         // All other endpoints require authentication
                         .anyRequest()
                         .authenticated())
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((req, res, e) -> res.sendError(HttpServletResponse.SC_UNAUTHORIZED)) // 401,
+                                                                                                                       // not
+                                                                                                                       // 403
+                        .accessDeniedHandler((req, res, e) -> res.sendError(HttpServletResponse.SC_FORBIDDEN))) // 403
+                                                                                                                // only
+                                                                                                                // for
+                                                                                                                // real
+                                                                                                                // denials
                 // Add the JWT authentication filter before the default username/password filter
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

@@ -64,7 +64,6 @@ public class UserManagementService {
      * attached.
      */
     @Cacheable(value = "userQuery", key = "#pageable.pageNumber + ':' + #pageable.pageSize + ':' + #pageable.sort")
-    @CacheEvict(cacheNames = "userQuery", allEntries = true)
     public BasicPageResponse<User, UserDTO> fetchUserList(Pageable pageable) {
         Page<User> users = repository.findAll(UserSpecification.excludeDisabled((byte) 1), pageable);
 

@@ -25,4 +25,12 @@ public class GlobalExceptionHandler {
                 .body(new SimpleResponse(423, e.getMessage()));
     }
 
+    // Unexpected error Handler
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<SimpleResponse> handleUnexpected(Exception e) {
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new SimpleResponse(423, e.getMessage()));
+    }
+
 }

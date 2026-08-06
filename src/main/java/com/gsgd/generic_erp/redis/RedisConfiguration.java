@@ -9,14 +9,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
-import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
-
-import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
 @Configuration
 @EnableCaching
@@ -39,24 +35,18 @@ public class RedisConfiguration {
                 return template;
         }
 
-        @SuppressWarnings("null")
-        @Bean
-        public RedisConnectionFactory redisConnectionFactory() {
-                RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(redisHost, redisPort);
-                // config.setPassword(RedisPassword.of("yourPassword"));
-                // config.setDatabase(0);
-                return new LettuceConnectionFactory(config);
-        }
-
         /**
          * Redis caching configurations
          */
         @Bean
         public RedisCacheConfiguration defaultCacheConfig() {
                 GenericJacksonJsonRedisSerializer serializer = GenericJacksonJsonRedisSerializer.builder()
-                                .enableDefaultTyping(BasicPolymorphicTypeValidator.builder()
-                                                .allowIfBaseType("com.gsgd.generic_erp.dto")
-                                                .build())
+                                // .enableDefaultTyping(BasicPolymorphicTypeValidator.builder()
+                                // .allowIfBaseType("com.gsgd.generic_erp.")
+                                // .allowIfSubType("java.util.")
+                                // .allowIfSubType("java.lang.")
+                                // .allowIfSubType("java.lang.Object")
+                                // .build())
                                 .typePropertyName("@class")
                                 .enableSpringCacheNullValueSupport()
                                 .build();
