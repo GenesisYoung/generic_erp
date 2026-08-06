@@ -14,6 +14,8 @@ import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializ
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+
 @Configuration
 @EnableCaching
 public class RedisConfiguration {
@@ -41,12 +43,13 @@ public class RedisConfiguration {
         @Bean
         public RedisCacheConfiguration defaultCacheConfig() {
                 GenericJacksonJsonRedisSerializer serializer = GenericJacksonJsonRedisSerializer.builder()
-                                // .enableDefaultTyping(BasicPolymorphicTypeValidator.builder()
-                                // .allowIfBaseType("com.gsgd.generic_erp.")
-                                // .allowIfSubType("java.util.")
-                                // .allowIfSubType("java.lang.")
-                                // .allowIfSubType("java.lang.Object")
-                                // .build())
+                                // Cache values are declared as Object, so the base type is always
+                                // java.lang.Object — only subtype rules can match here.
+                                .enableDefaultTyping(BasicPolymorphicTypeValidator.builder()
+                                                .allowIfSubType("com.gsgd.generic_erp.")
+                                                .allowIfSubType("java.util.")
+                                                .allowIfSubType("java.lang.")
+                                                .build())
                                 .typePropertyName("@class")
                                 .enableSpringCacheNullValueSupport()
                                 .build();
