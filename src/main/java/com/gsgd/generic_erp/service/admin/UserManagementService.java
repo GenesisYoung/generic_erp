@@ -1,6 +1,7 @@
 package com.gsgd.generic_erp.service.admin;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -85,7 +86,7 @@ public class UserManagementService {
                         u.getUsername(),
                         u.getEmail(),
                         u.getDisplayName(),
-                        rolesByUser.getOrDefault(u.getId(), List.of()),
+                        rolesByUser.getOrDefault(u.getId(), new ArrayList<>()),
                         u.getStatus(),
                         u.getIsEnabled(), null))
                 .toList();
