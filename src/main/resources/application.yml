@@ -1,4 +1,8 @@
 spring:
+  cache:
+    type: redis
+    redis:
+      time-to-live: 300000
   data:
     redis:
       host: ${REDIS_HOST}
