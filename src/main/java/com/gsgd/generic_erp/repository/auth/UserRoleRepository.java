@@ -50,10 +50,11 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
             @Param("roleIds") Collection<Long> roleIds);
 
     @Query("""
-                SELECT ur.userId AS userId,
-                       r.id      AS roleId,
-                       r.val     AS val,
-                       r.roleName    AS name
+                SELECT new com.gsgd.generic_erp.view.UserRoleView(
+                       ur.userId,
+                       r.id,
+                       r.val,
+                       r.roleName)
                 FROM UserRole ur
                 JOIN Role r ON r.id = ur.roleId
                 WHERE ur.userId IN :userIds
