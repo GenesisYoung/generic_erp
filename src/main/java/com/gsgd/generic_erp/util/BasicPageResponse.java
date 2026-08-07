@@ -4,6 +4,9 @@ import java.util.List;
 
 import org.springframework.data.domain.Page;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -19,15 +22,10 @@ import lombok.Setter;
 @NoArgsConstructor
 public class BasicPageResponse<T, R> {
 
-    // @JsonProperty("content")
     private List<R> content;
-    // @JsonProperty("pageNumber")
     private int pageNumber;
-    // @JsonProperty("pageSize")
     private int pageSize;
-    // @JsonProperty("totalElements")
     private long totalElements;
-    // @JsonProperty("totalPages")
     private int totalPages;
 
     public BasicPageResponse(List<R> content, Page<T> page) {
@@ -36,5 +34,23 @@ public class BasicPageResponse<T, R> {
         this.pageSize = page.getSize();
         this.totalElements = page.getTotalElements();
         this.totalPages = page.getTotalPages();
+    }
+
+    /**
+     * Used to deserialization for Redis cache to avoid it chooosing
+     * BasicPageResponse(List<R> content, Page<T> page)
+     */
+    @JsonCreator
+    public BasicPageResponse(
+            @JsonProperty("content") List<R> content,
+            @JsonProperty("pageNumber") int pageNumber,
+            @JsonProperty("pageSize") int pageSize,
+            @JsonProperty("totalElements") long totalElements,
+            @JsonProperty("totalPages") int totalPages) {
+        this.content = content;
+        this.pageNumber = pageNumber;
+        this.pageSize = pageSize;
+        this.totalElements = totalElements;
+        this.totalPages = totalPages;
     }
 }

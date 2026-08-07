@@ -56,7 +56,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     .get("refreshToken:" + jwtService.extractUsername(1, refreshToken));
             // If the refresh token in the request does not match the one stored in Redis,
             // reject the request.
-            if (storedRefreshToken != null && refreshToken != null && !refreshToken.equals(storedRefreshToken)) {
+            if (storedRefreshToken == null
+                    || (storedRefreshToken != null && !refreshToken.equals(storedRefreshToken))) {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.getWriter().write("Invalid refresh token");
                 return;
