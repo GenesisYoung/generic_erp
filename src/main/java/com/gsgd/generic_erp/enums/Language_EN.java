@@ -16,7 +16,9 @@ public enum Language_EN implements Language {
     NAME_DULICATED("Exception, name duplicated!"),
     USERNAME_DULICATED("Exception, username duplicated!"),
     EMAIL_DULICATED("Exception, email duplicated!"),
-    CANT_DELETE_ROOT_USER("Can't delete root user");
+    CANT_DELETE_ROOT_USER("Can't delete root user"),
+    ROLE_ASSIGNED("This role is still assigned to users and cannot be deleted"),
+    DEPT_ASSIGNED("This department is still assigned to users and cannot be deleted");
 
     private final String value;
 

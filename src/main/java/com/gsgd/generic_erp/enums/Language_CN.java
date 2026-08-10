@@ -16,7 +16,9 @@ public enum Language_CN implements Language {
     NAME_DULICATED("异常，名称重复!"),
     USERNAME_DULICATED("异常，用户名重复!"),
     EMAIL_DULICATED("异常，邮箱重复!"),
-    CANT_DELETE_ROOT_USER("无法删除根用户");
+    CANT_DELETE_ROOT_USER("无法删除根用户"),
+    ROLE_ASSIGNED("该角色已分配给用户，无法删除"),
+    DEPT_ASSIGNED("该部门已分配给用户，无法删除");
 
     private final String value;
 

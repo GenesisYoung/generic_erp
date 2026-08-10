@@ -1,6 +1,7 @@
 package com.gsgd.generic_erp.entity.auth;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -39,6 +40,17 @@ public class RolePermission {
 
     @Column(name = "permission_id", nullable = false)
     private Long permissionId;
+
+    /** Optional menu scope for the grant; null for role-wide grants. */
+    @Column(name = "menu_id")
+    private Long menuId;
+
+    /** Id of the user who created this grant (audit column, NOT NULL in DB). */
+    @Column(name = "created_by", nullable = false)
+    private Long createdBy;
+
+    @Column(name = "create_time", nullable = false, updatable = false)
+    private LocalDateTime createTime;
 
     @Column(name = "create_date")
     private LocalDate createDate;
