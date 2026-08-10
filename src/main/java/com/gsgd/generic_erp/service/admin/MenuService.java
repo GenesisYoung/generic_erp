@@ -43,7 +43,8 @@ public class MenuService {
         for (NavigationMenu menuDTO : content) {
             result.add(new MenuDTO(menuDTO.getId(), menuDTO.getParentId(), menuDTO.getTitleKey(), menuDTO.getIcon(),
                     menuDTO.getRoute(),
-                    menuDTO.getColor()));
+                    menuDTO.getColor(),
+                    menuDTO.getPId()));
         }
         return result;
     }
@@ -63,6 +64,8 @@ public class MenuService {
         m.setIsEnabled(true);
         m.setRoute(entity.getRoute());
         m.setTitleKey(entity.getTitleKey());
+        m.setPId(entity.getPermission());
+
         return m;
     }
 

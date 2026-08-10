@@ -48,13 +48,14 @@ public class WebSecurityConfiurer {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests((authz) -> authz
-                        .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD)
-                        .permitAll()
+
                         // Allow unauthenticated access to login and registration endpoints
                         .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh/access",
                                 "/api/auth/refresh/refresh")
                         .permitAll()
                         .requestMatchers("/ws/**").permitAll() // handshake only; CONNECT is still authenticated
+                        .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD)
+                        .permitAll()
                         // All other endpoints require authentication
                         .anyRequest()
                         .authenticated())

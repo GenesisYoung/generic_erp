@@ -1,4 +1,4 @@
-package com.gsgd.generic_erp.view;
+package com.gsgd.generic_erp.view.sql;
 
 import org.hibernate.annotations.Immutable;
 import org.hibernate.annotations.View;

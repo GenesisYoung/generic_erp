@@ -18,13 +18,15 @@ import com.gsgd.generic_erp.service.admin.MenuAccessService;
 import com.gsgd.generic_erp.service.admin.NavigationMenutViewService;
 import com.gsgd.generic_erp.util.BasicPageRequest;
 import com.gsgd.generic_erp.util.BasicPageResponse;
-import com.gsgd.generic_erp.view.NavigationPermissionView;
+import com.gsgd.generic_erp.util.BasicResponse;
+import com.gsgd.generic_erp.view.sql.NavigationPermissionView;
 
 /**
  * Read-side endpoints ({@code /api/permission}) for the permission-management
  * screens: paginated queries over the menu/permission database view, plus
  * per-menu listings of users, permissions, and registrations with their
- * current grant status. Mutations live in {@link ManipulatePermissionController}.
+ * current grant status. Mutations live in
+ * {@link ManipulatePermissionController}.
  */
 @RestController
 @RequestMapping("/api/permission")
@@ -45,6 +47,17 @@ public class PermissionManagementController {
         return service.query(filter);
     }
 
+    @PostMapping("/fetch/default")
+    public BasicPageResponse<NavigationPermissionView, NavigationPermissionView> fetchDefaults(
+            @RequestBody BasicPageRequest<PermissionMenuViewFilter> filter) {
+        return service.query(filter);
+    }
+
+    @GetMapping("/fetch/menu/permission")
+    public BasicResponse getMethodName() {
+        return service.fetchOnlyMenu();
+    }
+
     /** Every user, with whether they currently have access to this menu. */
     @GetMapping("/menu/{navId}/users")
     public List<UserAccessDTO> fetchUsersForMenu(@PathVariable Long navId) {
@@ -58,7 +71,9 @@ public class PermissionManagementController {
         return menuAccessService.listPermissionsForMenu(navId, userId);
     }
 
-    /** Every permission, with whether it's currently registered against this menu. */
+    /**
+     * Every permission, with whether it's currently registered against this menu.
+     */
     @GetMapping("/menu/registration")
     public List<PermissionRegistrationDTO> fetchRegistrationsForMenu(@RequestParam Long navId) {
         return menuAccessService.listRegistrationsForMenu(navId);

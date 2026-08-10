@@ -52,6 +52,13 @@ public class NavigationMenu {
     /** Vuetify color name applied to the menu item (e.g. "indigo") */
     @Column(name = "color", length = 20, nullable = false)
     private String color;
+    /**
+     * Bound with a default permission, then when
+     * creating a user with certaion role, this menu
+     * could be enabled automatically
+     */
+    @Column(name = "permission_id")
+    private String pId;
 
     /** Whether this menu item is visible/active in the frontend */
     @Column(name = "is_enabled", nullable = false)

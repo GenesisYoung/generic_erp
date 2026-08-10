@@ -1,8 +1,10 @@
 package com.gsgd.generic_erp.controller.admin;
 
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.gsgd.generic_erp.service.admin.MenuAccessService;
@@ -55,6 +57,12 @@ public class ManipulatePermissionController {
             return new SimpleResponse(500, e.getMessage());
         }
     }
+
+    @GetMapping("/defaults")
+    public String getMethodName(@RequestParam String param) {
+        return new String();
+    }
+
 }
 
 /** Request body: grant/revoke a user's access to a menu. */
