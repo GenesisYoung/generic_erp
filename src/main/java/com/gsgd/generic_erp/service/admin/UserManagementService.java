@@ -1,8 +1,6 @@
 package com.gsgd.generic_erp.service.admin;
 
-import java.text.SimpleDateFormat;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -54,8 +52,6 @@ public class UserManagementService {
     private final AuthenticationImpl authenticationService;
     private final UserInfoRepository infoRepository;
     private final UserDepartmentRepository uDepartmentRepositoryrepository;
-
-    private final SimpleDateFormat format = new SimpleDateFormat("MM/dd/yyyy");
     private final Language language;
 
     public UserManagementService(UserRepository repository, RoleRepository roleRepository,
@@ -81,11 +77,13 @@ public class UserManagementService {
     public BasicPageResponse<User, UserDTO> fetchUserList(Pageable pageable) {
         Page<User> users = repository.findAll(UserSpecification.excludeDisabled((byte) 1), pageable);
 
+        @SuppressWarnings("null")
         // 1. Collect this page's user IDs
         List<Long> userIds = users.getContent().stream()
                 .map(User::getId)
                 .toList();
 
+        @SuppressWarnings("null")
         // 2. One query for every role link on the page
         Map<Long, List<UserRoleView>> rolesByUser = userIds.isEmpty()
                 ? Map.of()
@@ -110,8 +108,9 @@ public class UserManagementService {
                             u.getStatus(),
                             u.getIsEnabled(), null, info != null ? info.getRealName() : null,
                             info != null ? info.getTitle() : null,
-                            info != null ? format.format(info.getBirthday()) : null,
-                            info != null ? format.format(info.getHireDate()) : null, departments);
+                            info != null ? info.getBirthday() : null,
+                            info != null ? info.getHireDate() : null,
+                            departments);
                 })
                 .toList();
 
@@ -156,9 +155,9 @@ public class UserManagementService {
                 info.setTitle(user.getTitle());
                 info.setCreateDate(LocalDate.now());
                 if (user.getBirthday() != null)
-                    info.setBirthday(LocalDate.parse(user.getBirthday(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                    info.setBirthday(user.getBirthday());
                 if (user.getHireDate() != null)
-                    info.setHireDate(LocalDate.parse(user.getHireDate(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                    info.setHireDate(user.getHireDate());
                 infoRepository.save(info);
                 /**
                  * Build constraints between users and departments
@@ -190,8 +189,12 @@ public class UserManagementService {
                     info.setRealName(user.getRealName());
                     info.setTitle(user.getTitle());
                     info.setCreateDate(LocalDate.now());
-                    info.setBirthday(LocalDate.parse(user.getBirthday(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
-                    info.setHireDate(LocalDate.parse(user.getHireDate(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                    if (user.getBirthday() != null)
+                        info.setBirthday(
+                                user.getBirthday());
+                    if (user.getHireDate() != null)
+                        info.setHireDate(
+                                user.getHireDate());
                     infoRepository.save(info);
                 } else {
                     UserInfo info = new UserInfo();
@@ -201,10 +204,10 @@ public class UserManagementService {
                     info.setUserId(userId);
                     if (user.getBirthday() != null)
                         info.setBirthday(
-                                LocalDate.parse(user.getBirthday(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                                user.getBirthday());
                     if (user.getHireDate() != null)
                         info.setHireDate(
-                                LocalDate.parse(user.getHireDate(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                                user.getHireDate());
                     infoRepository.save(info);
                 }
                 Set<Long> toRemove = null;
@@ -213,28 +216,26 @@ public class UserManagementService {
                  * Update department infomation of the user
                  */
                 List<UserDepartment> ud = uDepartmentRepositoryrepository.findByUserId(userId);
-                if (ud != null && !ud.isEmpty()) {
-                    @SuppressWarnings("null")
-                    Set<Long> existedDepts = ud
-                            .stream()
-                            .map(UserDepartment::getDeptId)
-                            .collect(Collectors.toSet());
-                    toRemove = new HashSet<>(existedDepts);
-                    toRemove.removeAll(user.getDepartments());
-                    toAdd = new HashSet<>(user.getDepartments());
-                    toAdd.removeAll(existedDepts);
-                    if (!toRemove.isEmpty()) {
-                        uDepartmentRepositoryrepository.deleteThroughUserIdAndDeptIds(userId, toRemove);
-                    }
-                    if (!toAdd.isEmpty()) {
-                        user.getDepartments().stream().forEach(ele -> {
-                            uDepartmentRepositoryrepository.save(
-                                    UserDepartment.builder()
-                                            .deptId(ele)
-                                            .userId(userId)
-                                            .build());
-                        });
-                    }
+                @SuppressWarnings("null")
+                Set<Long> existedDepts = ud
+                        .stream()
+                        .map(UserDepartment::getDeptId)
+                        .collect(Collectors.toSet());
+                toRemove = new HashSet<>(existedDepts);
+                toRemove.removeAll(user.getDepartments());
+                toAdd = new HashSet<>(user.getDepartments());
+                toAdd.removeAll(existedDepts);
+                if (!toRemove.isEmpty()) {
+                    uDepartmentRepositoryrepository.deleteThroughUserIdAndDeptIds(userId, toRemove);
+                }
+                if (!toAdd.isEmpty()) {
+                    toAdd.stream().forEach(ele -> {
+                        uDepartmentRepositoryrepository.save(
+                                UserDepartment.builder()
+                                        .deptId(ele)
+                                        .userId(userId)
+                                        .build());
+                    });
                 }
 
                 List<Role> roles = roleRepository.findObjByValue(user.getRoleList());

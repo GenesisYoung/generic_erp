@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.dto;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import com.gsgd.generic_erp.view.UserRoleView;
@@ -29,8 +30,8 @@ public class UserDTO {
     // User info data
     private String realName;
     private String title;
-    private String birthday;
-    private String hireDate;
+    private LocalDate birthday;
+    private LocalDate hireDate;
     // User's department data
     private List<Long> departments;
 }

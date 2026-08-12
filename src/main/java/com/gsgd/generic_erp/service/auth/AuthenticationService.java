@@ -1,6 +1,5 @@
 package com.gsgd.generic_erp.service.auth;
 
-import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -58,8 +57,6 @@ public class AuthenticationService {
         private final RedisTemplate<String, Object> redisTemplateService;
 
         private final UserInfoRepository infoRepository;
-
-        private final SimpleDateFormat format = new SimpleDateFormat("MM/dd/yyyy");
 
         private final UserDepartmentRepository drepository;
 
@@ -139,18 +136,19 @@ public class AuthenticationService {
                                                 .map(ele -> ele.getDeptId()).toList();
                                 userDTO = new UserDTO(user.getId(), user.getUsername(), user.getEmail(),
                                                 user.getDisplayName(),
-                                                null, user.getStatus(), user.getIsEnabled(), null, info.getRealName(),
-                                                info.getTitle(),
-                                                info.getBirthday() != null ? format.format(info.getBirthday()) : null,
-                                                info.getHireDate() != null ? format.format(info.getHireDate()) : null,
-                                                departments);
+                                                null, user.getStatus(), user.getIsEnabled(), null,
+                                                info != null ? info.getRealName() : null,
+                                                info != null ? info.getTitle() : null,
+                                                info != null ? info.getBirthday() : null,
+                                                info != null ? info.getHireDate() : null,
+                                                info != null ? departments : null);
                         } else {
                                 List<Long> departments = drepository.findByUserId(user.getId()).stream()
                                                 .map(ele -> ele.getDeptId()).toList();
                                 userDTO = new UserDTO(user.getId(), user.getUsername(), user.getEmail(),
                                                 user.getDisplayName(),
                                                 null, user.getStatus(), user.getIsEnabled(), null, "",
-                                                "", "", "",
+                                                "", null, null,
                                                 departments);
                         }
                         // Store the refresh token in Redis with a TTL of 7 days, new login will
@@ -300,21 +298,55 @@ public class AuthenticationService {
         }
 
         public static String getClientIp(HttpServletRequest request) {
-                if (request == null) {
-                        return "unknown";
+                // if (request == null) {
+                // return "unknown";
+                // }
+
+                // for (String header : IP_HEADERS) {
+                // String ipList = request.getHeader(header);
+                // if (ipList != null && !ipList.isEmpty() &&
+                // !"unknown".equalsIgnoreCase(ipList)) {
+                // // X-Forwarded-For can contain a comma-separated list of proxy IPs.
+                // // The first IP is generally the original client.
+                // return ipList.split(",")[0].trim();
+                // }
+                // }
+
+                // // Fallback to direct connection IP if no proxy headers are found
+                // return request.getRemoteAddr();
+
+                // Check standard proxy header used by most load balancers
+                String ip = request.getHeader("X-Forwarded-For");
+
+                // Check alternative proxy headers if the first one is empty
+                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                        ip = request.getHeader("Proxy-Client-IP");
+                }
+                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                        ip = request.getHeader("WL-Proxy-Client-IP"); // WebLogic
+                }
+                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                        ip = request.getHeader("HTTP_CLIENT_IP");
+                }
+                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                        ip = request.getHeader("HTTP_X_FORWARDED_FOR");
+                }
+                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                        ip = request.getHeader("X-Real-IP"); // Nginx alternative
                 }
 
-                for (String header : IP_HEADERS) {
-                        String ipList = request.getHeader(header);
-                        if (ipList != null && !ipList.isEmpty() && !"unknown".equalsIgnoreCase(ipList)) {
-                                // X-Forwarded-For can contain a comma-separated list of proxy IPs.
-                                // The first IP is generally the original client.
-                                return ipList.split(",")[0].trim();
-                        }
+                // If no proxies are found, grab the direct connection IP
+                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                        ip = request.getRemoteAddr();
                 }
 
-                // Fallback to direct connection IP if no proxy headers are found
-                return request.getRemoteAddr();
+                // X-Forwarded-For can contain a comma-separated list of multiple proxy IPs.
+                // The first IP in the list is always the original client.
+                if (ip != null && ip.contains(",")) {
+                        ip = ip.split(",")[0].trim();
+                }
+
+                return ip;
         }
 
         private static final String[] IP_HEADERS = {
