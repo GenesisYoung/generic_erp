@@ -17,6 +17,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class UserDTO {
 
+    // Basic data
     private Long id;
     private String name;
     private String email;
@@ -25,4 +26,11 @@ public class UserDTO {
     private Boolean active;
     private Byte isEnabled;
     private List<Integer> roleList;
+    // User info data
+    private String realName;
+    private String title;
+    private String birthday;
+    private String hireDate;
+    // User's department data
+    private List<Long> departments;
 }

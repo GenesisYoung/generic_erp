@@ -1,9 +1,11 @@
 package com.gsgd.generic_erp.repository.auth;
 
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.NativeQuery;
 
 import com.gsgd.generic_erp.entity.auth.UserDepartment;
 
@@ -31,4 +33,9 @@ public interface UserDepartmentRepository extends JpaRepository<UserDepartment, 
     @Modifying
     @Transactional
     void deleteByUserIdAndDeptId(Long userId, Long deptId);
+
+    @Modifying
+    @Transactional
+    @NativeQuery("DELETE FROM user_departments_tb t WHERE t.userId=?1 AND t.deptId IN ?2")
+    void deleteThroughUserIdAndDeptIds(Long userId, Set<Long> toRemove);
 }

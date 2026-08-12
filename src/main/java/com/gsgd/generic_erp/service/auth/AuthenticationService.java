@@ -1,7 +1,9 @@
 package com.gsgd.generic_erp.service.auth;
 
-import java.sql.Date;
+import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.redis.core.RedisTemplate;
@@ -18,9 +20,12 @@ import com.gsgd.generic_erp.controller.auth.AuthenticationController.TokenPair;
 import com.gsgd.generic_erp.dto.UserDTO;
 import com.gsgd.generic_erp.entity.auth.LoginLog;
 import com.gsgd.generic_erp.entity.auth.User;
+import com.gsgd.generic_erp.entity.auth.UserInfo;
 import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.enums.Language_EN;
 import com.gsgd.generic_erp.repository.auth.LoginLogRepository;
+import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
+import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
 import com.gsgd.generic_erp.util.GlobalVariable;
@@ -52,11 +57,18 @@ public class AuthenticationService {
 
         private final RedisTemplate<String, Object> redisTemplateService;
 
+        private final UserInfoRepository infoRepository;
+
+        private final SimpleDateFormat format = new SimpleDateFormat("MM/dd/yyyy");
+
+        private final UserDepartmentRepository drepository;
+
         AuthenticationService(AuthenticationManager authenticationManager, JWTUtil jwtUtil,
                         UserRepository userRepository,
                         LoginLogRepository loginLogRepository,
                         GlobalVariable globalVariable,
-                        RedisTemplate<String, Object> redisTemplateService)
+                        RedisTemplate<String, Object> redisTemplateService, UserInfoRepository infoRepository,
+                        UserDepartmentRepository departmentRepository)
                         throws ClassNotFoundException {
                 this.authenticationManager = authenticationManager;
                 this.jwtUtil = jwtUtil;
@@ -64,6 +76,8 @@ public class AuthenticationService {
                 this.loginLogRepository = loginLogRepository;
                 this.globalVariable = globalVariable;
                 this.redisTemplateService = redisTemplateService;
+                this.infoRepository = infoRepository;
+                this.drepository = departmentRepository;
         }
 
         /**
@@ -117,9 +131,28 @@ public class AuthenticationService {
                         userRepository.save(user);
                         String refreshToken = jwtUtil.generateRefreshToken(auth.getName(), user.getCurrentSessionId());
                         String accessToken = jwtUtil.generateAccessToken(auth.getName());
-                        UserDTO userDTO = new UserDTO(user.getId(), user.getUsername(), user.getEmail(),
-                                        user.getDisplayName(),
-                                        null, user.getStatus(), user.getIsEnabled(), null);
+                        Optional<UserInfo> op = infoRepository.findByUserId(user.getId());
+                        UserDTO userDTO = null;
+                        if (!op.isEmpty()) {
+                                UserInfo info = infoRepository.findByUserId(user.getId()).get();
+                                List<Long> departments = drepository.findByUserId(user.getId()).stream()
+                                                .map(ele -> ele.getDeptId()).toList();
+                                userDTO = new UserDTO(user.getId(), user.getUsername(), user.getEmail(),
+                                                user.getDisplayName(),
+                                                null, user.getStatus(), user.getIsEnabled(), null, info.getRealName(),
+                                                info.getTitle(),
+                                                info.getBirthday() != null ? format.format(info.getBirthday()) : null,
+                                                info.getHireDate() != null ? format.format(info.getHireDate()) : null,
+                                                departments);
+                        } else {
+                                List<Long> departments = drepository.findByUserId(user.getId()).stream()
+                                                .map(ele -> ele.getDeptId()).toList();
+                                userDTO = new UserDTO(user.getId(), user.getUsername(), user.getEmail(),
+                                                user.getDisplayName(),
+                                                null, user.getStatus(), user.getIsEnabled(), null, "",
+                                                "", "", "",
+                                                departments);
+                        }
                         // Store the refresh token in Redis with a TTL of 7 days, new login will
                         // overwrite the previous one, enforcing single-session.
                         redisTemplateService.opsForValue().set("refreshToken:" + user.getUsername(), refreshToken);
@@ -129,7 +162,7 @@ public class AuthenticationService {
                                         .loginIp(getClientIp(request))
                                         .loginTime(LocalDateTime.now())
                                         .status(1)
-                                        .createDate(new Date(new java.util.Date().getTime()))
+                                        .createDate(new java.sql.Date(new java.util.Date().getTime()))
                                         .build();
                         loginLogRepository.save(loginLog);
                         return new BasicResponse(200,

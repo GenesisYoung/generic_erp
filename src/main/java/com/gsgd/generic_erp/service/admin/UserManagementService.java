@@ -1,6 +1,8 @@
 package com.gsgd.generic_erp.service.admin;
 
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -22,10 +24,14 @@ import com.gsgd.generic_erp.configuration.security.impl.AuthenticationImpl;
 import com.gsgd.generic_erp.dto.UserDTO;
 import com.gsgd.generic_erp.entity.auth.Role;
 import com.gsgd.generic_erp.entity.auth.User;
+import com.gsgd.generic_erp.entity.auth.UserDepartment;
+import com.gsgd.generic_erp.entity.auth.UserInfo;
 import com.gsgd.generic_erp.entity.auth.UserRole;
 import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.enums.Language_EN;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
+import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
+import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.repository.auth.UserRoleRepository;
 import com.gsgd.generic_erp.spec.UserSpecification;
@@ -41,16 +47,21 @@ import com.gsgd.generic_erp.view.UserRoleView;
 @Service
 public class UserManagementService {
     // private final JWTUtil JWTUtil;
-    private UserRepository repository;
-    private RoleRepository roleRepository;
-    private UserRoleRepository userRoleRepository;
-    private UserRepository userRepository;
-    private AuthenticationImpl authenticationService;
-    private Language language;
+    private final UserRepository repository;
+    private final RoleRepository roleRepository;
+    private final UserRoleRepository userRoleRepository;
+    private final UserRepository userRepository;
+    private final AuthenticationImpl authenticationService;
+    private final UserInfoRepository infoRepository;
+    private final UserDepartmentRepository uDepartmentRepositoryrepository;
+
+    private final SimpleDateFormat format = new SimpleDateFormat("MM/dd/yyyy");
+    private final Language language;
 
     public UserManagementService(UserRepository repository, RoleRepository roleRepository,
             UserRoleRepository userRoleRepository, UserRepository userRepository,
-            AuthenticationImpl aService, Language language) {
+            AuthenticationImpl aService, Language language, UserInfoRepository infoRepository,
+            UserDepartmentRepository userDepartmentRepository) {
         this.repository = repository;
         this.roleRepository = roleRepository;
         this.userRoleRepository = userRoleRepository;
@@ -58,6 +69,8 @@ public class UserManagementService {
         // this.JWTUtil = JWTUtil;
         this.authenticationService = aService;
         this.language = language;
+        this.infoRepository = infoRepository;
+        this.uDepartmentRepositoryrepository = userDepartmentRepository;
     }
 
     /**
@@ -78,17 +91,28 @@ public class UserManagementService {
                 ? Map.of()
                 : userRoleRepository.findRoleViewsByUserIds(userIds).stream()
                         .collect(Collectors.groupingBy(UserRoleView::getUserId));
-
         // 3. Build DTOs with O(1) map lookups
         List<UserDTO> dto = users.getContent().stream()
-                .map(u -> new UserDTO(
-                        u.getId(),
-                        u.getUsername(),
-                        u.getEmail(),
-                        u.getDisplayName(),
-                        rolesByUser.getOrDefault(u.getId(), new ArrayList<>()),
-                        u.getStatus(),
-                        u.getIsEnabled(), null))
+                .map(u -> {
+                    Optional<UserInfo> op = infoRepository.findByUserId(u.getId());
+                    UserInfo info = null;
+                    if (op.isPresent()) {
+                        info = op.get();
+                    }
+                    List<Long> departments = uDepartmentRepositoryrepository.findByUserId(u.getId()).stream()
+                            .map(ele -> ele.getDeptId()).toList();
+                    return new UserDTO(
+                            u.getId(),
+                            u.getUsername(),
+                            u.getEmail(),
+                            u.getDisplayName(),
+                            rolesByUser.getOrDefault(u.getId(), new ArrayList<>()),
+                            u.getStatus(),
+                            u.getIsEnabled(), null, info != null ? info.getRealName() : null,
+                            info != null ? info.getTitle() : null,
+                            info != null ? format.format(info.getBirthday()) : null,
+                            info != null ? format.format(info.getHireDate()) : null, departments);
+                })
                 .toList();
 
         return new BasicPageResponse<>(dto, users);
@@ -105,77 +129,167 @@ public class UserManagementService {
     @Transactional
     @CacheEvict(cacheNames = "userQuery", allEntries = true)
     public SimpleResponse saveOrUpdate(Long userId, UserDTO user) {
-
-        // Check for duplicate username/email on create
-        if (userId == 0) {
-            if (userRepository.existsByUsername(user.getName())) {
-                if (language.getLanguage().equals("EN")) {
-                    throw new DataIntegrityViolationException(Language_EN.USERNAME_DULICATED.getMessage());
-                } else if (language.getLanguage().equals("CN")) {
-                    throw new DataIntegrityViolationException(Language_CN.USERNAME_DULICATED.getMessage());
+        try {
+            // Check for duplicate username/email on create
+            if (userId == 0) {
+                if (userRepository.existsByUsername(user.getName())) {
+                    if (language.getLanguage().equals("EN")) {
+                        throw new DataIntegrityViolationException(Language_EN.USERNAME_DULICATED.getMessage());
+                    } else if (language.getLanguage().equals("CN")) {
+                        throw new DataIntegrityViolationException(Language_CN.USERNAME_DULICATED.getMessage());
+                    }
                 }
-            }
-            if (userRepository.existsByEmail(user.getEmail())) {
-                if (language.getLanguage().equals("EN")) {
-                    throw new DataIntegrityViolationException(Language_EN.EMAIL_DULICATED.getMessage());
-                } else if (language.getLanguage().equals("CN")) {
-                    throw new DataIntegrityViolationException(Language_CN.EMAIL_DULICATED.getMessage());
+                if (userRepository.existsByEmail(user.getEmail())) {
+                    if (language.getLanguage().equals("EN")) {
+                        throw new DataIntegrityViolationException(Language_EN.EMAIL_DULICATED.getMessage());
+                    } else if (language.getLanguage().equals("CN")) {
+                        throw new DataIntegrityViolationException(Language_CN.EMAIL_DULICATED.getMessage());
+                    }
                 }
+                User saved = repository.save(injectUserDTO(user, userId));
+                /**
+                 * Upate related infomation of current user
+                 */
+                UserInfo info = new UserInfo();
+                info.setUserId(user.getId());
+                info.setRealName(user.getRealName());
+                info.setTitle(user.getTitle());
+                info.setCreateDate(LocalDate.now());
+                if (user.getBirthday() != null)
+                    info.setBirthday(LocalDate.parse(user.getBirthday(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                if (user.getHireDate() != null)
+                    info.setHireDate(LocalDate.parse(user.getHireDate(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                infoRepository.save(info);
+                /**
+                 * Build constraints between users and departments
+                 */
+                if (user.getDepartments() != null)
+                    user.getDepartments().stream().forEach(ele -> {
+                        uDepartmentRepositoryrepository.save(
+                                UserDepartment.builder()
+                                        .deptId(ele)
+                                        .userId(saved.getId())
+                                        .build());
+                    });
+                /**
+                 * Assign roles for current user
+                 */
+                for (Integer role : user.getRoleList()) {
+                    Long id = roleRepository.getIdByVal(role);
+                    userRoleRepository.save(new UserRole(null, saved.getId(), id, LocalDate.now()));
+                }
+                return new SimpleResponse(200, "Successfully created");
+            } else {
+                /**
+                 * Update information of this user
+                 */
+                Optional<UserInfo> i = infoRepository.findByUserId(userId);
+                if (!i.isEmpty()) {
+                    UserInfo info = i.get();
+                    info.setUserId(userId);
+                    info.setRealName(user.getRealName());
+                    info.setTitle(user.getTitle());
+                    info.setCreateDate(LocalDate.now());
+                    info.setBirthday(LocalDate.parse(user.getBirthday(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                    info.setHireDate(LocalDate.parse(user.getHireDate(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                    infoRepository.save(info);
+                } else {
+                    UserInfo info = new UserInfo();
+                    info.setRealName(user.getRealName());
+                    info.setTitle(user.getTitle());
+                    info.setCreateDate(LocalDate.now());
+                    info.setUserId(userId);
+                    if (user.getBirthday() != null)
+                        info.setBirthday(
+                                LocalDate.parse(user.getBirthday(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                    if (user.getHireDate() != null)
+                        info.setHireDate(
+                                LocalDate.parse(user.getHireDate(), DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+                    infoRepository.save(info);
+                }
+                Set<Long> toRemove = null;
+                Set<Long> toAdd = null;
+                /**
+                 * Update department infomation of the user
+                 */
+                List<UserDepartment> ud = uDepartmentRepositoryrepository.findByUserId(userId);
+                if (ud != null && !ud.isEmpty()) {
+                    @SuppressWarnings("null")
+                    Set<Long> existedDepts = ud
+                            .stream()
+                            .map(UserDepartment::getDeptId)
+                            .collect(Collectors.toSet());
+                    toRemove = new HashSet<>(existedDepts);
+                    toRemove.removeAll(user.getDepartments());
+                    toAdd = new HashSet<>(user.getDepartments());
+                    toAdd.removeAll(existedDepts);
+                    if (!toRemove.isEmpty()) {
+                        uDepartmentRepositoryrepository.deleteThroughUserIdAndDeptIds(userId, toRemove);
+                    }
+                    if (!toAdd.isEmpty()) {
+                        user.getDepartments().stream().forEach(ele -> {
+                            uDepartmentRepositoryrepository.save(
+                                    UserDepartment.builder()
+                                            .deptId(ele)
+                                            .userId(userId)
+                                            .build());
+                        });
+                    }
+                }
+
+                List<Role> roles = roleRepository.findObjByValue(user.getRoleList());
+                List<UserRole> userRoles = userRoleRepository.findByUserId(userId);
+                if (roles != null && userRoles != null && !roles.isEmpty() && !userRoles.isEmpty()) {
+                    // 1. Resolve the latest roles to a Set of IDs (one query)
+                    @SuppressWarnings("null")
+                    Set<Long> latestIds = roles
+                            .stream()
+                            .map(Role::getId)
+                            .collect(Collectors.toSet());
+
+                    // 2. Resolve the current role IDs (one query)
+                    @SuppressWarnings("null")
+                    Set<Long> currentIds = userRoles
+                            .stream()
+                            .map(UserRole::getRoleId)
+                            .collect(Collectors.toSet());
+
+                    // 3. Compute the diff
+                    // toRemove = current - latest
+                    toRemove = new HashSet<>(currentIds);
+                    toRemove.removeAll(latestIds);
+
+                    // toAdd = latest - current
+                    toAdd = new HashSet<>(latestIds);
+                    toAdd.removeAll(currentIds);
+
+                    // 4. Bulk delete (one query)
+                    if (!toRemove.isEmpty()) {
+                        userRoleRepository.deleteByUserIdAndRoleIdIn(userId, toRemove);
+                    }
+
+                    // 5. Bulk insert (one query)
+                    if (!toAdd.isEmpty()) {
+                        List<UserRole> newLinks = toAdd.stream()
+                                .map(roleId -> {
+                                    UserRole ur = new UserRole();
+                                    ur.setUserId(userId);
+                                    ur.setRoleId(roleId);
+                                    return ur;
+                                })
+                                .toList();
+                        userRoleRepository.saveAll(newLinks);
+                    }
+                }
+
+                repository.save(injectUserDTO(user, userId));
+
+                return new SimpleResponse(200, "Successfully created");
             }
-            User saved = repository.save(injectUserDTO(user, userId));
-
-            for (Integer role : user.getRoleList()) {
-                Long id = roleRepository.getIdByVal(role);
-                userRoleRepository.save(new UserRole(null, saved.getId(), id, LocalDate.now()));
-            }
-            return new SimpleResponse(200, "Successfully created");
-        } else {
-            // 1. Resolve the latest roles to a Set of IDs (one query)
-            @SuppressWarnings("null")
-            Set<Long> latestIds = roleRepository.findObjByValue(user.getRoleList())
-                    .stream()
-                    .map(Role::getId)
-                    .collect(Collectors.toSet());
-
-            // 2. Resolve the current role IDs (one query)
-            @SuppressWarnings("null")
-            Set<Long> currentIds = userRoleRepository.findByUserId(userId)
-                    .stream()
-                    .map(UserRole::getRoleId)
-                    .collect(Collectors.toSet());
-
-            // 3. Compute the diff
-            // toRemove = current - latest
-            Set<Long> toRemove = new HashSet<>(currentIds);
-            toRemove.removeAll(latestIds);
-
-            // toAdd = latest - current
-            Set<Long> toAdd = new HashSet<>(latestIds);
-            toAdd.removeAll(currentIds);
-
-            // 4. Bulk delete (one query)
-            if (!toRemove.isEmpty()) {
-                userRoleRepository.deleteByUserIdAndRoleIdIn(userId, toRemove);
-            }
-
-            // 5. Bulk insert (one query)
-            if (!toAdd.isEmpty()) {
-                List<UserRole> newLinks = toAdd.stream()
-                        .map(roleId -> {
-                            UserRole ur = new UserRole();
-                            ur.setUserId(userId);
-                            ur.setRoleId(roleId);
-                            return ur;
-                        })
-                        .toList();
-                userRoleRepository.saveAll(newLinks);
-            }
-
-            repository.save(injectUserDTO(user, userId));
-
-            return new SimpleResponse(200, "Successfully created");
+        } catch (NullPointerException exception) {
+            System.err.println(exception.getLocalizedMessage());
+            throw new NullPointerException(exception.getLocalizedMessage());
         }
-
     }
 
     /**
