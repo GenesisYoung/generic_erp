@@ -20,7 +20,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         // Destinations the SERVER publishes to and the client subscribes to.
-        registry.enableSimpleBroker("/topic", "/queue").setHeartbeatValue(new long[] { 10000, 10000 })
+        registry.enableSimpleBroker("/topic", "/queue", "/system").setHeartbeatValue(new long[] { 10000, 10000 })
                 .setTaskScheduler(scheduler());
         // Destinations the CLIENT sends to; these are routed to @MessageMapping.
         registry.setApplicationDestinationPrefixes("/app");

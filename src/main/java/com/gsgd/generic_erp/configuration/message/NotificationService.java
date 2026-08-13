@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.dto.GeneralAlertDTO;
 import com.gsgd.generic_erp.dto.NotificationDTO;
+import com.gsgd.generic_erp.dto.StatusNotificationDTO;
 
 import lombok.AllArgsConstructor;
 
@@ -19,6 +20,13 @@ public class NotificationService {
      */
     public void sendNotification(String username, NotificationDTO payload) {
         simpleMessageService.convertAndSendToUser(username, "/queue/notifications", payload);
+    }
+
+    /**
+     * Build connection between server and client to update front-end status
+     */
+    public void statusUpdates(String userName, StatusNotificationDTO payload) {
+        simpleMessageService.convertAndSendToUser(userName, "/system/status", payload);
     }
 
     /**

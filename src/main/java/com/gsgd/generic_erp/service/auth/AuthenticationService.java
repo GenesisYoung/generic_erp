@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -16,12 +17,14 @@ import com.gsgd.generic_erp.configuration.security.JWTUtil;
 import com.gsgd.generic_erp.controller.auth.AuthenticationController.AuthenticationRequest;
 import com.gsgd.generic_erp.controller.auth.AuthenticationController.AuthenticationResponse;
 import com.gsgd.generic_erp.controller.auth.AuthenticationController.TokenPair;
+import com.gsgd.generic_erp.dto.StatusNotificationDTO;
 import com.gsgd.generic_erp.dto.UserDTO;
 import com.gsgd.generic_erp.entity.auth.LoginLog;
 import com.gsgd.generic_erp.entity.auth.User;
 import com.gsgd.generic_erp.entity.auth.UserInfo;
 import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.enums.Language_EN;
+import com.gsgd.generic_erp.enums.StatusCommand;
 import com.gsgd.generic_erp.repository.auth.LoginLogRepository;
 import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
@@ -60,12 +63,14 @@ public class AuthenticationService {
 
         private final UserDepartmentRepository drepository;
 
+        private final SimpMessagingTemplate messager;
+
         AuthenticationService(AuthenticationManager authenticationManager, JWTUtil jwtUtil,
                         UserRepository userRepository,
                         LoginLogRepository loginLogRepository,
                         GlobalVariable globalVariable,
                         RedisTemplate<String, Object> redisTemplateService, UserInfoRepository infoRepository,
-                        UserDepartmentRepository departmentRepository)
+                        UserDepartmentRepository departmentRepository, SimpMessagingTemplate messagingTemplate)
                         throws ClassNotFoundException {
                 this.authenticationManager = authenticationManager;
                 this.jwtUtil = jwtUtil;
@@ -75,6 +80,7 @@ public class AuthenticationService {
                 this.redisTemplateService = redisTemplateService;
                 this.infoRepository = infoRepository;
                 this.drepository = departmentRepository;
+                this.messager = messagingTemplate;
         }
 
         /**
@@ -163,6 +169,14 @@ public class AuthenticationService {
                                         .createDate(new java.sql.Date(new java.util.Date().getTime()))
                                         .build();
                         loginLogRepository.save(loginLog);
+                        /**
+                         * Logout the former session
+                         */
+                        messager.convertAndSendToUser(username, "/system/status",
+                                        StatusNotificationDTO
+                                                        .builder()
+                                                        .code(StatusCommand.LOGOUT.getCode())
+                                                        .object(new LogoutMessage(refreshToken)));
                         return new BasicResponse(200,
                                         globalVariable.getDEFAULT_LANGUAGE().equals("EN")
                                                         ? Language_EN.LOGIN_SUCCESSFUL.getMessage()
@@ -353,5 +367,8 @@ public class AuthenticationService {
                         "HTTP_CLIENT_IP",
                         "REMOTE_ADDR"
         };
+
+        record LogoutMessage(String latestRereshCode) {
+        }
 
 }

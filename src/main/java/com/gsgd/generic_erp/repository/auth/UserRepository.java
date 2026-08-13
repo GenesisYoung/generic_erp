@@ -29,4 +29,6 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @Modifying
     @Query("UPDATE User u SET u.isEnabled = :isEnabled WHERE u.id = :id")
     void updateIsEnabled(Long id, Byte isEnabled);
+
+    Optional<User> findByCurrentSessionId(String sessionId);
 }
