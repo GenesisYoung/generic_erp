@@ -36,8 +36,15 @@ public class WebSocketAuthConfig implements WebSocketMessageBrokerConfigurer {
                         throw new IllegalArgumentException("Missing WebSocket credentials");
                     }
                     String token = bearer.substring(7);
+                    // The sid claim lives in the refresh token and is verified
+                    // with the refresh key, so it must be read from the
+                    // Refresh-Token header, not the access token.
+                    String refreshToken = accessor.getFirstNativeHeader("Refresh-Token");
+                    if (refreshToken == null) {
+                        throw new IllegalArgumentException("Missing WebSocket credentials");
+                    }
                     String username = jwtService.extractUsername(0, token);
-                    String sid = jwtService.extractSessionId(token);
+                    String sid = jwtService.extractSessionId(refreshToken);
                     UserDetails user = userDetailsService.loadUserByUsername(username);
                     if (!jwtService.isValid(0, token)
                             || !jwtService.isSessionCurrent(username, sid)) {

@@ -53,7 +53,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // If the request is for a public endpoint, skip token validation.
         if (!allowedEndpoints.contains(requestPath)) {
             if (refreshToken == null) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setStatus(HttpServletResponse.SC_CONFLICT);
                 response.getWriter().write("Invalid refresh token");
                 return;
             }
