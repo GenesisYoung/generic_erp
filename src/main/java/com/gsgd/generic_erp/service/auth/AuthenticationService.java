@@ -6,13 +6,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
+import com.gsgd.generic_erp.configuration.message.NotificationService;
 import com.gsgd.generic_erp.configuration.security.JWTUtil;
 import com.gsgd.generic_erp.controller.auth.AuthenticationController.AuthenticationRequest;
 import com.gsgd.generic_erp.controller.auth.AuthenticationController.AuthenticationResponse;
@@ -24,7 +24,6 @@ import com.gsgd.generic_erp.entity.auth.User;
 import com.gsgd.generic_erp.entity.auth.UserInfo;
 import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.enums.Language_EN;
-import com.gsgd.generic_erp.enums.StatusCommand;
 import com.gsgd.generic_erp.repository.auth.LoginLogRepository;
 import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
@@ -34,6 +33,7 @@ import com.gsgd.generic_erp.util.GlobalVariable;
 
 import io.jsonwebtoken.lang.Objects;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.AllArgsConstructor;
 
 /**
  * Business logic for login and token rotation.
@@ -45,6 +45,7 @@ import jakarta.servlet.http.HttpServletRequest;
  * localized (EN/CN) response messages.
  */
 @Service
+@AllArgsConstructor
 public class AuthenticationService {
 
         private final AuthenticationManager authenticationManager;
@@ -63,25 +64,7 @@ public class AuthenticationService {
 
         private final UserDepartmentRepository drepository;
 
-        private final SimpMessagingTemplate messager;
-
-        AuthenticationService(AuthenticationManager authenticationManager, JWTUtil jwtUtil,
-                        UserRepository userRepository,
-                        LoginLogRepository loginLogRepository,
-                        GlobalVariable globalVariable,
-                        RedisTemplate<String, Object> redisTemplateService, UserInfoRepository infoRepository,
-                        UserDepartmentRepository departmentRepository, SimpMessagingTemplate messagingTemplate)
-                        throws ClassNotFoundException {
-                this.authenticationManager = authenticationManager;
-                this.jwtUtil = jwtUtil;
-                this.userRepository = userRepository;
-                this.loginLogRepository = loginLogRepository;
-                this.globalVariable = globalVariable;
-                this.redisTemplateService = redisTemplateService;
-                this.infoRepository = infoRepository;
-                this.drepository = departmentRepository;
-                this.messager = messagingTemplate;
-        }
+        private final NotificationService messager;
 
         /**
          * Full login flow:
@@ -172,11 +155,8 @@ public class AuthenticationService {
                         /**
                          * Logout the former session
                          */
-                        messager.convertAndSendToUser(username, "/system/status",
-                                        StatusNotificationDTO
-                                                        .builder()
-                                                        .code(StatusCommand.LOGOUT.getCode())
-                                                        .object(new LogoutMessage(refreshToken)));
+                        messager.statusUpdates(username, StatusNotificationDTO.builder().code(1)
+                                        .object(new LogoutMessage(accessToken)).build());
                         return new BasicResponse(200,
                                         globalVariable.getDEFAULT_LANGUAGE().equals("EN")
                                                         ? Language_EN.LOGIN_SUCCESSFUL.getMessage()
@@ -368,7 +348,7 @@ public class AuthenticationService {
                         "REMOTE_ADDR"
         };
 
-        record LogoutMessage(String latestRereshCode) {
+        record LogoutMessage(String latestAccessToken) {
         }
 
 }

@@ -1,6 +1,7 @@
 package com.gsgd.generic_erp.configuration.message;
 
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.config.ChannelRegistration;
@@ -21,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 public class WebSocketAuthConfig implements WebSocketMessageBrokerConfigurer {
     private final JWTUtil jwtService;
     private final UserDetailsService userDetailsService;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
@@ -39,11 +41,13 @@ public class WebSocketAuthConfig implements WebSocketMessageBrokerConfigurer {
                     // The sid claim lives in the refresh token and is verified
                     // with the refresh key, so it must be read from the
                     // Refresh-Token header, not the access token.
-                    String refreshToken = accessor.getFirstNativeHeader("Refresh-Token");
-                    if (refreshToken == null) {
+                    String accessToken = (String) redisTemplate.opsForValue()
+                            .get("refreshToken:" + jwtService.extractUsername(0, token));
+                    if (accessToken == null) {
                         throw new IllegalArgumentException("Missing WebSocket credentials");
                     }
-                    String username = jwtService.extractUsername(0, token);
+                    String username = accessor.getFirstNativeHeader("User-Name");
+                    String refreshToken = (String) redisTemplate.opsForValue().get("refreshToken:" + username);
                     String sid = jwtService.extractSessionId(refreshToken);
                     UserDetails user = userDetailsService.loadUserByUsername(username);
                     if (!jwtService.isValid(0, token)

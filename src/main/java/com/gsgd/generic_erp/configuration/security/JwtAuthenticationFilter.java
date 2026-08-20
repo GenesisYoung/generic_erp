@@ -45,25 +45,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String header = request.getHeader("Authorization");
-        String refreshToken = request.getHeader("Refresh-Token");
-        List<String> allowedEndpoints = List.of("/api/auth/login", "/api/auth/register", "/api/auth/refresh/access",
-                "/api/auth/refresh/refresh", "/ws");
+        String login = "/api/auth/login";
         String requestPath = request.getRequestURI();
+        if (requestPath.contains(login)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        String header = request.getHeader("Authorization");
+        String username = request.getHeader("User-Name");
+        if (header == null) {
+            response.setStatus(HttpServletResponse.SC_CONFLICT);
+            response.getWriter().write("Invalid refresh token");
+            return;
+        }
+        String accessToken = header.substring(7);
+        String refreshToken = (String) redisTemplate.opsForValue()
+                .get("refreshToken:" + username);
+        ;
+        List<String> allowedEndpoints = List.of("/api/auth/register", "/api/auth/refresh/access",
+                "/api/auth/refresh/refresh", "/ws");
         // If the request is for a public endpoint, skip token validation.
         if (!allowedEndpoints.contains(requestPath)) {
-            if (refreshToken == null) {
+            if (accessToken == null) {
                 response.setStatus(HttpServletResponse.SC_CONFLICT);
-                response.getWriter().write("Invalid refresh token");
-                return;
-            }
-            String storedRefreshToken = (String) redisTemplate.opsForValue()
-                    .get("refreshToken:" + jwtService.extractUsername(1, refreshToken));
-            // If the refresh token in the request does not match the one stored in Redis,
-            // reject the request.
-            if (storedRefreshToken == null
-                    || (storedRefreshToken != null && !refreshToken.equals(storedRefreshToken))) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.getWriter().write("Invalid refresh token");
                 return;
             }
@@ -78,7 +82,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // If the token is valid, extract the username and load user details,
         // then set the authentication in the security context.
         if (jwtService.isValid(0, token)) {
-            String username = jwtService.extractUsername(0, token);
             // Load user details from the database using the username extracted from the
             // token.
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
