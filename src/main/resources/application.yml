@@ -37,7 +37,17 @@ spring:
         "[dialect]": org.hibernate.dialect.MySQLDialect
 
 security:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  login:
+    max-failed-attempts: ${LOGIN_MAX_FAILED_ATTEMPTS:3}
+    lock-duration-ms: ${LOGIN_LOCK_DURATION_MS:900000}
   token:
+    cookie:
+      secure: ${AUTH_COOKIE_SECURE:true}
+    secret:
+      access: ${AUTHENTICATION_SECRET_KEY_ACCESS}
+      refresh: ${AUTHENTICATION_SECRET_KEY_REFRESH}
     expiracy:
       access: ${ACCESS_TIMEOUT}
       refresh: ${REFRESH_TIMEOUT}

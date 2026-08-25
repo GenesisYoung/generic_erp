@@ -37,6 +37,13 @@ public class GlobalExceptionHandler {
                 .body(new SimpleResponse(409, "This record conflicts with existing data"));
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<SimpleResponse> handleInvalidRequest(IllegalArgumentException e) {
+        log.warn("Invalid request: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new SimpleResponse(400, e.getMessage()));
+    }
+
     // Unexpected: a bug. ERROR level, full stack trace, generic message to the
     // client.
     @ExceptionHandler(Exception.class)

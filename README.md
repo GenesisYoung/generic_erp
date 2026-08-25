@@ -31,6 +31,8 @@ ACCESS_TIMEOUT=900000            # access token TTL in ms (15 min)
 REFRESH_TIMEOUT=604800000        # refresh token TTL in ms (7 days)
 AUTHENTICATION_SECRET_KEY_ACCESS=<hmac-secret-for-access-tokens>
 AUTHENTICATION_SECRET_KEY_REFRESH=<hmac-secret-for-refresh-tokens>
+AUTH_COOKIE_SECURE=false         # local HTTP only; keep true in production
+CORS_ALLOWED_ORIGINS=http://localhost:5173
 LANGUAGE=EN                      # default language (EN / CN)
 ```
 

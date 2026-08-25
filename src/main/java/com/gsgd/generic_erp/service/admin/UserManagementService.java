@@ -110,7 +110,8 @@ public class UserManagementService {
                             info != null ? info.getTitle() : null,
                             info != null ? info.getBirthday() : null,
                             info != null ? info.getHireDate() : null,
-                            departments);
+                            departments,
+                            null);
                 })
                 .toList();
 
@@ -123,7 +124,7 @@ public class UserManagementService {
      * On update, the user's role links are reconciled with a set diff:
      * roles no longer selected are bulk-deleted and newly selected roles are
      * bulk-inserted, keeping the whole operation to a handful of queries.
-     * New users get a default password ({@code "userpass"}) hashed with Argon2.
+     * New users must be provisioned with an explicit strong initial password.
      */
     @Transactional
     @CacheEvict(cacheNames = "userQuery", allEntries = true)
@@ -131,6 +132,9 @@ public class UserManagementService {
         try {
             // Check for duplicate username/email on create
             if (userId == 0) {
+                if (user.getInitialPassword() == null || user.getInitialPassword().length() < 12) {
+                    throw new IllegalArgumentException("Initial password must be at least 12 characters");
+                }
                 if (userRepository.existsByUsername(user.getName())) {
                     if (language.getLanguage().equals("EN")) {
                         throw new DataIntegrityViolationException(Language_EN.USERNAME_DULICATED.getMessage());
@@ -334,7 +338,7 @@ public class UserManagementService {
             u.setDisplayName(user.getDisplayName());
             u.setEmail(user.getEmail());
             u.setStatus(user.getActive());
-            u.setPassword(authenticationService.generatePass("userpass"));
+            u.setPassword(authenticationService.generatePass(user.getInitialPassword()));
             u.setIsEnabled((byte) 1);
             return u;
         }

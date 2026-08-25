@@ -1,19 +1,22 @@
 package com.gsgd.generic_erp.service.auth;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.configuration.message.NotificationService;
 import com.gsgd.generic_erp.configuration.security.JWTUtil;
+import com.gsgd.generic_erp.configuration.security.RefreshTokenStore;
 import com.gsgd.generic_erp.controller.auth.AuthenticationController.AuthenticationRequest;
 import com.gsgd.generic_erp.controller.auth.AuthenticationController.AuthenticationResponse;
 import com.gsgd.generic_erp.controller.auth.AuthenticationController.TokenPair;
@@ -31,9 +34,8 @@ import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
 import com.gsgd.generic_erp.util.GlobalVariable;
 
-import io.jsonwebtoken.lang.Objects;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 
 /**
  * Business logic for login and token rotation.
@@ -45,7 +47,7 @@ import lombok.AllArgsConstructor;
  * localized (EN/CN) response messages.
  */
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class AuthenticationService {
 
         private final AuthenticationManager authenticationManager;
@@ -58,13 +60,19 @@ public class AuthenticationService {
 
         private final GlobalVariable globalVariable;
 
-        private final RedisTemplate<String, Object> redisTemplateService;
+        private final RefreshTokenStore refreshTokenStore;
 
         private final UserInfoRepository infoRepository;
 
         private final UserDepartmentRepository drepository;
 
         private final NotificationService messager;
+
+        @Value("${security.login.max-failed-attempts:3}")
+        private int maxFailedAttempts;
+
+        @Value("${security.login.lock-duration-ms:900000}")
+        private long lockDurationMs;
 
         /**
          * Full login flow:
@@ -82,41 +90,39 @@ public class AuthenticationService {
          */
         @SuppressWarnings("null")
         public BasicResponse handleLogin(AuthenticationRequest entity, HttpServletRequest request) {
+                String username = entity != null && entity.username() != null ? entity.username().trim() : "";
+                if (username.isEmpty() || entity.password() == null || entity.password().isEmpty()) {
+                        return invalidCredentials();
+                }
                 try {
-                        String username = entity.username().trim();
-                        User exist = userRepository.findByUsername(username)
-                                        .filter(user -> user.getIsEnabled() != null && user.getIsEnabled() == 1)
-                                        .orElseThrow(() -> new RuntimeException(
-                                                        globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                                        ? Language_EN.USER_NOT_AVAILABLE.getMessage()
-                                                                        : Language_CN.USER_NOT_AVAILABLE.getMessage()));
-                        if (Objects.isEmpty(exist)) {
-                                return new BasicResponse(402,
-                                                globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                                ? Language_EN.USER_NOT_AVAILABLE.getMessage()
-                                                                : Language_CN.USER_NOT_AVAILABLE.getMessage(),
-                                                null);
+                        Optional<User> existingUser = userRepository.findByUsername(username);
+                        if (existingUser.isEmpty() || existingUser.get().getIsEnabled() == null
+                                        || existingUser.get().getIsEnabled() != 1) {
+                                return invalidCredentials();
+                        }
+                        User exist = existingUser.get();
+                        if (exist.getLockedUntil() != null && exist.getLockedUntil().isAfter(LocalDateTime.now())) {
+                                return invalidCredentials();
+                        }
+                        if (exist.getLockedUntil() != null) {
+                                exist.setLockedUntil(null);
+                                exist.setFailedAttempted((byte) 0);
+                                userRepository.save(exist);
                         }
                         Authentication auth = authenticationManager
-                                        .authenticate(new UsernamePasswordAuthenticationToken(entity.username(),
+                                        .authenticate(new UsernamePasswordAuthenticationToken(username,
                                                         entity.password()));
                         if (auth.isAuthenticated() && exist.getFailedAttempted() != null
                                         && exist.getFailedAttempted() > 0) {
                                 exist.setFailedAttempted((byte) 0);
                                 userRepository.save(exist);
-                        } else if (exist.getFailedAttempted() != null && exist.getFailedAttempted() >= 3) {
-                                return new BasicResponse(401,
-                                                globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                                ? Language_EN.INVALID_CREDENTIALS.getMessage()
-                                                                : Language_CN.INVALID_CREDENTIALS.getMessage(),
-                                                null);
                         }
-                        User user = jwtUtil.getUser(entity.username());
+                        User user = jwtUtil.getUser(username);
                         String sessionId = UUID.randomUUID().toString();
                         user.setCurrentSessionId(sessionId);
                         userRepository.save(user);
                         String refreshToken = jwtUtil.generateRefreshToken(auth.getName(), user.getCurrentSessionId());
-                        String accessToken = jwtUtil.generateAccessToken(auth.getName());
+                        String accessToken = jwtUtil.generateAccessToken(auth.getName(), user.getCurrentSessionId());
                         Optional<UserInfo> op = infoRepository.findByUserId(user.getId());
                         UserDTO userDTO = null;
                         if (!op.isEmpty()) {
@@ -130,7 +136,8 @@ public class AuthenticationService {
                                                 info != null ? info.getTitle() : null,
                                                 info != null ? info.getBirthday() : null,
                                                 info != null ? info.getHireDate() : null,
-                                                info != null ? departments : null);
+                                                info != null ? departments : null,
+                                                null);
                         } else {
                                 List<Long> departments = drepository.findByUserId(user.getId()).stream()
                                                 .map(ele -> ele.getDeptId()).toList();
@@ -138,12 +145,12 @@ public class AuthenticationService {
                                                 user.getDisplayName(),
                                                 null, user.getStatus(), user.getIsEnabled(), null, "",
                                                 "", null, null,
-                                                departments);
+                                                departments,
+                                                null);
                         }
                         // Store the refresh token in Redis with a TTL of 7 days, new login will
                         // overwrite the previous one, enforcing single-session.
-                        redisTemplateService.opsForValue().set("refreshToken:" + user.getUsername(), refreshToken);
-                        redisTemplateService.expire("refreshToken:" + user.getUsername(), java.time.Duration.ofDays(7));
+                        refreshTokenStore.store(user.getUsername(), refreshToken);
                         LoginLog loginLog = LoginLog.builder()
                                         .userId(user.getId())
                                         .loginIp(getClientIp(request))
@@ -163,34 +170,23 @@ public class AuthenticationService {
                                                         : Language_CN.LOGIN_SUCCESSFUL.getMessage(),
                                         new AuthenticationResponse(new TokenPair(refreshToken, accessToken), userDTO));
                 } catch (BadCredentialsException e) {
-                        // Wrong password: increment the failed-attempt counter and lock the
-                        // account (isEnabled = 0) once it reaches 3 consecutive failures.
-                        String username = entity.username().trim();
-                        User user = userRepository.findByUsername(username)
+                        userRepository.findByUsername(username)
                                         .filter(u -> u.getIsEnabled() != null && u.getIsEnabled() == 1)
-                                        .orElseThrow(() -> new RuntimeException(
-                                                        globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                                        ? Language_EN.USER_NOT_AVAILABLE.getMessage()
-                                                                        : Language_CN.USER_NOT_AVAILABLE.getMessage()));
-                        byte failedAttempts = user.getFailedAttempted() != null ? user.getFailedAttempted() : 0;
-                        user.setFailedAttempted(failedAttempts < 3 ? (byte) (failedAttempts + 1) : failedAttempts);
-                        userRepository.save(user);
-                        if (failedAttempts + 1 >= 3) {
-                                user.setIsEnabled((byte) 0); // Disable the user account
-                                userRepository.save(user);
-                                return new BasicResponse(402,
-                                                globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                                ? Language_EN.MULTIPLE_FAILURE.getMessage()
-                                                                : Language_CN.MULTIPLE_FAILURE.getMessage(),
-                                                null);
-                        }
-                        return new BasicResponse(401,
-                                        globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                        ? Language_EN.INVALID_CREDENTIALS.getMessage()
-                                                        : Language_CN.INVALID_CREDENTIALS.getMessage(),
-                                        null);
-                } catch (RuntimeException e) {
-                        return new BasicResponse(402, e.getMessage(), null);
+                                        .ifPresent(user -> {
+                                                int failedAttempts = user.getFailedAttempted() == null
+                                                                ? 0
+                                                                : user.getFailedAttempted();
+                                                int nextAttempt = failedAttempts + 1;
+                                                user.setFailedAttempted((byte) Math.min(nextAttempt, maxFailedAttempts));
+                                                if (nextAttempt >= maxFailedAttempts) {
+                                                        user.setLockedUntil(LocalDateTime.now()
+                                                                        .plus(Duration.ofMillis(lockDurationMs)));
+                                                }
+                                                userRepository.save(user);
+                                        });
+                        return invalidCredentials();
+                } catch (AuthenticationException e) {
+                        return invalidCredentials();
                 } catch (Exception e) {
                         return new BasicResponse(500,
                                         globalVariable.getDEFAULT_LANGUAGE().equals("EN")
@@ -200,18 +196,23 @@ public class AuthenticationService {
                 }
         }
 
+        private BasicResponse invalidCredentials() {
+                return new BasicResponse(401,
+                                globalVariable.getDEFAULT_LANGUAGE().equals("EN")
+                                                ? Language_EN.INVALID_CREDENTIALS.getMessage()
+                                                : Language_CN.INVALID_CREDENTIALS.getMessage(),
+                                null);
+        }
+
         /**
          * Returns the remaining validity (ms) of the refresh token carried in the
          * {@code Authorization} header, or -1 if the token is invalid.
          */
         public long getExpirationRemaining(HttpServletRequest request) {
-                String refreshToken = request.getHeader("Authorization").substring(7);
-                if (jwtUtil.isValid(1, refreshToken.trim())) {
-                        String token = request.getHeader("Authorization").substring(7); // Remove "Bearer " prefix
-                        return jwtUtil.expirationRemaining(1, token.trim());
-                } else {
-                        return -1; // Invalid token
-                }
+                String refreshToken = bearerToken(request);
+                return refreshToken != null && jwtUtil.isValid(1, refreshToken)
+                                ? jwtUtil.expirationRemaining(1, refreshToken)
+                                : -1;
         }
 
         /**
@@ -220,44 +221,11 @@ public class AuthenticationService {
          * this rejects refresh tokens from older logins (single-session enforcement).
          */
         public BasicResponse refreshAccessToken(HttpServletRequest request) {
-                String refreshToken = request.getHeader("Authorization").substring(7); // Remove "Bearer " prefix
-                if (!jwtUtil.isValid(1, refreshToken.trim())) {
-                        return new BasicResponse(401,
-                                        globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                        ? Language_EN.TOKEN_REFRESH_FAILED.getMessage()
-                                                        : Language_CN.TOKEN_REFRESH_FAILED.getMessage(),
-                                        null);
-                }
-                String username = jwtUtil.extractUsername(1, refreshToken.trim());
-                if (username != null) {
-                        User u = jwtUtil.getUser(username);
-                        if (u != null && !u.getCurrentSessionId()
-                                        .equals(jwtUtil.extractSessionId(refreshToken.trim()))) {
-                                return new BasicResponse(401,
-                                                globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                                ? Language_EN.TOKEN_REFRESH_FAILED.getMessage()
-                                                                : Language_CN.TOKEN_REFRESH_FAILED.getMessage(),
-                                                null);
-                        } else if (u == null || u.getCurrentSessionId() == null) {
-                                return new BasicResponse(401,
-                                                globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                                ? Language_EN.TOKEN_REFRESH_FAILED.getMessage()
-                                                                : Language_CN.TOKEN_REFRESH_FAILED.getMessage(),
-                                                null);
-                        }
-                        String newAccessToken = jwtUtil.generateAccessToken(username);
-                        return new BasicResponse(200,
-                                        globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                        ? Language_EN.TOKEN_REFRESH_SUCCESSFUL.getMessage()
-                                                        : Language_CN.TOKEN_REFRESH_SUCCESSFUL.getMessage(),
-                                        newAccessToken);
-                } else {
-                        return new BasicResponse(401,
-                                        globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                        ? Language_EN.TOKEN_REFRESH_FAILED.getMessage()
-                                                        : Language_CN.TOKEN_REFRESH_FAILED.getMessage(),
-                                        null);
-                }
+                return rotateTokenPair(request);
+        }
+
+        public BasicResponse refreshAccessToken(String refreshToken) {
+                return rotateTokenPair(refreshToken);
         }
 
         /**
@@ -265,30 +233,74 @@ public class AuthenticationService {
          * refresh token bound to the same session id.
          */
         public BasicResponse refreshRefreshToken(HttpServletRequest request) {
-                String refreshToken = request.getHeader("Authorization").substring(7); // Remove "Bearer " prefix
-                if (!jwtUtil.isValid(1, refreshToken.trim())) {
-                        return new BasicResponse(500,
-                                        globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                        ? Language_EN.TOKEN_REFRESH_FAILED.getMessage()
-                                                        : Language_CN.TOKEN_REFRESH_FAILED.getMessage(),
-                                        null);
+                return rotateTokenPair(request);
+        }
+
+        public BasicResponse refreshRefreshToken(String refreshToken) {
+                return rotateTokenPair(refreshToken);
+        }
+
+        private BasicResponse rotateTokenPair(HttpServletRequest request) {
+                return rotateTokenPair(bearerToken(request));
+        }
+
+        private BasicResponse rotateTokenPair(String refreshToken) {
+                if (refreshToken == null || !jwtUtil.isValid(1, refreshToken)) {
+                        return refreshFailure();
                 }
-                String username = jwtUtil.extractUsername(1, refreshToken.trim());
-                if (username != null) {
-                        User u = jwtUtil.getUser(username);
-                        String newRefreshToken = jwtUtil.generateRefreshToken(username, u.getCurrentSessionId());
-                        return new BasicResponse(200,
-                                        globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                        ? Language_EN.TOKEN_REFRESH_SUCCESSFUL.getMessage()
-                                                        : Language_CN.TOKEN_REFRESH_SUCCESSFUL.getMessage(),
-                                        newRefreshToken);
-                } else {
-                        return new BasicResponse(500,
-                                        globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                        ? Language_EN.TOKEN_REFRESH_FAILED.getMessage()
-                                                        : Language_CN.TOKEN_REFRESH_FAILED.getMessage(),
-                                        null);
+
+                String username = jwtUtil.extractUsername(1, refreshToken);
+                User user = jwtUtil.getUser(username);
+                String sid = jwtUtil.extractSessionId(refreshToken);
+                if (user == null || user.getCurrentSessionId() == null
+                                || !user.getCurrentSessionId().equals(sid)
+                                || user.getIsEnabled() == null || user.getIsEnabled() != 1) {
+                        return refreshFailure();
                 }
+
+                String newRefreshToken = jwtUtil.generateRefreshToken(username, sid);
+                if (!refreshTokenStore.rotate(username, refreshToken, newRefreshToken)) {
+                        // A mismatch means this token was already rotated or revoked. Revoke the
+                        // whole session to prevent a replay race from leaving either caller active.
+                        refreshTokenStore.revoke(username);
+                        user.setCurrentSessionId(null);
+                        userRepository.save(user);
+                        return refreshFailure();
+                }
+
+                String newAccessToken = jwtUtil.generateAccessToken(username, sid);
+                return new BasicResponse(200,
+                                globalVariable.getDEFAULT_LANGUAGE().equals("EN")
+                                                ? Language_EN.TOKEN_REFRESH_SUCCESSFUL.getMessage()
+                                                : Language_CN.TOKEN_REFRESH_SUCCESSFUL.getMessage(),
+                                new TokenPair(newRefreshToken, newAccessToken));
+        }
+
+        private String bearerToken(HttpServletRequest request) {
+                String header = request.getHeader("Authorization");
+                if (header == null || !header.startsWith("Bearer ")) {
+                        return null;
+                }
+                String token = header.substring(7).trim();
+                return token.isEmpty() ? null : token;
+        }
+
+        private BasicResponse refreshFailure() {
+                return new BasicResponse(401,
+                                globalVariable.getDEFAULT_LANGUAGE().equals("EN")
+                                                ? Language_EN.TOKEN_REFRESH_FAILED.getMessage()
+                                                : Language_CN.TOKEN_REFRESH_FAILED.getMessage(),
+                                null);
+        }
+
+        public BasicResponse logout(String username) {
+                refreshTokenStore.revoke(username);
+                User user = jwtUtil.getUser(username);
+                if (user != null) {
+                        user.setCurrentSessionId(null);
+                        userRepository.save(user);
+                }
+                return new BasicResponse(200, "Logged out", null);
         }
 
         public static String getClientIp(HttpServletRequest request) {

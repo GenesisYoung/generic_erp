@@ -3,6 +3,7 @@ package com.gsgd.generic_erp.configuration.security;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.time.LocalDateTime;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.GrantedAuthority;
@@ -45,6 +46,17 @@ public class UserDetail implements UserDetails {
     @Override
     public String getUsername() {
         return user.getUsername();
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return user.getLockedUntil() == null || user.getLockedUntil().isBefore(LocalDateTime.now());
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return user.getIsEnabled() != null && user.getIsEnabled() == 1
+                && !Boolean.FALSE.equals(user.getStatus());
     }
 
 }
