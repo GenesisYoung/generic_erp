@@ -29,33 +29,24 @@ public class ManipulatePermissionController {
     /** Grant or revoke a user's baseline access to a menu. */
     @PostMapping("/user")
     public SimpleResponse setUserAccess(@RequestBody UserAccessRequest request) {
-        try {
-            return service.setUserAccess(request.navId(), request.userId(), request.granted());
-        } catch (Exception e) {
-            return new SimpleResponse(500, e.getMessage());
-        }
+        return service.setUserAccess(request.navId(), request.userId(), request.granted());
+
     }
 
     /** Grant or revoke one permission for a user, scoped to a menu. */
     @PostMapping("/permission")
     public SimpleResponse setPermissionAccess(@RequestBody PermissionAccessRequest request) {
-        try {
-            return service.setPermissionAccess(request.navId(), request.userId(), request.permissionId(),
-                    request.granted());
-        } catch (Exception e) {
-            return new SimpleResponse(500, e.getMessage());
-        }
+        return service.setPermissionAccess(request.navId(), request.userId(), request.permissionId(),
+                request.granted());
+
     }
 
     /** Register or de-register a permission against a menu. */
     @PostMapping("/registration")
     public SimpleResponse setPermissionRegistration(@RequestBody PermissionRegistrationRequest request) {
-        try {
-            return service.setPermissionRegistration(request.navId(), request.permissionId(),
-                    request.registered());
-        } catch (Exception e) {
-            return new SimpleResponse(500, e.getMessage());
-        }
+        return service.setPermissionRegistration(request.navId(), request.permissionId(),
+                request.registered());
+
     }
 
     @GetMapping("/defaults")

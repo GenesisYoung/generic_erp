@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.gsgd.generic_erp.configuration.message.NotificationService;
 import com.gsgd.generic_erp.configuration.security.JWTUtil;
@@ -46,7 +47,8 @@ class AuthenticationServiceTest {
                 tokens,
                 mock(UserInfoRepository.class),
                 mock(UserDepartmentRepository.class),
-                mock(NotificationService.class));
+                mock(NotificationService.class),
+                mock(PasswordEncoder.class));
     }
 
     @Test

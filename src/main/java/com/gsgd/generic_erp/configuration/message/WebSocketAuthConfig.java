@@ -1,5 +1,7 @@
 package com.gsgd.generic_erp.configuration.message;
 
+import java.security.Principal;
+
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -7,6 +9,7 @@ import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -56,6 +59,15 @@ public class WebSocketAuthConfig implements WebSocketMessageBrokerConfigurer {
                     // non-null, which is what /user/** destinations depend on.
                     accessor.setUser(auth);
 
+                    if (accessor != null && (StompCommand.SUBSCRIBE.equals(accessor.getCommand())
+                            || StompCommand.SEND.equals(accessor.getCommand()))) {
+                        Principal p = accessor.getUser();
+                        String sid = accessor.getSessionAttributes() == null ? null
+                                : (String) accessor.getSessionAttributes().get("sid");
+                        if (p == null || sid == null || !jwtService.isSessionCurrent(p.getName(), sid)) {
+                            throw new AuthenticationCredentialsNotFoundException("Session no longer current");
+                        }
+                    }
                     return message;
                 }
                 return message;

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
  * algorithm. Implemented by {@code AuthenticationImpl} using Argon2.
  */
 @Service
-public interface AuthenticationService {
+public interface AuthenticationServiceInterface {
 
     /** Hashes a plain-text password for storage. */
     public String generatePass(String password);

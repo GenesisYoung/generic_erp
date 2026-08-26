@@ -1,9 +1,9 @@
 package com.gsgd.generic_erp.configuration.security;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.time.LocalDateTime;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.GrantedAuthority;
@@ -29,6 +29,10 @@ public class UserDetail implements UserDetails {
     public UserDetail(User user, List<Role> roles) {
         this.user = user;
         this.roles = roles;
+    }
+
+    public User getUser() {
+        return user;
     }
 
     @Override

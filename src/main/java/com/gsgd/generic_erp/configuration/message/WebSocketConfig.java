@@ -1,8 +1,8 @@
 package com.gsgd.generic_erp.configuration.message;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
@@ -42,4 +42,5 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         taskScheduler.initialize();
         return taskScheduler;
     }
+
 }

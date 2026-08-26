@@ -9,6 +9,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.gsgd.generic_erp.configuration.exception.NoneDeleteableException;
 import com.gsgd.generic_erp.configuration.security.impl.AuthenticationImpl;
+import com.gsgd.generic_erp.controller.exception.GlobalExceptionHandler;
 import com.gsgd.generic_erp.dto.UserDTO;
 import com.gsgd.generic_erp.entity.auth.Role;
 import com.gsgd.generic_erp.entity.auth.User;
@@ -53,6 +56,7 @@ public class UserManagementService {
     private final UserInfoRepository infoRepository;
     private final UserDepartmentRepository uDepartmentRepositoryrepository;
     private final Language language;
+    private final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     public UserManagementService(UserRepository repository, RoleRepository roleRepository,
             UserRoleRepository userRoleRepository, UserRepository userRepository,
@@ -292,7 +296,7 @@ public class UserManagementService {
                 return new SimpleResponse(200, "Successfully created");
             }
         } catch (NullPointerException exception) {
-            System.err.println(exception.getLocalizedMessage());
+            log.error("Exeception on saving user ==> [UserManagementService]{}", exception);
             throw new NullPointerException(exception.getLocalizedMessage());
         }
     }

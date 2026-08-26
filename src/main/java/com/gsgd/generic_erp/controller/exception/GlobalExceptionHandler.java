@@ -15,6 +15,11 @@ import com.gsgd.generic_erp.util.SimpleResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+/**
+ * Central exception handler for the application.
+ * Converts domain and framework exceptions into consistent HTTP responses
+ * for API clients.
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 

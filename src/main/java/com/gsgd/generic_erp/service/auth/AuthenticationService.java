@@ -1,17 +1,20 @@
 package com.gsgd.generic_erp.service.auth;
 
-import java.time.LocalDateTime;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.configuration.message.NotificationService;
@@ -27,13 +30,16 @@ import com.gsgd.generic_erp.entity.auth.User;
 import com.gsgd.generic_erp.entity.auth.UserInfo;
 import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.enums.Language_EN;
+import com.gsgd.generic_erp.enums.StatusCommand;
 import com.gsgd.generic_erp.repository.auth.LoginLogRepository;
 import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
 import com.gsgd.generic_erp.util.GlobalVariable;
+import com.gsgd.generic_erp.util.LoginRateLimiter;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 
@@ -74,6 +80,17 @@ public class AuthenticationService {
         @Value("${security.login.lock-duration-ms:900000}")
         private long lockDurationMs;
 
+        private final PasswordEncoder passwordEncoder;
+
+        private String dummyPasswordHash;
+
+        private LoginRateLimiter limiter;
+
+        @PostConstruct
+        void initializeDummyPasswordHash() {
+                dummyPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
+        }
+
         /**
          * Full login flow:
          * <ol>
@@ -91,33 +108,31 @@ public class AuthenticationService {
         @SuppressWarnings("null")
         public BasicResponse handleLogin(AuthenticationRequest entity, HttpServletRequest request) {
                 String username = entity != null && entity.username() != null ? entity.username().trim() : "";
+                // Limit the login attempts from a same id
+                if (!limiter.allow("ip:" + request.getRemoteAddr(), 20, Duration.ofMinutes(1))
+                                || !limiter.allow("user:" + username, 10, Duration.ofMinutes(1))) {
+                        return new BasicResponse(429, "Too many attempts", null);
+                }
                 if (username.isEmpty() || entity.password() == null || entity.password().isEmpty()) {
                         return invalidCredentials();
                 }
                 try {
-                        Optional<User> existingUser = userRepository.findByUsername(username);
-                        if (existingUser.isEmpty() || existingUser.get().getIsEnabled() == null
-                                        || existingUser.get().getIsEnabled() != 1) {
-                                return invalidCredentials();
-                        }
-                        User exist = existingUser.get();
-                        if (exist.getLockedUntil() != null && exist.getLockedUntil().isAfter(LocalDateTime.now())) {
-                                return invalidCredentials();
-                        }
-                        if (exist.getLockedUntil() != null) {
-                                exist.setLockedUntil(null);
-                                exist.setFailedAttempted((byte) 0);
-                                userRepository.save(exist);
-                        }
                         Authentication auth = authenticationManager
                                         .authenticate(new UsernamePasswordAuthenticationToken(username,
                                                         entity.password()));
-                        if (auth.isAuthenticated() && exist.getFailedAttempted() != null
+                        User exist = userRepository.findByUsername(username)
+                                        .orElseThrow(() -> new IllegalStateException(
+                                                        "Authenticated user no longer exists"));
+                        if (exist.getLockedUntil() != null) {
+                                exist.setLockedUntil(null);
+                        }
+
+                        if (exist.getFailedAttempted() != null
                                         && exist.getFailedAttempted() > 0) {
                                 exist.setFailedAttempted((byte) 0);
-                                userRepository.save(exist);
                         }
-                        User user = jwtUtil.getUser(username);
+
+                        User user = exist;
                         String sessionId = UUID.randomUUID().toString();
                         user.setCurrentSessionId(sessionId);
                         userRepository.save(user);
@@ -162,8 +177,9 @@ public class AuthenticationService {
                         /**
                          * Logout the former session
                          */
-                        messager.statusUpdates(username, StatusNotificationDTO.builder().code(1)
-                                        .object(new LogoutMessage(accessToken)).build());
+                        messager.statusUpdates(username,
+                                        StatusNotificationDTO.builder().code(StatusCommand.SESSION_SUPERSEDED.getCode())
+                                                        .object(new SessionChangedMessage(sessionId)).build());
                         return new BasicResponse(200,
                                         globalVariable.getDEFAULT_LANGUAGE().equals("EN")
                                                         ? Language_EN.LOGIN_SUCCESSFUL.getMessage()
@@ -177,7 +193,8 @@ public class AuthenticationService {
                                                                 ? 0
                                                                 : user.getFailedAttempted();
                                                 int nextAttempt = failedAttempts + 1;
-                                                user.setFailedAttempted((byte) Math.min(nextAttempt, maxFailedAttempts));
+                                                user.setFailedAttempted(
+                                                                (byte) Math.min(nextAttempt, maxFailedAttempts));
                                                 if (nextAttempt >= maxFailedAttempts) {
                                                         user.setLockedUntil(LocalDateTime.now()
                                                                         .plus(Duration.ofMillis(lockDurationMs)));
@@ -185,15 +202,15 @@ public class AuthenticationService {
                                                 userRepository.save(user);
                                         });
                         return invalidCredentials();
+                } catch (DisabledException | LockedException e) {
+                        // Spring checks these account states before checking the password.
+                        // Burn one Argon2 verification to keep response timing comparable.
+                        passwordEncoder.matches(entity.password(), dummyPasswordHash);
+                        return invalidCredentials();
                 } catch (AuthenticationException e) {
                         return invalidCredentials();
-                } catch (Exception e) {
-                        return new BasicResponse(500,
-                                        globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                        ? Language_EN.INTERNAL_SERVER_ERROR.getMessage()
-                                                        : Language_CN.INTERNAL_SERVER_ERROR.getMessage(),
-                                        null);
                 }
+
         }
 
         private BasicResponse invalidCredentials() {
@@ -304,55 +321,7 @@ public class AuthenticationService {
         }
 
         public static String getClientIp(HttpServletRequest request) {
-                // if (request == null) {
-                // return "unknown";
-                // }
-
-                // for (String header : IP_HEADERS) {
-                // String ipList = request.getHeader(header);
-                // if (ipList != null && !ipList.isEmpty() &&
-                // !"unknown".equalsIgnoreCase(ipList)) {
-                // // X-Forwarded-For can contain a comma-separated list of proxy IPs.
-                // // The first IP is generally the original client.
-                // return ipList.split(",")[0].trim();
-                // }
-                // }
-
-                // // Fallback to direct connection IP if no proxy headers are found
-                // return request.getRemoteAddr();
-
-                // Check standard proxy header used by most load balancers
-                String ip = request.getHeader("X-Forwarded-For");
-
-                // Check alternative proxy headers if the first one is empty
-                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-                        ip = request.getHeader("Proxy-Client-IP");
-                }
-                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-                        ip = request.getHeader("WL-Proxy-Client-IP"); // WebLogic
-                }
-                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-                        ip = request.getHeader("HTTP_CLIENT_IP");
-                }
-                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-                        ip = request.getHeader("HTTP_X_FORWARDED_FOR");
-                }
-                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-                        ip = request.getHeader("X-Real-IP"); // Nginx alternative
-                }
-
-                // If no proxies are found, grab the direct connection IP
-                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-                        ip = request.getRemoteAddr();
-                }
-
-                // X-Forwarded-For can contain a comma-separated list of multiple proxy IPs.
-                // The first IP in the list is always the original client.
-                if (ip != null && ip.contains(",")) {
-                        ip = ip.split(",")[0].trim();
-                }
-
-                return ip;
+                return request.getRemoteAddr();
         }
 
         private static final String[] IP_HEADERS = {
@@ -361,6 +330,9 @@ public class AuthenticationService {
         };
 
         record LogoutMessage(String latestAccessToken) {
+        }
+
+        record SessionChangedMessage(String sessionId) {
         }
 
 }
