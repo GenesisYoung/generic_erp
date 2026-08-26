@@ -21,6 +21,7 @@ import com.gsgd.generic_erp.repository.auth.RoleDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
 import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.util.BasicPageResponse;
+import com.gsgd.generic_erp.util.BasicResponse;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
 import jakarta.transaction.Transactional;
@@ -31,7 +32,8 @@ import jakarta.transaction.Transactional;
  *
  * <ul>
  * <li>Department list: paginated CRUD. A department cannot be deleted while any
- * user is still assigned to it ({@code user_departments_tb}); deleting an unused
+ * user is still assigned to it ({@code user_departments_tb}); deleting an
+ * unused
  * department first clears its role links so no orphaned join rows remain.</li>
  * <li>Associated roles: for a selected department, every role is listed
  * (paginated) flagged with whether a {@code role_department_tb} link already
@@ -132,4 +134,14 @@ public class DepartmentManagementService {
         }
         return new SimpleResponse(200, "");
     }
+
+    public BasicResponse fetDepts() {
+        return new BasicResponse(
+                200,
+                "Success",
+                departmentRepository.findAll().stream().map(ele -> new DeptOptions(ele.getId(), ele.getDeptName())));
+    }
 }
+
+record DeptOptions(Long val, String title) {
+};

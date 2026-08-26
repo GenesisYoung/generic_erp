@@ -42,18 +42,23 @@ public class JWTUtil {
 
     private final UserRepository userRepository;
 
-    public JWTUtil(UserRepository userRepository) {
+    public JWTUtil(UserRepository userRepository,
+            @Value("${security.token.secret.refresh}") String refreshSecret,
+            @Value("${security.token.secret.access}") String accessSecret) {
         this.userRepository = userRepository;
-        this.keyRefresh = new SecretKeySpec(
-                System.getenv("AUTHENTICATION_SECRET_KEY_REFRESH") == null
-                        ? "alternative_key_for_refresh_token_732dwddw32cioniso1".getBytes(StandardCharsets.UTF_8)
-                        : System.getenv("AUTHENTICATION_SECRET_KEY_REFRESH").getBytes(StandardCharsets.UTF_8),
-                "HmacSHA256");
-        this.keyAccess = new SecretKeySpec(
-                System.getenv("AUTHENTICATION_SECRET_KEY_ACCESS") == null
-                        ? "alternative_key_for_access_token_21kj414k1flscbh".getBytes(StandardCharsets.UTF_8)
-                        : System.getenv("AUTHENTICATION_SECRET_KEY_ACCESS").getBytes(StandardCharsets.UTF_8),
-                "HmacSHA256");
+        this.keyRefresh = secretKey(refreshSecret, "refresh");
+        this.keyAccess = secretKey(accessSecret, "access");
+    }
+
+    private SecretKey secretKey(String secret, String purpose) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT " + purpose + " signing secret is required");
+        }
+        byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length < 32) {
+            throw new IllegalStateException("JWT " + purpose + " signing secret must be at least 32 bytes");
+        }
+        return new SecretKeySpec(bytes, "HmacSHA256");
     }
 
     /**
@@ -75,11 +80,12 @@ public class JWTUtil {
                 .compact();
     }
 
-    /** Generates a short-lived access token for the given username. */
-    public String generateAccessToken(String username) {
+    /** Generates a short-lived access token bound to the current login session. */
+    public String generateAccessToken(String username, String sessionId) {
         long now = System.currentTimeMillis();
         return Jwts.builder()
                 .subject(username)
+                .claim("sid", sessionId)
                 .issuedAt(new Date(now))
                 .expiration(new Date(now + accessTokenExpirationMs))
                 .signWith(keyAccess)
@@ -112,7 +118,7 @@ public class JWTUtil {
         try {
             parseClaims(type, token);
             return true;
-        } catch (JwtException e) {
+        } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
     }
@@ -146,9 +152,14 @@ public class JWTUtil {
         return parseClaims(1, token).get("sid", String.class);
     }
 
+    /** Extracts the session id using the key appropriate for the token type. */
+    public String extractSessionId(int type, String token) {
+        return parseClaims(type, token).get("sid", String.class);
+    }
+
     public boolean isSessionCurrent(String username, String sid) {
         User user = getUser(username);
-        if (user == null) {
+        if (user == null || sid == null || user.getCurrentSessionId() == null) {
             return false;
         }
         return sid.equals(user.getCurrentSessionId());

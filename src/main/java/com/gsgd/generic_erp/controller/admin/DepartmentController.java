@@ -17,6 +17,7 @@ import com.gsgd.generic_erp.entity.auth.Role;
 import com.gsgd.generic_erp.service.admin.DepartmentManagementService;
 import com.gsgd.generic_erp.util.BasicPage;
 import com.gsgd.generic_erp.util.BasicPageResponse;
+import com.gsgd.generic_erp.util.BasicResponse;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
 /**
@@ -76,6 +77,11 @@ public class DepartmentController {
     @PostMapping("/role")
     public SimpleResponse setRole(@RequestBody DepartmentRoleRequest request) {
         return service.setDepartmentRole(request.deptId(), request.roleId(), request.granted());
+    }
+
+    @GetMapping("/dept/options")
+    public BasicResponse fetchDepts() {
+        return service.fetDepts();
     }
 }
 

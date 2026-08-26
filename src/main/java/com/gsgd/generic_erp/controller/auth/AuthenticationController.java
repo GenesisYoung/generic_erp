@@ -1,16 +1,23 @@
 package com.gsgd.generic_erp.controller.auth;
 
+import java.security.Principal;
+
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 
 import com.gsgd.generic_erp.dto.UserDTO;
 import com.gsgd.generic_erp.service.auth.AuthenticationService;
 import com.gsgd.generic_erp.util.BasicResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Cookie;
 
 /**
  * Public authentication endpoints ({@code /api/auth}).
@@ -23,7 +30,12 @@ import jakarta.servlet.http.HttpServletRequest;
 @RequestMapping("/api/auth")
 public class AuthenticationController {
 
+    private static final String REFRESH_COOKIE = "erp_refresh";
+
     private AuthenticationService service;
+
+    @Value("${security.token.cookie.secure:true}")
+    private boolean secureCookie;
 
     public AuthenticationController(AuthenticationService service) {
         this.service = service;
@@ -33,8 +45,9 @@ public class AuthenticationController {
      * Authenticates with username/password; returns a token pair plus user info.
      */
     @PostMapping("/login")
-    public BasicResponse login(@RequestBody AuthenticationRequest entity, HttpServletRequest request) {
-        return service.handleLogin(entity, request);
+    public BasicResponse login(@RequestBody AuthenticationRequest entity, HttpServletRequest request,
+            HttpServletResponse response) {
+        return moveRefreshTokenToCookie(service.handleLogin(entity, request), response);
     }
 
     // // Token expiration remaining endpoint
@@ -48,14 +61,77 @@ public class AuthenticationController {
      * token.
      */
     @RequestMapping(path = "/refresh/access", method = RequestMethod.POST)
-    public BasicResponse accessToken(HttpServletRequest request) {
-        return service.refreshAccessToken(request);
+    public BasicResponse accessToken(HttpServletRequest request, HttpServletResponse response) {
+        if (!"1".equals(request.getHeader("X-Refresh-Request"))) {
+            return new BasicResponse(400, "Invalid refresh request", null);
+        }
+        return moveRefreshTokenToCookie(service.refreshAccessToken(refreshCookie(request)), response);
     }
 
     /** Rotates the refresh token itself, invalidating the previous one. */
     @RequestMapping(path = "/refresh/refresh", method = RequestMethod.POST)
-    public BasicResponse refreshToken(HttpServletRequest request) {
-        return service.refreshRefreshToken(request);
+    public BasicResponse refreshToken(HttpServletRequest request, HttpServletResponse response) {
+        if (!"1".equals(request.getHeader("X-Refresh-Request"))) {
+            return new BasicResponse(400, "Invalid refresh request", null);
+        }
+        return moveRefreshTokenToCookie(service.refreshRefreshToken(refreshCookie(request)), response);
+    }
+
+    /** Revokes the current session and its refresh token. */
+    @PostMapping("/logout")
+    public BasicResponse logout(Principal principal, HttpServletResponse response) {
+        clearRefreshCookie(response);
+        return service.logout(principal.getName());
+    }
+
+    private BasicResponse moveRefreshTokenToCookie(BasicResponse result, HttpServletResponse response) {
+        if (result.getStatus() != 200) {
+            clearRefreshCookie(response);
+            return result;
+        }
+        if (result.getObject() instanceof AuthenticationResponse authentication) {
+            TokenPair pair = authentication.tokens();
+            setRefreshCookie(response, pair.refreshToken());
+            result.setObject(new AuthenticationResponse(new TokenPair(null, pair.accessToken()), authentication.user()));
+        } else if (result.getObject() instanceof TokenPair pair) {
+            setRefreshCookie(response, pair.refreshToken());
+            result.setObject(new TokenPair(null, pair.accessToken()));
+        }
+        return result;
+    }
+
+    private String refreshCookie(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+        for (Cookie cookie : cookies) {
+            if (REFRESH_COOKIE.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
+    }
+
+    private void setRefreshCookie(HttpServletResponse response, String token) {
+        ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE, token)
+                .httpOnly(true)
+                .secure(secureCookie)
+                .sameSite("Strict")
+                .path("/api/auth")
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private void clearRefreshCookie(HttpServletResponse response) {
+        ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE, "")
+                .httpOnly(true)
+                .secure(secureCookie)
+                .sameSite("Strict")
+                .path("/api/auth")
+                .maxAge(0)
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
 
     /** Access + refresh token pair returned on login and rotation. */

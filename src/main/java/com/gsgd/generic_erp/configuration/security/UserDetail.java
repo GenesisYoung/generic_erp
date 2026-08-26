@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.configuration.security;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -30,6 +31,10 @@ public class UserDetail implements UserDetails {
         this.roles = roles;
     }
 
+    public User getUser() {
+        return user;
+    }
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return roles.stream()
@@ -45,6 +50,17 @@ public class UserDetail implements UserDetails {
     @Override
     public String getUsername() {
         return user.getUsername();
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return user.getLockedUntil() == null || user.getLockedUntil().isBefore(LocalDateTime.now());
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return user.getIsEnabled() != null && user.getIsEnabled() == 1
+                && !Boolean.FALSE.equals(user.getStatus());
     }
 
 }

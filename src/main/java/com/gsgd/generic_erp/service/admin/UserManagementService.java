@@ -9,6 +9,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -19,13 +21,18 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.gsgd.generic_erp.configuration.exception.NoneDeleteableException;
 import com.gsgd.generic_erp.configuration.security.impl.AuthenticationImpl;
+import com.gsgd.generic_erp.controller.exception.GlobalExceptionHandler;
 import com.gsgd.generic_erp.dto.UserDTO;
 import com.gsgd.generic_erp.entity.auth.Role;
 import com.gsgd.generic_erp.entity.auth.User;
+import com.gsgd.generic_erp.entity.auth.UserDepartment;
+import com.gsgd.generic_erp.entity.auth.UserInfo;
 import com.gsgd.generic_erp.entity.auth.UserRole;
 import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.enums.Language_EN;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
+import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
+import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.repository.auth.UserRoleRepository;
 import com.gsgd.generic_erp.spec.UserSpecification;
@@ -41,16 +48,20 @@ import com.gsgd.generic_erp.view.UserRoleView;
 @Service
 public class UserManagementService {
     // private final JWTUtil JWTUtil;
-    private UserRepository repository;
-    private RoleRepository roleRepository;
-    private UserRoleRepository userRoleRepository;
-    private UserRepository userRepository;
-    private AuthenticationImpl authenticationService;
-    private Language language;
+    private final UserRepository repository;
+    private final RoleRepository roleRepository;
+    private final UserRoleRepository userRoleRepository;
+    private final UserRepository userRepository;
+    private final AuthenticationImpl authenticationService;
+    private final UserInfoRepository infoRepository;
+    private final UserDepartmentRepository uDepartmentRepositoryrepository;
+    private final Language language;
+    private final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     public UserManagementService(UserRepository repository, RoleRepository roleRepository,
             UserRoleRepository userRoleRepository, UserRepository userRepository,
-            AuthenticationImpl aService, Language language) {
+            AuthenticationImpl aService, Language language, UserInfoRepository infoRepository,
+            UserDepartmentRepository userDepartmentRepository) {
         this.repository = repository;
         this.roleRepository = roleRepository;
         this.userRoleRepository = userRoleRepository;
@@ -58,6 +69,8 @@ public class UserManagementService {
         // this.JWTUtil = JWTUtil;
         this.authenticationService = aService;
         this.language = language;
+        this.infoRepository = infoRepository;
+        this.uDepartmentRepositoryrepository = userDepartmentRepository;
     }
 
     /**
@@ -68,27 +81,42 @@ public class UserManagementService {
     public BasicPageResponse<User, UserDTO> fetchUserList(Pageable pageable) {
         Page<User> users = repository.findAll(UserSpecification.excludeDisabled((byte) 1), pageable);
 
+        @SuppressWarnings("null")
         // 1. Collect this page's user IDs
         List<Long> userIds = users.getContent().stream()
                 .map(User::getId)
                 .toList();
 
+        @SuppressWarnings("null")
         // 2. One query for every role link on the page
         Map<Long, List<UserRoleView>> rolesByUser = userIds.isEmpty()
                 ? Map.of()
                 : userRoleRepository.findRoleViewsByUserIds(userIds).stream()
                         .collect(Collectors.groupingBy(UserRoleView::getUserId));
-
         // 3. Build DTOs with O(1) map lookups
         List<UserDTO> dto = users.getContent().stream()
-                .map(u -> new UserDTO(
-                        u.getId(),
-                        u.getUsername(),
-                        u.getEmail(),
-                        u.getDisplayName(),
-                        rolesByUser.getOrDefault(u.getId(), new ArrayList<>()),
-                        u.getStatus(),
-                        u.getIsEnabled(), null))
+                .map(u -> {
+                    Optional<UserInfo> op = infoRepository.findByUserId(u.getId());
+                    UserInfo info = null;
+                    if (op.isPresent()) {
+                        info = op.get();
+                    }
+                    List<Long> departments = uDepartmentRepositoryrepository.findByUserId(u.getId()).stream()
+                            .map(ele -> ele.getDeptId()).toList();
+                    return new UserDTO(
+                            u.getId(),
+                            u.getUsername(),
+                            u.getEmail(),
+                            u.getDisplayName(),
+                            rolesByUser.getOrDefault(u.getId(), new ArrayList<>()),
+                            u.getStatus(),
+                            u.getIsEnabled(), null, info != null ? info.getRealName() : null,
+                            info != null ? info.getTitle() : null,
+                            info != null ? info.getBirthday() : null,
+                            info != null ? info.getHireDate() : null,
+                            departments,
+                            null);
+                })
                 .toList();
 
         return new BasicPageResponse<>(dto, users);
@@ -100,82 +128,177 @@ public class UserManagementService {
      * On update, the user's role links are reconciled with a set diff:
      * roles no longer selected are bulk-deleted and newly selected roles are
      * bulk-inserted, keeping the whole operation to a handful of queries.
-     * New users get a default password ({@code "userpass"}) hashed with Argon2.
+     * New users must be provisioned with an explicit strong initial password.
      */
     @Transactional
     @CacheEvict(cacheNames = "userQuery", allEntries = true)
     public SimpleResponse saveOrUpdate(Long userId, UserDTO user) {
-
-        // Check for duplicate username/email on create
-        if (userId == 0) {
-            if (userRepository.existsByUsername(user.getName())) {
-                if (language.getLanguage().equals("EN")) {
-                    throw new DataIntegrityViolationException(Language_EN.USERNAME_DULICATED.getMessage());
-                } else if (language.getLanguage().equals("CN")) {
-                    throw new DataIntegrityViolationException(Language_CN.USERNAME_DULICATED.getMessage());
+        try {
+            // Check for duplicate username/email on create
+            if (userId == 0) {
+                if (user.getInitialPassword() == null || user.getInitialPassword().length() < 12) {
+                    throw new IllegalArgumentException("Initial password must be at least 12 characters");
                 }
-            }
-            if (userRepository.existsByEmail(user.getEmail())) {
-                if (language.getLanguage().equals("EN")) {
-                    throw new DataIntegrityViolationException(Language_EN.EMAIL_DULICATED.getMessage());
-                } else if (language.getLanguage().equals("CN")) {
-                    throw new DataIntegrityViolationException(Language_CN.EMAIL_DULICATED.getMessage());
+                if (userRepository.existsByUsername(user.getName())) {
+                    if (language.getLanguage().equals("EN")) {
+                        throw new DataIntegrityViolationException(Language_EN.USERNAME_DULICATED.getMessage());
+                    } else if (language.getLanguage().equals("CN")) {
+                        throw new DataIntegrityViolationException(Language_CN.USERNAME_DULICATED.getMessage());
+                    }
                 }
+                if (userRepository.existsByEmail(user.getEmail())) {
+                    if (language.getLanguage().equals("EN")) {
+                        throw new DataIntegrityViolationException(Language_EN.EMAIL_DULICATED.getMessage());
+                    } else if (language.getLanguage().equals("CN")) {
+                        throw new DataIntegrityViolationException(Language_CN.EMAIL_DULICATED.getMessage());
+                    }
+                }
+                User saved = repository.save(injectUserDTO(user, userId));
+                /**
+                 * Upate related infomation of current user
+                 */
+                UserInfo info = new UserInfo();
+                info.setUserId(user.getId());
+                info.setRealName(user.getRealName());
+                info.setTitle(user.getTitle());
+                info.setCreateDate(LocalDate.now());
+                if (user.getBirthday() != null)
+                    info.setBirthday(user.getBirthday());
+                if (user.getHireDate() != null)
+                    info.setHireDate(user.getHireDate());
+                infoRepository.save(info);
+                /**
+                 * Build constraints between users and departments
+                 */
+                if (user.getDepartments() != null)
+                    user.getDepartments().stream().forEach(ele -> {
+                        uDepartmentRepositoryrepository.save(
+                                UserDepartment.builder()
+                                        .deptId(ele)
+                                        .userId(saved.getId())
+                                        .build());
+                    });
+                /**
+                 * Assign roles for current user
+                 */
+                for (Integer role : user.getRoleList()) {
+                    Long id = roleRepository.getIdByVal(role);
+                    userRoleRepository.save(new UserRole(null, saved.getId(), id, LocalDate.now()));
+                }
+                return new SimpleResponse(200, "Successfully created");
+            } else {
+                /**
+                 * Update information of this user
+                 */
+                Optional<UserInfo> i = infoRepository.findByUserId(userId);
+                if (!i.isEmpty()) {
+                    UserInfo info = i.get();
+                    info.setUserId(userId);
+                    info.setRealName(user.getRealName());
+                    info.setTitle(user.getTitle());
+                    info.setCreateDate(LocalDate.now());
+                    if (user.getBirthday() != null)
+                        info.setBirthday(
+                                user.getBirthday());
+                    if (user.getHireDate() != null)
+                        info.setHireDate(
+                                user.getHireDate());
+                    infoRepository.save(info);
+                } else {
+                    UserInfo info = new UserInfo();
+                    info.setRealName(user.getRealName());
+                    info.setTitle(user.getTitle());
+                    info.setCreateDate(LocalDate.now());
+                    info.setUserId(userId);
+                    if (user.getBirthday() != null)
+                        info.setBirthday(
+                                user.getBirthday());
+                    if (user.getHireDate() != null)
+                        info.setHireDate(
+                                user.getHireDate());
+                    infoRepository.save(info);
+                }
+                Set<Long> toRemove = null;
+                Set<Long> toAdd = null;
+                /**
+                 * Update department infomation of the user
+                 */
+                List<UserDepartment> ud = uDepartmentRepositoryrepository.findByUserId(userId);
+                @SuppressWarnings("null")
+                Set<Long> existedDepts = ud
+                        .stream()
+                        .map(UserDepartment::getDeptId)
+                        .collect(Collectors.toSet());
+                toRemove = new HashSet<>(existedDepts);
+                toRemove.removeAll(user.getDepartments());
+                toAdd = new HashSet<>(user.getDepartments());
+                toAdd.removeAll(existedDepts);
+                if (!toRemove.isEmpty()) {
+                    uDepartmentRepositoryrepository.deleteThroughUserIdAndDeptIds(userId, toRemove);
+                }
+                if (!toAdd.isEmpty()) {
+                    toAdd.stream().forEach(ele -> {
+                        uDepartmentRepositoryrepository.save(
+                                UserDepartment.builder()
+                                        .deptId(ele)
+                                        .userId(userId)
+                                        .build());
+                    });
+                }
+
+                List<Role> roles = roleRepository.findObjByValue(user.getRoleList());
+                List<UserRole> userRoles = userRoleRepository.findByUserId(userId);
+                if (roles != null && userRoles != null && !roles.isEmpty() && !userRoles.isEmpty()) {
+                    // 1. Resolve the latest roles to a Set of IDs (one query)
+                    @SuppressWarnings("null")
+                    Set<Long> latestIds = roles
+                            .stream()
+                            .map(Role::getId)
+                            .collect(Collectors.toSet());
+
+                    // 2. Resolve the current role IDs (one query)
+                    @SuppressWarnings("null")
+                    Set<Long> currentIds = userRoles
+                            .stream()
+                            .map(UserRole::getRoleId)
+                            .collect(Collectors.toSet());
+
+                    // 3. Compute the diff
+                    // toRemove = current - latest
+                    toRemove = new HashSet<>(currentIds);
+                    toRemove.removeAll(latestIds);
+
+                    // toAdd = latest - current
+                    toAdd = new HashSet<>(latestIds);
+                    toAdd.removeAll(currentIds);
+
+                    // 4. Bulk delete (one query)
+                    if (!toRemove.isEmpty()) {
+                        userRoleRepository.deleteByUserIdAndRoleIdIn(userId, toRemove);
+                    }
+
+                    // 5. Bulk insert (one query)
+                    if (!toAdd.isEmpty()) {
+                        List<UserRole> newLinks = toAdd.stream()
+                                .map(roleId -> {
+                                    UserRole ur = new UserRole();
+                                    ur.setUserId(userId);
+                                    ur.setRoleId(roleId);
+                                    return ur;
+                                })
+                                .toList();
+                        userRoleRepository.saveAll(newLinks);
+                    }
+                }
+
+                repository.save(injectUserDTO(user, userId));
+
+                return new SimpleResponse(200, "Successfully created");
             }
-            User saved = repository.save(injectUserDTO(user, userId));
-
-            for (Integer role : user.getRoleList()) {
-                Long id = roleRepository.getIdByVal(role);
-                userRoleRepository.save(new UserRole(null, saved.getId(), id, LocalDate.now()));
-            }
-            return new SimpleResponse(200, "Successfully created");
-        } else {
-            // 1. Resolve the latest roles to a Set of IDs (one query)
-            @SuppressWarnings("null")
-            Set<Long> latestIds = roleRepository.findObjByValue(user.getRoleList())
-                    .stream()
-                    .map(Role::getId)
-                    .collect(Collectors.toSet());
-
-            // 2. Resolve the current role IDs (one query)
-            @SuppressWarnings("null")
-            Set<Long> currentIds = userRoleRepository.findByUserId(userId)
-                    .stream()
-                    .map(UserRole::getRoleId)
-                    .collect(Collectors.toSet());
-
-            // 3. Compute the diff
-            // toRemove = current - latest
-            Set<Long> toRemove = new HashSet<>(currentIds);
-            toRemove.removeAll(latestIds);
-
-            // toAdd = latest - current
-            Set<Long> toAdd = new HashSet<>(latestIds);
-            toAdd.removeAll(currentIds);
-
-            // 4. Bulk delete (one query)
-            if (!toRemove.isEmpty()) {
-                userRoleRepository.deleteByUserIdAndRoleIdIn(userId, toRemove);
-            }
-
-            // 5. Bulk insert (one query)
-            if (!toAdd.isEmpty()) {
-                List<UserRole> newLinks = toAdd.stream()
-                        .map(roleId -> {
-                            UserRole ur = new UserRole();
-                            ur.setUserId(userId);
-                            ur.setRoleId(roleId);
-                            return ur;
-                        })
-                        .toList();
-                userRoleRepository.saveAll(newLinks);
-            }
-
-            repository.save(injectUserDTO(user, userId));
-
-            return new SimpleResponse(200, "Successfully created");
+        } catch (NullPointerException exception) {
+            log.error("Exeception on saving user ==> [UserManagementService]{}", exception);
+            throw new NullPointerException(exception.getLocalizedMessage());
         }
-
     }
 
     /**
@@ -219,7 +342,7 @@ public class UserManagementService {
             u.setDisplayName(user.getDisplayName());
             u.setEmail(user.getEmail());
             u.setStatus(user.getActive());
-            u.setPassword(authenticationService.generatePass("userpass"));
+            u.setPassword(authenticationService.generatePass(user.getInitialPassword()));
             u.setIsEnabled((byte) 1);
             return u;
         }

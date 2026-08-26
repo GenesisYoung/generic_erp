@@ -12,8 +12,18 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
 
-# Hard-coded secret so JWTUtil.System.getenv() has something to use
-authentication-secret-key: test-secret-key-for-junit-only-1234567890
+security:
+  cors:
+    allowed-origins: http://localhost:5173,http://127.0.0.1:5173,http://198.18.0.1:5173/
+  token:
+    cookie:
+      secure: false
+    secret:
+      access: test-access-secret-for-junit-only-1234567890
+      refresh: test-refresh-secret-for-junit-only-1234567890
+    expiracy:
+      access: 900000
+      refresh: 604800000
 logging:
   level:
     "[org.hibernate.SQL]": DEBUG

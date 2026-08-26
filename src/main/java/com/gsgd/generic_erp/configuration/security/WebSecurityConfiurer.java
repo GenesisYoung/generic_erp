@@ -2,6 +2,7 @@ package com.gsgd.generic_erp.configuration.security;
 
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -37,6 +38,9 @@ public class WebSecurityConfiurer {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    @Value("${security.cors.allowed-origins}")
+    private String[] allowedOrigins;
+
     WebSecurityConfiurer(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
@@ -49,13 +53,16 @@ public class WebSecurityConfiurer {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests((authz) -> authz
 
-                        // Allow unauthenticated access to login and registration endpoints
-                        .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh/access",
+                        // Allow unauthenticated access only to login and refresh endpoints.
+                        .requestMatchers("/api/auth/login", "/api/auth/refresh/access",
                                 "/api/auth/refresh/refresh")
                         .permitAll()
                         .requestMatchers("/ws/**").permitAll() // handshake only; CONNECT is still authenticated
                         .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD)
                         .permitAll()
+                        .requestMatchers("/api/root/**", "/api/admin/**", "/api/manager/**",
+                                "/api/permission/**")
+                        .hasAnyRole("ROOT", "ADMIN")
                         // All other endpoints require authentication
                         .anyRequest()
                         .authenticated())
@@ -75,14 +82,13 @@ public class WebSecurityConfiurer {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // Use a PATTERN, not "*", so credentials are allowed:
-        config.setAllowedOriginPatterns(List.of("*"));
+        config.setAllowedOrigins(List.of(allowedOrigins));
         // Allow all standard HTTP methods
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         // Allow all headers
         config.setAllowedHeaders(List.of("*"));
-        // Allow credentials (cookies, authorization headers, etc.) to be included in
-        // requests
+        // Refresh tokens use an HttpOnly cookie. Exact origins above are required when
+        // credentials are enabled.
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
