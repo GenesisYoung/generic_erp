@@ -320,4 +320,4 @@ java -jar target/generic_erp-1.0.1-SNAPSHOT.jar
 3. Add login audit log endpoint.
 4. Write unit and integration tests for the auth module.
 5. Introduce Flyway for database migration management.
-6. Begin first ERP business module (TBD — HR or Inventory).
+6. Begin the first ERP business module — the **Product (item master data)** module. Function & feature requirements are specified in [docs/modules/product-module-requirements.md](docs/modules/product-module-requirements.md); it is the master-data foundation the Inventory, Purchasing, and Sales modules build on.
