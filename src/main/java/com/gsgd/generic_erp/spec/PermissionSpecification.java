@@ -10,8 +10,12 @@ import com.gsgd.generic_erp.entity.auth.Permission;
  */
 public class PermissionSpecification {
     public static Specification<Permission> hasPermissionName(String permissionName) {
-        return (root, query, criteriaBuilder) -> criteriaBuilder.like(root.get("permissionCode"),
-                "%" + permissionName + "%");
+        return (root, query, criteriaBuilder) -> criteriaBuilder.and(criteriaBuilder.like(root.get("permissionCode"),
+                "%" + permissionName + "%"), criteriaBuilder.equal(root.get("isEnabled"), 1));
+    }
+
+    public static Specification<Permission> enabled() {
+        return (root, query, criteriaBuilder) -> criteriaBuilder.equal(root.get("isEnabled"), 1);
     }
 
     // public static PredicateSpecification<Permission> deleteByVal(Long[] vals) {

@@ -1,23 +1,27 @@
 package com.gsgd.generic_erp.controller.auth;
 
 import java.security.Principal;
+import java.time.Duration;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 
 import com.gsgd.generic_erp.dto.UserDTO;
 import com.gsgd.generic_erp.service.auth.AuthenticationService;
 import com.gsgd.generic_erp.util.BasicResponse;
 
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.Cookie;
+import lombok.RequiredArgsConstructor;
 
 /**
  * Public authentication endpoints ({@code /api/auth}).
@@ -28,18 +32,17 @@ import jakarta.servlet.http.Cookie;
  */
 @RestController
 @RequestMapping("/api/auth")
+@RequiredArgsConstructor
 public class AuthenticationController {
 
     private static final String REFRESH_COOKIE = "erp_refresh";
 
-    private AuthenticationService service;
+    private final AuthenticationService service;
 
     @Value("${security.token.cookie.secure:true}")
     private boolean secureCookie;
 
-    public AuthenticationController(AuthenticationService service) {
-        this.service = service;
-    }
+    private final Logger log = LoggerFactory.getLogger(getClass());
 
     /**
      * Authenticates with username/password; returns a token pair plus user info.
@@ -62,20 +65,24 @@ public class AuthenticationController {
      */
     @RequestMapping(path = "/refresh/access", method = RequestMethod.POST)
     public BasicResponse accessToken(HttpServletRequest request, HttpServletResponse response) {
+        log.info("Current X-Refresh-Request ===> {}", request.getHeader("X-Refresh-Request"));
         if (!"1".equals(request.getHeader("X-Refresh-Request"))) {
             return new BasicResponse(400, "Invalid refresh request", null);
         }
         return moveRefreshTokenToCookie(service.refreshAccessToken(refreshCookie(request)), response);
     }
 
-    /** Rotates the refresh token itself, invalidating the previous one. */
-    @RequestMapping(path = "/refresh/refresh", method = RequestMethod.POST)
-    public BasicResponse refreshToken(HttpServletRequest request, HttpServletResponse response) {
-        if (!"1".equals(request.getHeader("X-Refresh-Request"))) {
-            return new BasicResponse(400, "Invalid refresh request", null);
-        }
-        return moveRefreshTokenToCookie(service.refreshRefreshToken(refreshCookie(request)), response);
-    }
+    // /** Rotates the refresh token itself, invalidating the previous one. */
+    // @RequestMapping(path = "/refresh/refresh", method = RequestMethod.POST)
+    // public BasicResponse refreshToken(HttpServletRequest request,
+    // HttpServletResponse response) {
+    // if (!"1".equals(request.getHeader("X-Refresh-Request"))) {
+    // return new BasicResponse(400, "Invalid refresh request", null);
+    // }
+    // return
+    // moveRefreshTokenToCookie(service.refreshRefreshToken(refreshCookie(request)),
+    // response);
+    // }
 
     /** Revokes the current session and its refresh token. */
     @PostMapping("/logout")
@@ -92,7 +99,8 @@ public class AuthenticationController {
         if (result.getObject() instanceof AuthenticationResponse authentication) {
             TokenPair pair = authentication.tokens();
             setRefreshCookie(response, pair.refreshToken());
-            result.setObject(new AuthenticationResponse(new TokenPair(null, pair.accessToken()), authentication.user()));
+            result.setObject(
+                    new AuthenticationResponse(new TokenPair(null, pair.accessToken()), authentication.user()));
         } else if (result.getObject() instanceof TokenPair pair) {
             setRefreshCookie(response, pair.refreshToken());
             result.setObject(new TokenPair(null, pair.accessToken()));
@@ -119,6 +127,7 @@ public class AuthenticationController {
                 .secure(secureCookie)
                 .sameSite("Strict")
                 .path("/api/auth")
+                .maxAge(Duration.ofDays(7))
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }

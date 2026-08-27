@@ -23,7 +23,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Service
 public class LoginRateLimiter {
-    public StringRedisTemplate redis;
+    public final StringRedisTemplate redis;
 
     /**
      * Checks if a login attempt is allowed based on rate limiting rules.

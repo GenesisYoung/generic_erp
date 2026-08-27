@@ -34,7 +34,7 @@ public class PermissionService {
     /** Returns a page of permissions, filtered by name when one is provided. */
     public BasicPageResponse<Permission, PermissionDTO> getAllPermissions(Pageable pageable, String name) {
         if (name == null || name.isEmpty()) {
-            Page<Permission> page = permissionRepository.findAll(pageable);
+            Page<Permission> page = permissionRepository.findAll(PermissionSpecification.enabled(), pageable);
             return new BasicPageResponse<>(transferDTO(page.getContent()), page);
         }
         Page<Permission> page = permissionRepository.findAll(PermissionSpecification.hasPermissionName(name), pageable);
@@ -52,7 +52,7 @@ public class PermissionService {
     /** Maps a DTO to an entity: loads the existing row when an id is present. */
     public Permission transferObj(PermissionDTO dto) {
         if (dto.getId() == null)
-            return new Permission(null, dto.getPermissionCode(), null);
+            return new Permission(null, dto.getPermissionCode(), 1, null);
         else {
             Permission p = permissionRepository.findById(dto.getId()).get();
             p.setPermissionCode(dto.getPermissionCode());
@@ -74,7 +74,7 @@ public class PermissionService {
     /** Deletes permissions by id; returns the number requested. */
     public long deleteByGroup(Long[] deleteVal) {
         for (Long id : deleteVal) {
-            permissionRepository.deleteById(id);
+            permissionRepository.disable(id);
         }
         return deleteVal.length;
     }
@@ -96,7 +96,7 @@ public class PermissionService {
                 .forEach(ele -> {
                     List<Permission> children = permissionRepository.findChildrenPermission(ele + "%");
                     children.stream().forEach(e -> {
-                        permissionRepository.deleteById(e.getId());
+                        permissionRepository.disable(e.getId());
                     });
                 });
     }

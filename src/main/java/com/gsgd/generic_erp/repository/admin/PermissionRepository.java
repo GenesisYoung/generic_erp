@@ -24,4 +24,9 @@ public interface PermissionRepository extends JpaRepository<Permission, Long>, J
     @NativeQuery("SELECT * FROM permission_tb p WHERE p.permission_code LIKE ?1")
     List<Permission> findChildrenPermission(String ele);
 
+    @Transactional
+    @Modifying
+    @NativeQuery("UPDATE permission_tb p SET p.is_enabled=0 WHERE p.id = ?1")
+    void disable(Long id);
+
 }

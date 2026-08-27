@@ -84,7 +84,7 @@ public class AuthenticationService {
 
         private String dummyPasswordHash;
 
-        private LoginRateLimiter limiter;
+        private final LoginRateLimiter limiter;
 
         @PostConstruct
         void initializeDummyPasswordHash() {

@@ -10,16 +10,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import com.gsgd.generic_erp.configuration.exception.AuthenticationException;
 import com.gsgd.generic_erp.configuration.exception.NoneDeleteableException;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * Central exception handler for the application.
- * Converts domain and framework exceptions into consistent HTTP responses
- * for API clients.
- */
+ * 
+*/
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -31,7 +30,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<SimpleResponse> handleNoneDeleteable(NoneDeleteableException e) {
         log.warn("Delete rejected: {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.LOCKED)
-                .body(new SimpleResponse(423, e.getMessage()));
+                .body(new SimpleResponse(NoneDeleteableException.code, e.getMessage()));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
@@ -40,6 +39,13 @@ public class GlobalExceptionHandler {
         // Never send the raw message — it exposes table and column names.
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new SimpleResponse(409, "This record conflicts with existing data"));
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<SimpleResponse> handleInvalidInvalidRequest(IllegalArgumentException e) {
+        log.warn("Invalid request: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new SimpleResponse(AuthenticationException.code, e.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

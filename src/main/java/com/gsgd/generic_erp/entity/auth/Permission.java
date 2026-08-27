@@ -38,6 +38,9 @@ public class Permission {
     @Column(name = "permission_code", length = 50, nullable = false)
     private String permissionCode;
 
+    @Column(name = "is_enabled", nullable = false)
+    private Integer isEnabled;
+
     @Column(name = "create_date")
     private LocalDate createDate;
 }

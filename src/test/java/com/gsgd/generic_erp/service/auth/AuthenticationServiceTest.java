@@ -23,6 +23,7 @@ import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
 import com.gsgd.generic_erp.util.GlobalVariable;
+import com.gsgd.generic_erp.util.LoginRateLimiter;
 
 class AuthenticationServiceTest {
 
@@ -48,7 +49,12 @@ class AuthenticationServiceTest {
                 mock(UserInfoRepository.class),
                 mock(UserDepartmentRepository.class),
                 mock(NotificationService.class),
-                mock(PasswordEncoder.class));
+                mock(PasswordEncoder.class),
+                mock(LoginRateLimiter.class));
+    }
+
+    void generateLongtermToken() {
+
     }
 
     @Test

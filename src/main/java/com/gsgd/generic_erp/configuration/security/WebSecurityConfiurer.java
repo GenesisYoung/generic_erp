@@ -20,6 +20,8 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.gsgd.generic_erp.configuration.exception.AuthenticationException;
+
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -67,7 +69,7 @@ public class WebSecurityConfiurer {
                         .anyRequest()
                         .authenticated())
                 .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint((req, res, e) -> res.sendError(HttpServletResponse.SC_UNAUTHORIZED)) // 401,
+                        .authenticationEntryPoint((req, res, e) -> res.sendError(AuthenticationException.code)) // 401,
                         .accessDeniedHandler((req, res, e) -> res.sendError(HttpServletResponse.SC_FORBIDDEN))) // 403
                                                                                                                 // only
                                                                                                                 // for

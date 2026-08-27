@@ -1,12 +1,12 @@
 package com.gsgd.generic_erp.configuration.exception;
 
-public class NoneDeleteableException extends Exception {
+public class AuthenticationException extends Exception {
 
     private String message;
 
-    public final static int code = 423;
+    public final static int code = 401;
 
-    public NoneDeleteableException(String message) {
+    public AuthenticationException(String message) {
         this.message = message;
     }
 
