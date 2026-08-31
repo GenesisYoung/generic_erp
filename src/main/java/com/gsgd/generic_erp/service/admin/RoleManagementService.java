@@ -26,6 +26,7 @@ import com.gsgd.generic_erp.repository.auth.RolePermissionRepository;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.repository.auth.UserRoleRepository;
+import com.gsgd.generic_erp.spec.PermissionSpecification;
 import com.gsgd.generic_erp.util.BasicPageResponse;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
@@ -37,7 +38,8 @@ import jakarta.transaction.Transactional;
  * <ul>
  * <li>Role list: paginated CRUD. A role cannot be deleted while any user is
  * still assigned to it ({@code user_roles_tb}); deleting an unused role first
- * clears its permission and department links so no orphaned join rows remain.</li>
+ * clears its permission and department links so no orphaned join rows
+ * remain.</li>
  * <li>Associated permissions: for a selected role, every permission is listed
  * (paginated) flagged with whether a {@code role_permission_tb} link already
  * exists ("Processed" vs "Not granted"), and that link can be toggled.</li>
@@ -117,7 +119,7 @@ public class RoleManagementService {
         Set<Long> grantedIds = rolePermissionRepository.findByRoleId(roleId).stream()
                 .map(RolePermission::getPermissionId)
                 .collect(Collectors.toSet());
-        Page<Permission> page = permissionRepository.findAll(pageable);
+        Page<Permission> page = permissionRepository.findAll(PermissionSpecification.enabled(), pageable);
         List<PermissionAccessDTO> dto = page.getContent().stream()
                 .map(p -> new PermissionAccessDTO(p.getId(), p.getPermissionCode(), grantedIds.contains(p.getId())))
                 .toList();
@@ -145,7 +147,8 @@ public class RoleManagementService {
     }
 
     /**
-     * Resolves the id of the currently authenticated user for the {@code created_by}
+     * Resolves the id of the currently authenticated user for the
+     * {@code created_by}
      * audit column. Falls back to the root user (id 1) when no username-based
      * principal is present (e.g. system calls).
      */

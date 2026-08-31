@@ -25,6 +25,7 @@ public class PermissionSpecification {
     // }
 
     public static Specification<Permission> findMenuPermission() {
-        return (root, query, builder) -> builder.like(root.get("permissionCode"), "menu.%");
+        return (root, query, builder) -> builder.and(builder.like(root.get("permissionCode"), "menu.%"), builder.equal(
+                root.get("isEnabled"), 1));
     }
 }
