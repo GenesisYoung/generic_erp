@@ -36,6 +36,14 @@ public class ProductViewSepcification {
         }
     }
 
+    public static Specification<ProductVariantCategoryView> configurable(Boolean configurable) {
+        if (configurable == null) {
+            return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
+        } else {
+            return (root, query, criteriaBuilder) -> criteriaBuilder.equal(root.get("configurable"), configurable);
+        }
+    }
+
     public static Specification<ProductVariantCategoryView> isStatus(String status) {
         if (status == null || status.isEmpty()) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
@@ -86,7 +94,8 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> filter(boolean isMaxprice, ProductFilter filter) {
+    public static Specification<ProductVariantCategoryView> filter(boolean isMinPrice, boolean isMaxprice,
+            ProductFilter filter) {
         return (root, query, criteriaBuilder) -> criteriaBuilder.and(
                 hasProductCode(filter.productCode()).toPredicate(root, query, criteriaBuilder),
                 hasProductName(filter.productName()).toPredicate(root, query, criteriaBuilder),
@@ -95,7 +104,8 @@ public class ProductViewSepcification {
                 hasSku(filter.sku()).toPredicate(root, query, criteriaBuilder),
                 isCategory(filter.cateId()).toPredicate(root, query, criteriaBuilder),
                 maxPrice(filter.maxPrice(), isMaxprice).toPredicate(root, query, criteriaBuilder),
-                minPrice(filter.minPrice(), isMaxprice).toPredicate(root, query, criteriaBuilder),
+                minPrice(filter.minPrice(), isMinPrice).toPredicate(root, query, criteriaBuilder),
+                configurable(filter.configurable()).toPredicate(root, query, criteriaBuilder),
                 hasTaxCategory(filter.taxCategory()).toPredicate(root, query, criteriaBuilder));
     }
 }

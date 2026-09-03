@@ -21,9 +21,11 @@ import lombok.experimental.SuperBuilder;
 /**
  * Product master-data entity mapped to {@code product_tb}.
  *
- * <p>This entity stores information shared by all variants. Every product must
+ * <p>
+ * This entity stores information shared by all variants. Every product must
  * own at least one {@link ProductVariant}; the service layer must enforce this
- * invariant within the same transaction.</p>
+ * invariant within the same transaction.
+ * </p>
  */
 @Entity
 @Table(name = "product_tb", indexes = {
@@ -93,6 +95,12 @@ public class Product extends ProductAuditableEntity {
     /** Tax-category label reserved for the future Tax module. */
     @Column(name = "tax_category", length = 32)
     private String taxCategory;
+
+    @Column(name = "created_by")
+    private Long createdBy;
+
+    @Column(name = "updated_by")
+    private Long updatedBy;
 
     /** Hibernate optimistic-lock version used to prevent concurrent overwrites. */
     @Version
