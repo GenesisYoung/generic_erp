@@ -47,6 +47,7 @@ public class RedisConfiguration {
                                                 .allowIfSubType("com.gsgd.generic_erp.")
                                                 .allowIfSubType("java.util.")
                                                 .allowIfSubType("java.lang.")
+                                                .allowIfBaseType("java.math")
                                                 .build())
                                 .typePropertyName("@class")
                                 .enableSpringCacheNullValueSupport()
@@ -69,7 +70,9 @@ public class RedisConfiguration {
         public RedisCacheManagerBuilderCustomizer cacheCustomizer(
                         RedisCacheConfiguration base) {
                 return builder -> builder
-                                .withCacheConfiguration("userQuery", base.entryTtl(Duration.ofDays(7)));
+                                .withCacheConfiguration("userQuery", base.entryTtl(Duration.ofDays(7)))
+                                .withCacheConfiguration("productQuery", base.entryTtl(Duration.ofDays(7)))
+                                .withCacheConfiguration("productVariantQuery", base.entryTtl(Duration.ofDays(7)));
         }
 
 }

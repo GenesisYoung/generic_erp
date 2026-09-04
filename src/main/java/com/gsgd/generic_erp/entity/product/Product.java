@@ -1,7 +1,5 @@
 package com.gsgd.generic_erp.entity.product;
 
-import java.math.BigDecimal;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -81,16 +79,16 @@ public class Product extends ProductAuditableEntity {
     private Long baseUomId;
 
     /** Standard cost; null means unpriced, while zero means free. */
-    @Column(name = "standard_cost", precision = 19, scale = 4)
-    private BigDecimal standardCost;
+    // @Column(name = "standard_cost", precision = 19, scale = 4)
+    // private BigDecimal standardCost;
 
     /** List price; null means unpriced, while zero means free. */
-    @Column(name = "list_price", precision = 19, scale = 4)
-    private BigDecimal listPrice;
+    // @Column(name = "list_price", precision = 19, scale = 4)
+    // private BigDecimal listPrice;
 
     /** Three-letter ISO 4217 currency code; required when any price is set. */
-    @Column(name = "currency", length = 3)
-    private String currency;
+    // @Column(name = "currency", length = 3)
+    // private String currency;
 
     /** Tax-category label reserved for the future Tax module. */
     @Column(name = "tax_category", length = 32)

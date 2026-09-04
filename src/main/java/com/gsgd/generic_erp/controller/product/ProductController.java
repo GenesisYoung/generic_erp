@@ -10,7 +10,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.gsgd.generic_erp.dto.ProductDTO;
-import com.gsgd.generic_erp.dto.ProductFilter;
+import com.gsgd.generic_erp.dto.filter.ProductFilter;
+import com.gsgd.generic_erp.dto.filter.ProductVariantFilter;
 import com.gsgd.generic_erp.service.product.ProductService;
 import com.gsgd.generic_erp.util.BasicPage;
 import com.gsgd.generic_erp.util.SimplePageResponse;
@@ -37,7 +38,7 @@ public class ProductController {
             p.defineSort(Sort.by(sortProperty).ascending());
         else
             p.defineSort(Sort.by(sortProperty).descending());
-        return service.fetchProducts(isMinPrice, isMaxprice, filter, p);
+        return service.fetchProducts(filter, p);
     }
 
     @RequestMapping(path = "/detail/{id}")
@@ -48,6 +49,16 @@ public class ProductController {
     @PostMapping(path = "/save")
     public SimpleResponse saveProduct(@RequestBody ProductDTO product) {
         return service.saveProduct(product);
+    }
+
+    @RequestMapping(path = "/fetch/variants")
+    public SimplePageResponse getMethodName(
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "20") int size,
+            @RequestParam(required = false, defaultValue = "variantId") String sortProperty,
+            @RequestParam(required = false, defaultValue = "ASC") Sort.Direction sortDirection,
+            @ModelAttribute ProductVariantFilter filter) {
+        return service.queryVariants(filter, new BasicPage(page, size));
     }
 
 }

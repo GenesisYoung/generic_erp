@@ -43,35 +43,34 @@ import lombok.Setter;
 @Immutable
 @Table(name = "product_variant_category_view")
 @View(query = """
-                          select concat(`p`.`product_id`, ':', coalesce(`pvt`.`variant_id`, 0), ':',
-                            coalesce(`pcrt`.`cate_id`, 0)) AS `row_id`,
-                     `p`.`product_id`                      AS `product_id`,
-                     `p`.`product_name`                    AS `product_name`,
-                     `p`.`product_code`                    AS `product_code`,
-                     `p`.`product_description`             AS `product_description`,
-                     `p`.`type`                            AS `type`,
-                     `p`.`configurable`                    AS `configurable`,
-                     `p`.`status`                          AS `status`,
-                     `p`.`tax_category`                    AS `tax_category`,
-                     `pvt`.`variant_id`                    AS `variant_id`,
-                     `pvt`.`sku`                           AS `sku`,
-                     `pvt`.`variant_name`                  AS `variant_name`,
-                     `pvt`.`is_default`                    AS `is_default`,
-                     `pvt`.`description`                   AS `variant_description`,
-                     `p`.`standard_cost`                 AS `standard_cost`,
-                     `p`.`list_price`                    AS `list_price`,
-                     `pvt`.`currency`                      AS `currency`,
-                     `pvt`.`net_weight`                    AS `net_weight`,
-                     `pvt`.`length`                        AS `length`,
-                     `pvt`.`width`                         AS `width`,
-                     `pvt`.`height`                        AS `height`,
-                     `pvt`.`weight_uom_id`                 AS `weight_uom_id`,
-                     `pvt`.`size_uom_id`                   AS `size_uom_id`,
-                     `pcrt`.`cate_id`                      AS `cate_id`
+                     select concat(`p`.`product_id`, ':', coalesce(`pvt`.`variant_id`, 0), ':', coalesce(`pcrt`.`cate_id`, 0)) AS `row_id`,
+                     `p`.`product_id`                                                                                   AS `product_id`,
+                     `p`.`product_name`                                                                                 AS `product_name`,
+                     `p`.`product_code`                                                                                 AS `product_code`,
+                     `p`.`product_description`                                                                          AS `product_description`,
+                     `p`.`type`                                                                                         AS `type`,
+                     `p`.`configurable`                                                                                 AS `configurable`,
+                     `p`.`status`                                                                                       AS `status`,
+                     `p`.`tax_category`                                                                                 AS `tax_category`,
+                     `pvt`.`variant_id`                                                                                 AS `variant_id`,
+                     `pvt`.`sku`                                                                                        AS `sku`,
+                     `pvt`.`variant_name`                                                                               AS `variant_name`,
+                     `pvt`.`is_default`                                                                                 AS `is_default`,
+                     `pvt`.`description`                                                                                AS `variant_description`,
+                     `pvt`.`standard_cost`                                                                                AS `standard_cost`,
+                     `pvt`.`list_price`                                                                                   AS `list_price`,
+                     `pvt`.`currency`                                                                                   AS `currency`,
+                     `pvt`.`net_weight`                                                                                 AS `net_weight`,
+                     `pvt`.`length`                                                                                     AS `length`,
+                     `pvt`.`width`                                                                                      AS `width`,
+                     `pvt`.`height`                                                                                     AS `height`,
+                     `pvt`.`weight_uom_id`                                                                              AS `weight_uom_id`,
+                     `pvt`.`size_uom_id`                                                                                AS `size_uom_id`,
+                     `pcrt`.`cate_id`                                                                                   AS `cate_id`
               from ((`generic_erp`.`product_tb` `p` left join `generic_erp`.`product_variant_tb` `pvt`
                      on (((`pvt`.`product_id` = `p`.`product_id`) and (`pvt`.`active` = 1)))) left join `generic_erp`.`product_category_rel_tb` `pcrt`
                     on (((`pcrt`.`product_id` = `p`.`product_id`) and (`pcrt`.`active` = 1))))
-                      """)
+                                    """)
 @Getter
 @Setter
 @AllArgsConstructor

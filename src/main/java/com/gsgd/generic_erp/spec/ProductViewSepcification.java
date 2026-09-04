@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 
 import org.springframework.data.jpa.domain.Specification;
 
-import com.gsgd.generic_erp.dto.ProductFilter;
+import com.gsgd.generic_erp.dto.filter.ProductFilter;
 import com.gsgd.generic_erp.entity.product.ProductStatus;
 import com.gsgd.generic_erp.entity.product.ProductType;
 import com.gsgd.generic_erp.view.sql.ProductVariantCategoryView;
@@ -69,16 +69,16 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> maxPrice(BigDecimal maxPrice, boolean isMaxprice) {
-        if (maxPrice == null || !isMaxprice) {
+    public static Specification<ProductVariantCategoryView> maxPrice(BigDecimal maxPrice) {
+        if (maxPrice == null) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
             return (root, query, criteriaBuilder) -> criteriaBuilder.lessThanOrEqualTo(root.get("listPrice"), maxPrice);
         }
     }
 
-    public static Specification<ProductVariantCategoryView> minPrice(BigDecimal minPrice, boolean isMaxprice) {
-        if (minPrice == null || !isMaxprice) {
+    public static Specification<ProductVariantCategoryView> minPrice(BigDecimal minPrice) {
+        if (minPrice == null) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
             return (root, query, criteriaBuilder) -> criteriaBuilder.greaterThanOrEqualTo(root.get("listPrice"),
@@ -94,7 +94,7 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> filter(boolean isMinPrice, boolean isMaxprice,
+    public static Specification<ProductVariantCategoryView> filter(
             ProductFilter filter) {
         return (root, query, criteriaBuilder) -> criteriaBuilder.and(
                 hasProductCode(filter.productCode()).toPredicate(root, query, criteriaBuilder),
@@ -103,8 +103,8 @@ public class ProductViewSepcification {
                 isStatus(filter.status()).toPredicate(root, query, criteriaBuilder),
                 hasSku(filter.sku()).toPredicate(root, query, criteriaBuilder),
                 isCategory(filter.cateId()).toPredicate(root, query, criteriaBuilder),
-                maxPrice(filter.maxPrice(), isMaxprice).toPredicate(root, query, criteriaBuilder),
-                minPrice(filter.minPrice(), isMinPrice).toPredicate(root, query, criteriaBuilder),
+                maxPrice(filter.maxPrice()).toPredicate(root, query, criteriaBuilder),
+                minPrice(filter.minPrice()).toPredicate(root, query, criteriaBuilder),
                 configurable(filter.configurable()).toPredicate(root, query, criteriaBuilder),
                 hasTaxCategory(filter.taxCategory()).toPredicate(root, query, criteriaBuilder));
     }

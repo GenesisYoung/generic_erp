@@ -1,7 +1,5 @@
 package com.gsgd.generic_erp.dto;
 
-import java.math.BigDecimal;
-
 import com.gsgd.generic_erp.entity.product.ProductStatus;
 import com.gsgd.generic_erp.entity.product.ProductType;
 
@@ -25,8 +23,8 @@ public class ProductDTO {
     private Boolean configurable;
     private ProductStatus status;
     private Long baseUomId;
-    private BigDecimal standardCost;
-    private BigDecimal listPrice;
-    private String currency;
+    // private BigDecimal standardCost;
+    // private BigDecimal listPrice;
+    // private String currency;
     private String taxCategory;
 }
