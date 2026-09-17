@@ -21,7 +21,8 @@ public class VariantSpecification {
                         builder),
                 byMaxPrice(filter.max()).toPredicate(root, query,
                         builder),
-                byMinPrice(filter.min()).toPredicate(root, query, builder));
+                byMinPrice(filter.min()).toPredicate(root, query, builder),
+                builder.equal(root.get("active"), true));
     }
 
     public static Specification<ProductVariant> byVariantId(Long variantId) {

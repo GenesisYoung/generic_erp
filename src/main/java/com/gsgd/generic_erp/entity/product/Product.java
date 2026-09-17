@@ -11,6 +11,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
+import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -78,17 +79,9 @@ public class Product extends ProductAuditableEntity {
     @Column(name = "base_uom_id", nullable = false)
     private Long baseUomId;
 
-    /** Standard cost; null means unpriced, while zero means free. */
-    // @Column(name = "standard_cost", precision = 19, scale = 4)
-    // private BigDecimal standardCost;
-
-    /** List price; null means unpriced, while zero means free. */
-    // @Column(name = "list_price", precision = 19, scale = 4)
-    // private BigDecimal listPrice;
-
-    /** Three-letter ISO 4217 currency code; required when any price is set. */
-    // @Column(name = "currency", length = 3)
-    // private String currency;
+    @Column(name = "is_enabled")
+    @Default
+    private Boolean isEnabled = true;
 
     /** Tax-category label reserved for the future Tax module. */
     @Column(name = "tax_category", length = 32)

@@ -10,7 +10,7 @@ import com.gsgd.generic_erp.entity.product.ProductType;
 import com.gsgd.generic_erp.view.sql.ProductVariantCategoryView;
 
 public class ProductViewSepcification {
-    public static Specification<ProductVariantCategoryView> hasProductCode(String productCode) {
+    private static Specification<ProductVariantCategoryView> hasProductCode(String productCode) {
         if (productCode == null || productCode.isEmpty()) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
@@ -19,7 +19,7 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> hasProductName(String productName) {
+    private static Specification<ProductVariantCategoryView> hasProductName(String productName) {
         if (productName == null || productName.isEmpty()) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
@@ -28,7 +28,7 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> isType(String type) {
+    private static Specification<ProductVariantCategoryView> isType(String type) {
         if (type == null || type.isEmpty()) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
@@ -36,7 +36,7 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> configurable(Boolean configurable) {
+    private static Specification<ProductVariantCategoryView> configurable(Boolean configurable) {
         if (configurable == null) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
@@ -44,7 +44,7 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> isStatus(String status) {
+    private static Specification<ProductVariantCategoryView> isStatus(String status) {
         if (status == null || status.isEmpty()) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
@@ -53,7 +53,7 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> hasSku(String sku) {
+    private static Specification<ProductVariantCategoryView> hasSku(String sku) {
         if (sku == null || sku.isEmpty()) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
@@ -61,7 +61,7 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> isCategory(Long categoryId) {
+    private static Specification<ProductVariantCategoryView> isCategory(Long categoryId) {
         if (categoryId == null || categoryId == -1) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
@@ -69,7 +69,7 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> maxPrice(BigDecimal maxPrice) {
+    private static Specification<ProductVariantCategoryView> maxPrice(BigDecimal maxPrice) {
         if (maxPrice == null) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
@@ -77,7 +77,7 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> minPrice(BigDecimal minPrice) {
+    private static Specification<ProductVariantCategoryView> minPrice(BigDecimal minPrice) {
         if (minPrice == null) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
@@ -86,12 +86,16 @@ public class ProductViewSepcification {
         }
     }
 
-    public static Specification<ProductVariantCategoryView> hasTaxCategory(String taxCategory) {
+    private static Specification<ProductVariantCategoryView> hasTaxCategory(String taxCategory) {
         if (taxCategory == null || taxCategory.isEmpty()) {
             return (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
         } else {
             return (root, query, criteriaBuilder) -> criteriaBuilder.equal(root.get("taxCategory"), taxCategory);
         }
+    }
+
+    private static Specification<ProductVariantCategoryView> isEnabled(Boolean isEnabled) {
+        return (root, query, builder) -> builder.equal(root.get("isEnabled"), isEnabled);
     }
 
     public static Specification<ProductVariantCategoryView> filter(
@@ -106,6 +110,7 @@ public class ProductViewSepcification {
                 maxPrice(filter.maxPrice()).toPredicate(root, query, criteriaBuilder),
                 minPrice(filter.minPrice()).toPredicate(root, query, criteriaBuilder),
                 configurable(filter.configurable()).toPredicate(root, query, criteriaBuilder),
-                hasTaxCategory(filter.taxCategory()).toPredicate(root, query, criteriaBuilder));
+                hasTaxCategory(filter.taxCategory()).toPredicate(root, query, criteriaBuilder),
+                isEnabled(filter.isEnabled()).toPredicate(root, query, criteriaBuilder));
     }
 }

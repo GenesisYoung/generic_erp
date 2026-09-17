@@ -1,6 +1,7 @@
 package com.gsgd.generic_erp.aop;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
@@ -8,6 +9,7 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.interceptor.KeyGenerator;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.expression.MethodBasedEvaluationContext;
 import org.springframework.core.DefaultParameterNameDiscoverer;
@@ -37,12 +39,33 @@ public class AuditRecordAspect {
     private final UserRepository userRepository;
     private final ExpressionParser parser = new SpelExpressionParser();
     private final ParameterNameDiscoverer parameterNameDiscoverer = new DefaultParameterNameDiscoverer();
+    private final Map<String, KeyGenerator> keyGenerators;
 
     @AfterReturning(pointcut = "@annotation(auditRecord)", returning = "result")
     public void afterReturning(JoinPoint joinPoint, AuditRecord auditRecord, Object result) {
         try {
             MethodSignature signature = (MethodSignature) joinPoint.getSignature();
-            String targetId = evaluate(auditRecord.targetId(), joinPoint, signature, result);
+            String targetId = null;
+
+            try {
+                if (!auditRecord.generateKey().isEmpty()) {
+                    KeyGenerator generator = keyGenerators.get(auditRecord.generateKey());
+                    if (generator == null)
+                        throw new IllegalArgumentException(
+                                "Unable to create a kegenerator, illegal argument: " + auditRecord.generateKey());
+                    Object key = generator.generate(joinPoint.getTarget(), signature.getMethod(), joinPoint.getArgs());
+                    if (key != null)
+                        targetId = key.toString();
+                    else
+                        targetId = null;
+                } else
+                    targetId = evaluate(auditRecord.targetId(), joinPoint, signature, result);
+            } catch (Exception e) {
+                logger.error(
+                        "Failed to build audit event for {}",
+                        joinPoint.getSignature(),
+                        e);
+            }
             String methodName = signature.getDeclaringType().getSimpleName()
                     + "." + signature.getName();
             AuditLogEvent event = new AuditLogEvent(

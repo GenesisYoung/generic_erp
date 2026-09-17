@@ -63,6 +63,7 @@ public class GlobalExceptionHandler {
         log.error("Unhandled exception [traceId={}] {} {}",
                 traceId, request.getMethod(), request.getRequestURI(), e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new SimpleResponse(500, "Internal server error. Reference: " + traceId));
+                .body(new SimpleResponse(500, "Internal server error. Reference: " + traceId + "\n"
+                        + "Message===>" + e.getMessage()));
     }
 }

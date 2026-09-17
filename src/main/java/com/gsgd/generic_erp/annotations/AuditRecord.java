@@ -51,4 +51,6 @@ public @interface AuditRecord {
 
     /** Free-text description shown in the audit UI. */
     String description() default "";
+
+    String generateKey() default "";
 }

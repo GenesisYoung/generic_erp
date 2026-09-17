@@ -72,7 +72,8 @@ public class RedisConfiguration {
                 return builder -> builder
                                 .withCacheConfiguration("userQuery", base.entryTtl(Duration.ofDays(7)))
                                 .withCacheConfiguration("productQuery", base.entryTtl(Duration.ofDays(7)))
-                                .withCacheConfiguration("productVariantQuery", base.entryTtl(Duration.ofDays(7)));
+                                .withCacheConfiguration("productVariantQuery", base.entryTtl(Duration.ofDays(7)))
+                                .withCacheConfiguration("plainProduct", base.entryTtl(Duration.ofDays(7)));
         }
 
 }

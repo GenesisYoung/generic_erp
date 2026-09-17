@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS audit_log_tb (
     KEY idx_audit_operate_time (operate_time)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
+alter table product_tb
+    add is_enabled bool default true null after tax_category;
+
 
 
 

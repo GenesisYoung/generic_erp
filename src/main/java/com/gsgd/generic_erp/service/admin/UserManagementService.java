@@ -77,7 +77,7 @@ public class UserManagementService {
      * Returns a page of enabled users, each mapped to a DTO with its roles
      * attached.
      */
-    @Cacheable(value = "userQuery", key = "#pageable.pageNumber + ':' + #pageable.pageSize + ':' + #pageable.sort")
+    @Cacheable(value = "userQuery", keyGenerator = "jsonKeyGenerator")
     public BasicPageResponse<User, UserDTO> fetchUserList(Pageable pageable) {
         Page<User> users = repository.findAll(UserSpecification.excludeDisabled((byte) 1), pageable);
 
