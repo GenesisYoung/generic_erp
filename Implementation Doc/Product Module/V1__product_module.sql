@@ -76,7 +76,7 @@ CREATE TABLE category_tb (
 CREATE TABLE appendix_tb (
     appendix_id  BIGINT        NOT NULL AUTO_INCREMENT,
     storage_key  VARCHAR(64)   NOT NULL,
-    path         VARCHAR(512)  NOT NULL,
+    path         VARCHAR(512),
     file_name    VARCHAR(128)  NOT NULL,
     file_exten   VARCHAR(8)    NOT NULL,
     mime_type    VARCHAR(128)  NULL,

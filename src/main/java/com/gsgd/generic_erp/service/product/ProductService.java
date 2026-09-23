@@ -3,6 +3,7 @@ package com.gsgd.generic_erp.service.product;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +43,7 @@ import com.gsgd.generic_erp.util.SimplePageResponse;
 import com.gsgd.generic_erp.util.SimpleResponse;
 import com.gsgd.generic_erp.view.sql.ProductVariantCategoryView;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
@@ -432,5 +434,19 @@ public class ProductService {
                                 .code(200)
                                 .message("Uploaded::" + products.size())
                                 .build();
+        }
+
+        public String export(BasicPage page, ProductFilter filter, HttpServletResponse resp) {
+
+                try {
+                        Page<ProductVariantCategoryView> result = viewRepository.findAll(
+                                        ProductViewSepcification.filter(filter),
+                                        PageRequest.of(page.getPageNumber(), page.getPageSize(), page.getSort()));
+
+                        OutputStream out = resp.getOutputStream();
+                } catch (IOException e) {
+                        e.printStackTrace();
+                }
+                throw new UnsupportedOperationException("Unimplemented method 'export'");
         }
 }

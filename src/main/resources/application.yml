@@ -1,4 +1,8 @@
 spring:
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
   cache:
     type: redis
     redis:
@@ -26,6 +30,8 @@ spring:
   global:
     variable:
       default-language: ${LANGUAGE}
+    file:
+      home_path: ${FILE_PATH}
   jpa:
     hibernate:
       ddl-auto: update

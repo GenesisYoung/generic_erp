@@ -4,6 +4,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,6 +28,7 @@ import com.gsgd.generic_erp.util.SimplePageResponse;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
 import io.jsonwebtoken.lang.Arrays;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -125,6 +127,19 @@ public class ProductController {
         }
 
         return service.importProducts(file);
+    }
+
+    @GetMapping("/export")
+    public String exportAsCSV(@RequestParam int page, @RequestParam int size,
+            @RequestParam(required = false, defaultValue = "productId") String sortProperty,
+            @RequestParam(required = false, defaultValue = "ASC") Sort.Direction sortDirection,
+            @ModelAttribute ProductFilter filter, HttpServletResponse resp) {
+        BasicPage p = new BasicPage(page, size);
+        if (sortDirection.equals(Sort.Direction.ASC))
+            p.defineSort(Sort.by(sortProperty).ascending());
+        else
+            p.defineSort(Sort.by(sortProperty).descending());
+        return service.export(p, filter, resp);
     }
 
 }

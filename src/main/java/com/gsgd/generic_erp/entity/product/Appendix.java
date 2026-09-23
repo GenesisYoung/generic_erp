@@ -16,8 +16,10 @@ import lombok.experimental.SuperBuilder;
 /**
  * Stored-file reference mapped to {@code appendix_tb}.
  *
- * <p>This entity describes the file and its storage location, not how a product
- * uses the file.</p>
+ * <p>
+ * This entity describes the file and its storage location, not how a product
+ * uses the file.
+ * </p>
  */
 @Entity
 @Table(name = "appendix_tb", indexes = {
@@ -37,12 +39,14 @@ public class Appendix extends ProductAuditableEntity {
     @Column(name = "appendix_id")
     private Long appendixId;
 
-    /** Immutable opaque storage identifier, normally a UUID, used in external paths. */
+    /**
+     * Immutable opaque storage identifier, normally a UUID, used in external paths.
+     */
     @Column(name = "storage_key", length = 64, nullable = false, unique = true, updatable = false)
     private String storageKey;
 
     /** File-system path or object-storage key. */
-    @Column(name = "path", length = 512, nullable = false)
+    @Column(name = "path", length = 512)
     private String path;
 
     /** Original uploaded filename, including its extension. */

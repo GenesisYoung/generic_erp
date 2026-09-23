@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.gsgd.generic_erp.configuration.exception.AuthenticationException;
+import com.gsgd.generic_erp.configuration.exception.FileOwnershipMismatchException;
 import com.gsgd.generic_erp.configuration.exception.NoneDeleteableException;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
@@ -22,48 +23,57 @@ import jakarta.servlet.http.HttpServletRequest;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    // Expected: the message is safe and useful for the user. WARN level, no stack
-    // trace.
-    @ExceptionHandler(NoneDeleteableException.class)
-    public ResponseEntity<SimpleResponse> handleNoneDeleteable(NoneDeleteableException e) {
-        log.warn("Delete rejected: {}", e.getMessage());
-        return ResponseEntity.status(HttpStatus.LOCKED)
-                .body(new SimpleResponse(NoneDeleteableException.code, e.getMessage()));
-    }
+        // Expected: the message is safe and useful for the user. WARN level, no stack
+        // trace.
+        @ExceptionHandler(NoneDeleteableException.class)
+        public ResponseEntity<SimpleResponse> handleNoneDeleteable(NoneDeleteableException e) {
+                log.warn("Delete rejected: {}", e.getMessage());
+                return ResponseEntity.status(HttpStatus.LOCKED)
+                                .body(new SimpleResponse(NoneDeleteableException.code, e.getMessage()));
+        }
 
-    @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<SimpleResponse> handleIntegrity(DataIntegrityViolationException e) {
-        log.warn("Constraint violation", e);
-        // Never send the raw message — it exposes table and column names.
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new SimpleResponse(409, "This record conflicts with existing data"));
-    }
+        @ExceptionHandler(DataIntegrityViolationException.class)
+        public ResponseEntity<SimpleResponse> handleIntegrity(DataIntegrityViolationException e) {
+                log.warn("Constraint violation", e);
+                // Never send the raw message — it exposes table and column names.
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                                .body(new SimpleResponse(409, "This record conflicts with existing data"));
+        }
 
-    @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<SimpleResponse> handleInvalidInvalidRequest(IllegalArgumentException e) {
-        log.warn("Invalid request: {}", e.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new SimpleResponse(AuthenticationException.code, e.getMessage()));
-    }
+        @ExceptionHandler(AuthenticationException.class)
+        public ResponseEntity<SimpleResponse> handleInvalidInvalidRequest(IllegalArgumentException e) {
+                log.warn("Invalid request: {}", e.getMessage());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(new SimpleResponse(AuthenticationException.code, e.getMessage()));
+        }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<SimpleResponse> handleInvalidRequest(IllegalArgumentException e) {
-        log.warn("Invalid request: {}", e.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new SimpleResponse(400, e.getMessage()));
-    }
+        @ExceptionHandler(IllegalArgumentException.class)
+        public ResponseEntity<SimpleResponse> handleInvalidRequest(IllegalArgumentException e) {
+                log.warn("Invalid request: {}", e.getMessage());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                .body(new SimpleResponse(400, e.getMessage()));
+        }
 
-    // Unexpected: a bug. ERROR level, full stack trace, generic message to the
-    // client.
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<SimpleResponse> handleUnexpected(Exception e, HttpServletRequest request) {
-        String traceId = UUID.randomUUID().toString().substring(0, 8);
-        log.error("Unhandled exception [traceId={}] {} {}",
-                traceId, request.getMethod(), request.getRequestURI(), e);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new SimpleResponse(500, "Internal server error. Reference: " + traceId + "\n"
-                        + "Message===>" + e.getMessage()));
-    }
+        // Unexpected: a bug. ERROR level, full stack trace, generic message to the
+        // client.
+        @ExceptionHandler(Exception.class)
+        public ResponseEntity<SimpleResponse> handleUnexpected(Exception e, HttpServletRequest request) {
+                String traceId = UUID.randomUUID().toString().substring(0, 8);
+                log.error("Unhandled exception [traceId={}] {} {}",
+                                traceId, request.getMethod(), request.getRequestURI(), e);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .body(new SimpleResponse(500, "Internal server error. Reference: " + traceId + "\n"
+                                                + "Message===>" + e.getMessage()));
+        }
+
+        @ExceptionHandler(FileOwnershipMismatchException.class)
+        public SimpleResponse handleFileManipulatedByUnMatchedUserError(FileOwnershipMismatchException e) {
+                log.error(e.getMessage());
+                return SimpleResponse.builder()
+                                .code(e.getCode())
+                                .message(e.getMessage())
+                                .build();
+        }
 }

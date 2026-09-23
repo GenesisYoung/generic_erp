@@ -56,6 +56,61 @@ CREATE TABLE IF NOT EXISTS audit_log_tb (
 alter table product_tb
     add is_enabled bool default true null after tax_category;
 
+alter table appendix_tb
+    add constraint appendix_tb_pk
+        unique (storage_key);
 
+create table file_chunk_tb
+(
+    id            bigint auto_increment
+        primary key,
+    appendix_id   bigint                 not null,
+    uuid          varchar(36)            not null,
+    standard_size int                    null comment 'Standard chuck size',
+    chuck_idx     int                    null,
+    finished      bool                   null,
+    create_time   datetime default NOW() null,
+    update_time   datetime               null,
+    operator_id   bigint                 null,
+    constraint file_chunk_tb_appendix_tb_appendix_id_fk
+        foreign key (appendix_id) references appendix_tb (appendix_id),
+    constraint file_chunk_tb_user_tb_id_fk
+        foreign key (operator_id) references user_tb (id)
+);
 
+create index file_chunk_tb_uuid_index
+    on file_chunk_tb (uuid);
 
+create table upload_session
+(
+    id          bigint auto_increment
+        primary key,
+    file_uuid   varchar(36)                                                  not null,
+    total_size  double                                                       not null,
+    current_idx int                                      default 0           not null,
+    chuck_size  double                                                       not null,
+    status      enum ('FINISHED', 'UPLOADING', 'PAUSED') default 'UPLOADING' null
+);
+
+create index upload_session_file_uuid_index
+    on upload_session (file_uuid);
+
+alter table upload_session
+    modify total_size bigint not null;
+
+alter table upload_session
+    modify chuck_size bigint not null;
+
+alter table upload_session
+    modify status enum ('FINISHED', 'UPLOADING', 'MERGING') default 'UPLOADING' null;
+
+alter table upload_session
+    add appendix_id bigint null after file_uuid;
+
+alter table upload_session
+    add constraint upload_session_appendix_tb_appendix_id_fk
+        foreign key (appendix_id) references appendix_tb (appendix_id);
+
+alter table file_chunk_tb
+    add constraint file_chunk_tb_pk
+        unique (chuck_idx, uuid);
