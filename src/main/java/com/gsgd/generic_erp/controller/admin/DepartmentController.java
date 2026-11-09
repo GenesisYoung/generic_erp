@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.admin;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,6 +37,7 @@ public class DepartmentController {
     }
 
     /** A page of departments (20 per page by default), ordered by id. */
+    @PreAuthorize("@perm.has('menu.departmentManagement.read')")
     @GetMapping("/fetch")
     public BasicPageResponse<Department, DepartmentDTO> fetchDepartments(int page, int size) {
         BasicPage p = new BasicPage(page, size);
@@ -44,6 +46,7 @@ public class DepartmentController {
     }
 
     /** Creates a department (no id) or updates an existing one. */
+    @PreAuthorize("@perm.canSave('menu.departmentManagement', #department.id)")
     @PostMapping("/save")
     public SimpleResponse save(@RequestBody DepartmentDTO department) {
         return service.saveOrUpdate(department);
@@ -55,6 +58,7 @@ public class DepartmentController {
      * can show the reason without tripping the axios refresh-and-retry path that
      * fires on non-2xx responses.
      */
+    @PreAuthorize("@perm.has('menu.departmentManagement.delete')")
     @DeleteMapping("/delete/{id}")
     public SimpleResponse delete(@PathVariable Long id) {
         try {
@@ -65,6 +69,7 @@ public class DepartmentController {
     }
 
     /** A page of roles flagged with whether this department is linked to each. */
+    @PreAuthorize("@perm.has('menu.departmentManagement.read')")
     @GetMapping("/{deptId}/roles")
     public BasicPageResponse<Role, RoleGrantDTO> rolesForDepartment(@PathVariable Long deptId,
             int page, int size) {
@@ -74,11 +79,13 @@ public class DepartmentController {
     }
 
     /** Links or unlinks a single role to a department. */
+    @PreAuthorize("@perm.has('menu.departmentManagement.update')")
     @PostMapping("/role")
     public SimpleResponse setRole(@RequestBody DepartmentRoleRequest request) {
         return service.setDepartmentRole(request.deptId(), request.roleId(), request.granted());
     }
 
+    @PreAuthorize("@perm.hasAny('menu.departmentManagement.read', 'menu.userManagement.read')")
     @GetMapping("/dept/options")
     public BasicResponse fetchDepts() {
         return service.fetDepts();

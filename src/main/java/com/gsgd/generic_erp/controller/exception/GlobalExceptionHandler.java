@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -47,6 +48,16 @@ public class GlobalExceptionHandler {
                 log.warn("Invalid request: {}", e.getMessage());
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                                 .body(new SimpleResponse(AuthenticationException.code, e.getMessage()));
+        }
+
+        // @PreAuthorize denials surface inside the MVC layer, so map them here;
+        // otherwise the catch-all below would turn them into 500s.
+        @ExceptionHandler(AccessDeniedException.class)
+        public ResponseEntity<SimpleResponse> handleAccessDenied(AccessDeniedException e,
+                        HttpServletRequest request) {
+                log.warn("Access denied: {} {}", request.getMethod(), request.getRequestURI());
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                                .body(new SimpleResponse(403, "Access denied"));
         }
 
         @ExceptionHandler(IllegalArgumentException.class)

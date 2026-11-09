@@ -22,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 @Configuration
 @RequiredArgsConstructor
 public class WebSocketAuthConfig implements WebSocketMessageBrokerConfigurer {
+    private static final String SESSION_ID_ATTRIBUTE = "sid";
     private final JWTUtil jwtService;
     private final UserDetailsService userDetailsService;
 
@@ -58,17 +59,22 @@ public class WebSocketAuthConfig implements WebSocketMessageBrokerConfigurer {
                     // This is the critical line: it makes accessor.getUser()
                     // non-null, which is what /user/** destinations depend on.
                     accessor.setUser(auth);
-
-                    if (accessor != null && (StompCommand.SUBSCRIBE.equals(accessor.getCommand())
-                            || StompCommand.SEND.equals(accessor.getCommand()))) {
-                        Principal p = accessor.getUser();
-                        String sid = accessor.getSessionAttributes() == null ? null
-                                : (String) accessor.getSessionAttributes().get("sid");
-                        if (p == null || sid == null || !jwtService.isSessionCurrent(p.getName(), sid)) {
-                            throw new AuthenticationCredentialsNotFoundException("Session no longer current");
-                        }
+                    // Remember the login session so later frames can be rejected once it
+                    // is superseded or logged out.
+                    if (accessor.getSessionAttributes() != null) {
+                        accessor.getSessionAttributes().put(SESSION_ID_ATTRIBUTE, sessionId);
                     }
                     return message;
+                }
+
+                if (accessor != null && (StompCommand.SUBSCRIBE.equals(accessor.getCommand())
+                        || StompCommand.SEND.equals(accessor.getCommand()))) {
+                    Principal p = accessor.getUser();
+                    String sid = accessor.getSessionAttributes() == null ? null
+                            : (String) accessor.getSessionAttributes().get(SESSION_ID_ATTRIBUTE);
+                    if (p == null || sid == null || !jwtService.isSessionCurrent(p.getName(), sid)) {
+                        throw new AuthenticationCredentialsNotFoundException("Session no longer current");
+                    }
                 }
                 return message;
             }

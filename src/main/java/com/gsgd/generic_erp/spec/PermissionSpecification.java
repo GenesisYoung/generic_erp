@@ -25,7 +25,10 @@ public class PermissionSpecification {
     // }
 
     public static Specification<Permission> findMenuPermission() {
-        return (root, query, builder) -> builder.and(builder.like(root.get("permissionCode"), "menu.%"), builder.equal(
-                root.get("isEnabled"), 1));
+        // Only top-level menu permissions ("menu.x"), not their action children
+        // ("menu.x.read"), which exist purely for API checks.
+        return (root, query, builder) -> builder.and(builder.like(root.get("permissionCode"), "menu.%"),
+                builder.notLike(root.get("permissionCode"), "menu.%.%"),
+                builder.equal(root.get("isEnabled"), 1));
     }
 }

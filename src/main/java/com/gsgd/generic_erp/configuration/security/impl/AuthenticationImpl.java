@@ -1,24 +1,28 @@
 package com.gsgd.generic_erp.configuration.security.impl;
 
-import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.configuration.security.AuthenticationServiceInterface;
 
 /**
  * Argon2-based implementation of {@link AuthenticationServiceInterface}, used
- * when
- * creating users. The encoder parameters must stay consistent with the
- * {@code PasswordEncoder} bean in {@code WebSecurityConfiurer} so that hashes
- * produced here can be verified during login.
+ * when creating users. It delegates to the shared {@code PasswordEncoder} bean
+ * in {@code WebSecurityConfiurer}, so hashes produced here always use exactly
+ * the parameters that login verification expects.
  */
 @Service
 public class AuthenticationImpl implements AuthenticationServiceInterface {
 
+    private final PasswordEncoder passwordEncoder;
+
+    public AuthenticationImpl(PasswordEncoder passwordEncoder) {
+        this.passwordEncoder = passwordEncoder;
+    }
+
     @Override
     public String generatePass(String password) {
-        // Argon2(saltLength, hashLength, parallelism, memory (KB), iterations)
-        return new Argon2PasswordEncoder(64, 50, 2, 1 << 16, 4).encode(password);
+        return passwordEncoder.encode(password);
     }
 
 }

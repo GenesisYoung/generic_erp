@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.product;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
@@ -37,6 +38,7 @@ import lombok.RequiredArgsConstructor;
 public class ProductController {
     private final ProductService service;
 
+    @PreAuthorize("@perm.has('product.read')")
     @RequestMapping("/fetch")
     public SimplePageResponse fetchProducts(@RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -53,21 +55,25 @@ public class ProductController {
         return service.fetchProducts(filter, p);
     }
 
+    @PreAuthorize("@perm.has('product.read')")
     @RequestMapping(path = "/detail/{id}")
     public SimplePageResponse productDetail(@PathVariable Long id) {
         return service.findByProductId(id);
     }
 
+    @PreAuthorize("@perm.canSave('product', #product.productId)")
     @PostMapping(path = "/save")
     public SimpleResponse saveProduct(@RequestBody ProductDTO product) {
         return service.saveProduct(product);
     }
 
+    @PreAuthorize("@perm.has('product.delete')")
     @RequestMapping(path = "/disable", method = RequestMethod.GET)
     public SimpleResponse requestMethodName(@RequestParam Long[] ids) {
         return service.disableProduct(ids);
     }
 
+    @PreAuthorize("@perm.has('product.read')")
     @RequestMapping(path = "/fetch/variants")
     public SimplePageResponse fetchVariants(
             @RequestParam(required = false, defaultValue = "0") int page,
@@ -78,21 +84,25 @@ public class ProductController {
         return service.queryVariants(filter, new BasicPage(page, size));
     }
 
+    @PreAuthorize("@perm.has('product.read')")
     @RequestMapping(path = "/fetch/variant/detail/{id}")
     public BasicResponse variantDetail(@PathVariable Long id) {
         return service.findVariantById(id);
     }
 
+    @PreAuthorize("@perm.has('product.update')")
     @PostMapping("/variant/save")
     public SimpleResponse saveVariant(@RequestBody ProductVariantDTO dto) {
         return service.saveVariant(dto);
     }
 
+    @PreAuthorize("@perm.has('product.update')")
     @RequestMapping(path = "/variant/disable")
     public SimpleResponse disableVariant(@RequestParam Long[] ids) {
         return service.disableVariant(Arrays.asList(ids));
     }
 
+    @PreAuthorize("@perm.has('product.read')")
     @RequestMapping(path = "/plain/product")
     public SimplePageResponse fetchPlainProduct(@ModelAttribute PlainProductFilter filter, @RequestParam int page,
             @RequestParam int size) {
@@ -100,21 +110,25 @@ public class ProductController {
                 PageRequest.of(page, size));
     }
 
+    @PreAuthorize("@perm.has('product.read')")
     @RequestMapping(path = "/plain/product/{id}")
     public BasicResponse fetchProductById(@PathVariable Long id) {
         return service.fetchPlainProductById(id);
     }
 
+    @PreAuthorize("@perm.canSave('product', #dto.productId)")
     @RequestMapping(path = "/plain/product/saveOrUpdate")
     public SimpleResponse savePlainProduct(@RequestBody ProductDTO dto) {
         return service.saveOrUpdatePlainProduct(dto);
     }
 
+    @PreAuthorize("@perm.has('product.delete')")
     @RequestMapping(path = "/plain/product/disable")
     public SimpleResponse requestDisable(@RequestParam Long[] ids) {
         return service.disableProduct(ids);
     }
 
+    @PreAuthorize("@perm.has('product.import')")
     @PostMapping(path = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public SimpleResponse importProductsByCSV(
             @RequestPart("file") MultipartFile file) {
@@ -129,6 +143,7 @@ public class ProductController {
         return service.importProducts(file);
     }
 
+    @PreAuthorize("@perm.has('product.read')")
     @GetMapping("/export")
     public String exportAsCSV(@RequestParam int page, @RequestParam int size,
             @RequestParam(required = false, defaultValue = "productId") String sortProperty,

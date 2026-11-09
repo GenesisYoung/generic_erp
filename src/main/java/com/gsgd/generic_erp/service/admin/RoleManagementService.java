@@ -14,6 +14,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.configuration.exception.NoneDeleteableException;
+import com.gsgd.generic_erp.configuration.security.PermissionChecker;
+import com.gsgd.generic_erp.configuration.security.RoleGuard;
 import com.gsgd.generic_erp.dto.PermissionAccessDTO;
 import com.gsgd.generic_erp.dto.RoleDTO;
 import com.gsgd.generic_erp.entity.auth.Permission;
@@ -54,16 +56,21 @@ public class RoleManagementService {
     private final RolePermissionRepository rolePermissionRepository;
     private final RoleDepartmentRepository roleDepartmentRepository;
     private final UserRepository userRepository;
+    private final RoleGuard roleGuard;
+    private final PermissionChecker permissionChecker;
 
     public RoleManagementService(RoleRepository roleRepository, UserRoleRepository userRoleRepository,
             PermissionRepository permissionRepository, RolePermissionRepository rolePermissionRepository,
-            RoleDepartmentRepository roleDepartmentRepository, UserRepository userRepository) {
+            RoleDepartmentRepository roleDepartmentRepository, UserRepository userRepository,
+            RoleGuard roleGuard, PermissionChecker permissionChecker) {
         this.roleRepository = roleRepository;
         this.userRoleRepository = userRoleRepository;
         this.permissionRepository = permissionRepository;
         this.rolePermissionRepository = rolePermissionRepository;
         this.roleDepartmentRepository = roleDepartmentRepository;
         this.userRepository = userRepository;
+        this.roleGuard = roleGuard;
+        this.permissionChecker = permissionChecker;
     }
 
     /** Returns a page of roles mapped to {@link RoleDTO}. */
@@ -75,21 +82,51 @@ public class RoleManagementService {
         return new BasicPageResponse<>(dto, page);
     }
 
-    /** Creates a role (id == null) or renames/updates an existing one. */
+    /**
+     * Creates a role (id == null) or renames/updates an existing one.
+     * <p>
+     * Authorities are derived from the role name, so the built-in ROOT/ADMIN
+     * roles are immutable and their names (case-insensitively) are reserved;
+     * otherwise renaming any role to "ROOT" would grant ROOT to its holders.
+     * {@code val} is the external code used to assign roles, so it must be
+     * unique too.
+     */
     public SimpleResponse saveOrUpdate(RoleDTO dto) {
+        String name = dto.getRoleName() == null ? null : dto.getRoleName().trim();
+        if (name == null || name.isEmpty() || dto.getVal() == null) {
+            return new SimpleResponse(400, "Role name and value are required");
+        }
         if (dto.getId() == null) {
-            if (roleRepository.existsByRoleName(dto.getRoleName())) {
+            if (roleGuard.isBuiltInRoleName(name)) {
+                return new SimpleResponse(403, "Reserved role name");
+            }
+            if (roleRepository.existsByRoleName(name)) {
                 return new SimpleResponse(201, Language_CN.NAME_DULICATED.getMessage());
             }
+            if (roleRepository.existsByVal(dto.getVal())) {
+                return new SimpleResponse(201, "Role value already in use");
+            }
             roleRepository.save(Role.builder()
-                    .roleName(dto.getRoleName())
+                    .roleName(name)
                     .val(dto.getVal())
                     .createDate(LocalDate.now())
                     .build());
             return new SimpleResponse(200, "");
         }
-        Role role = roleRepository.findById(dto.getId()).orElseThrow();
-        role.setRoleName(dto.getRoleName());
+        Role role = roleRepository.findById(dto.getId()).orElse(null);
+        if (role == null) {
+            return new SimpleResponse(404, "Role not found");
+        }
+        if (roleGuard.isBuiltInRoleName(role.getRoleName()) || roleGuard.isBuiltInRoleName(name)) {
+            return new SimpleResponse(403, "Built-in roles cannot be modified");
+        }
+        if (roleRepository.existsByRoleNameIgnoreCaseAndIdNot(name, role.getId())) {
+            return new SimpleResponse(201, Language_CN.NAME_DULICATED.getMessage());
+        }
+        if (roleRepository.existsByValAndIdNot(dto.getVal(), role.getId())) {
+            return new SimpleResponse(201, "Role value already in use");
+        }
+        role.setRoleName(name);
         role.setVal(dto.getVal());
         roleRepository.save(role);
         return new SimpleResponse(200, "");
@@ -102,6 +139,13 @@ public class RoleManagementService {
      */
     @Transactional
     public SimpleResponse deleteRole(Long roleId) throws NoneDeleteableException {
+        Role role = roleRepository.findById(roleId).orElse(null);
+        if (role == null) {
+            return new SimpleResponse(404, "Role not found");
+        }
+        if (roleGuard.isBuiltInRoleName(role.getRoleName())) {
+            throw new NoneDeleteableException("Built-in roles cannot be deleted");
+        }
         if (!userRoleRepository.findByRoleId(roleId).isEmpty()) {
             throw new NoneDeleteableException(Language_CN.ROLE_ASSIGNED.getMessage());
         }
@@ -129,6 +173,17 @@ public class RoleManagementService {
     /** Grants or revokes a single permission for a role (idempotent). */
     @Transactional
     public SimpleResponse setRolePermission(Long roleId, Long permissionId, boolean granted) {
+        Role role = roleRepository.findById(roleId).orElse(null);
+        Permission permission = permissionRepository.findById(permissionId).orElse(null);
+        if (role == null || permission == null) {
+            return new SimpleResponse(404, "Role or permission not found");
+        }
+        if (granted && !permissionChecker.has(permission.getPermissionCode())) {
+            return new SimpleResponse(403, "You cannot grant a permission you do not hold");
+        }
+        if (RoleGuard.ROOT_ROLE.equals(role.getRoleName()) && !roleGuard.currentUserIsRoot()) {
+            return new SimpleResponse(403, "Only ROOT can change ROOT permissions");
+        }
         boolean exists = rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, permissionId);
         if (granted) {
             if (!exists) {

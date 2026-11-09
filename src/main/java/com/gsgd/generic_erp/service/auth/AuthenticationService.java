@@ -189,9 +189,16 @@ public class AuthenticationService {
                         userRepository.findByUsername(username)
                                         .filter(u -> u.getIsEnabled() != null && u.getIsEnabled() == 1)
                                         .ifPresent(user -> {
-                                                int failedAttempts = user.getFailedAttempted() == null
+                                                // A lock that has already expired starts a fresh
+                                                // window; otherwise one typo re-locks immediately.
+                                                boolean lockExpired = user.getLockedUntil() != null
+                                                                && !user.getLockedUntil().isAfter(LocalDateTime.now());
+                                                int failedAttempts = user.getFailedAttempted() == null || lockExpired
                                                                 ? 0
                                                                 : user.getFailedAttempted();
+                                                if (lockExpired) {
+                                                        user.setLockedUntil(null);
+                                                }
                                                 int nextAttempt = failedAttempts + 1;
                                                 user.setFailedAttempted(
                                                                 (byte) Math.min(nextAttempt, maxFailedAttempts));
@@ -271,7 +278,10 @@ public class AuthenticationService {
                 String sid = jwtUtil.extractSessionId(refreshToken);
                 if (user == null || user.getCurrentSessionId() == null
                                 || !user.getCurrentSessionId().equals(sid)
-                                || user.getIsEnabled() == null || user.getIsEnabled() != 1) {
+                                || user.getIsEnabled() == null || user.getIsEnabled() != 1
+                                || Boolean.FALSE.equals(user.getStatus())
+                                || (user.getLockedUntil() != null
+                                                && user.getLockedUntil().isAfter(LocalDateTime.now()))) {
                         return refreshFailure();
                 }
 

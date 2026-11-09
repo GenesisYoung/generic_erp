@@ -2,6 +2,7 @@ package com.gsgd.generic_erp.controller.admin;
 
 import java.util.List;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,30 +42,35 @@ public class PermissionManagementController {
     }
 
     /** Paginated, filterable query over the navigation/permission view. */
+    @PreAuthorize("@perm.has('menu.permissionManagement.read')")
     @PostMapping("/fetch")
     public BasicPageResponse<NavigationPermissionView, NavigationPermissionView> fetchPermissionThrouthUser(
             @RequestBody BasicPageRequest<PermissionMenuViewFilter> filter) {
         return service.query(filter);
     }
 
+    @PreAuthorize("@perm.has('menu.permissionManagement.read')")
     @PostMapping("/fetch/default")
     public BasicPageResponse<NavigationPermissionView, NavigationPermissionView> fetchDefaults(
             @RequestBody BasicPageRequest<PermissionMenuViewFilter> filter) {
         return service.query(filter);
     }
 
+    @PreAuthorize("@perm.hasAny('menu.permissionManagement.read', 'menu.menuManagement.read')")
     @GetMapping("/fetch/menu/permission")
     public BasicResponse getMethodName() {
         return service.fetchOnlyMenu();
     }
 
     /** Every user, with whether they currently have access to this menu. */
+    @PreAuthorize("@perm.has('menu.permissionManagement.read')")
     @GetMapping("/menu/{navId}/users")
     public List<UserAccessDTO> fetchUsersForMenu(@PathVariable Long navId) {
         return menuAccessService.listUsersForMenu(navId);
     }
 
     /** Every permission, with whether the given user holds it for this menu. */
+    @PreAuthorize("@perm.has('menu.permissionManagement.read')")
     @GetMapping("/menu/permission")
     public List<PermissionAccessDTO> fetchPermissionsForMenu(@RequestParam Long navId,
             @RequestParam Long userId) {
@@ -74,6 +80,7 @@ public class PermissionManagementController {
     /**
      * Every permission, with whether it's currently registered against this menu.
      */
+    @PreAuthorize("@perm.has('menu.permissionManagement.read')")
     @GetMapping("/menu/registration")
     public List<PermissionRegistrationDTO> fetchRegistrationsForMenu(@RequestParam Long navId) {
         return menuAccessService.listRegistrationsForMenu(navId);

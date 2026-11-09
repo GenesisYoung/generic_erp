@@ -9,6 +9,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -30,12 +31,15 @@ import jakarta.servlet.http.HttpServletResponse;
  * <p>
  * Defines a stateless (no HTTP session) security filter chain: CSRF is disabled
  * because authentication is JWT-based, CORS is restricted to local frontend
- * origins, and only the login/refresh endpoints are publicly accessible. The
+ * origins, and only the login/refresh endpoints are publicly accessible.
+ * Authorization is per endpoint via method security ({@link PermissionChecker}).
+ * The
  * {@link JwtAuthenticationFilter} is inserted before the standard
  * username/password filter so every request is authenticated from its token.
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class WebSecurityConfiurer {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -56,16 +60,14 @@ public class WebSecurityConfiurer {
                 .authorizeHttpRequests((authz) -> authz
 
                         // Allow unauthenticated access only to login and refresh endpoints.
-                        .requestMatchers("/api/auth/login", "/api/auth/refresh/access",
-                                "/api/auth/refresh/refresh")
+                        .requestMatchers("/api/auth/login", "/api/auth/refresh/access")
                         .permitAll()
                         .requestMatchers("/ws/**").permitAll() // handshake only; CONNECT is still authenticated
                         .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD)
                         .permitAll()
-                        .requestMatchers("/api/root/**", "/api/admin/**", "/api/manager/**",
-                                "/api/permission/**")
-                        .hasAnyRole("ROOT", "ADMIN")
-                        // All other endpoints require authentication
+                        // Everything else requires a login; what the caller may do is decided
+                        // per endpoint by @PreAuthorize("@perm.has(...)") (see PermissionChecker).
+                        // ControllerPermissionCoverageTest fails the build if a handler forgets one.
                         .anyRequest()
                         .authenticated())
                 .exceptionHandling(ex -> ex
@@ -119,14 +121,13 @@ public class WebSecurityConfiurer {
         return new ProviderManager(authenticationProvider);
     }
 
-    // Configure the password encoder to use Argon2, which is a secure hashing
-    // algorithm for passwords.
-    // The encrytion parameters is the same as the AuthenticationImpl(generate
-    // password when creating user) class,
-    // it ensures that the password hashing and verification processes are
-    // consistent across the application.
+    // Argon2 password encoder, shared by login verification and user creation
+    // (AuthenticationImpl). Argon2(saltLength, hashLength, parallelism, memory
+    // KB, iterations). hashLength stays at 50 bytes so the encoded string fits
+    // user_tb.password (VARCHAR 255); 128 overflows it. Verification reads the
+    // parameters from each stored hash, so existing hashes keep working.
     @Bean
     PasswordEncoder passwordEncoder() {
-        return new Argon2PasswordEncoder(64, 128, 2, 1 << 16, 4);
+        return new Argon2PasswordEncoder(64, 50, 2, 1 << 16, 4);
     }
 }

@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.GrantedAuthority;
@@ -25,10 +26,17 @@ public class UserDetail implements UserDetails {
 
     private final User user;
     private final List<Role> roles;
+    /** Permission codes held via roles or direct approvals (see PermissionChecker). */
+    private final List<String> permissions;
 
     public UserDetail(User user, List<Role> roles) {
+        this(user, roles, List.of());
+    }
+
+    public UserDetail(User user, List<Role> roles, List<String> permissions) {
         this.user = user;
         this.roles = roles;
+        this.permissions = permissions == null ? List.of() : permissions;
     }
 
     public User getUser() {
@@ -37,8 +45,9 @@ public class UserDetail implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return roles.stream()
-                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getRoleName()))
+        return Stream.concat(
+                roles.stream().map(role -> new SimpleGrantedAuthority("ROLE_" + role.getRoleName())),
+                permissions.stream().map(SimpleGrantedAuthority::new))
                 .collect(Collectors.toList());
     }
 

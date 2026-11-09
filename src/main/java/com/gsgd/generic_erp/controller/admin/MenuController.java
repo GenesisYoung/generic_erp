@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.admin;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,29 +27,33 @@ public class MenuController {
     }
 
     /** Returns a page of menu items matching the given filter. */
+    @PreAuthorize("@perm.has('menu.menuManagement.read')")
     @GetMapping("/fetch")
     public BasicPageResponse<NavigationMenu, MenuDTO> fetch(int page, int size, MenuDTO filter) {
         return service.fetchData(page, size, filter);
     }
 
     /** Same as {@link #fetch}, but restricted to menu items marked valid. */
+    @PreAuthorize("@perm.hasAny('menu.menuManagement.read', 'menu.permissionManagement.read')")
     @GetMapping("/fetch/valid")
     public BasicPageResponse<NavigationMenu, MenuDTO> fetchValid(int page, int size, MenuDTO filter) {
         return service.fetchValidData(page, size, filter);
     }
 
     /** Creates or updates a menu item. */
+    @PreAuthorize("@perm.canSave('menu.menuManagement', #entity.id)")
     @PostMapping("/save")
     public SimpleResponse postMethodName(@RequestBody MenuDTO entity) {
         try {
             service.saveAndFlush(entity);
         } catch (Exception e) {
-            new SimpleResponse(500, e.getMessage());
+            return new SimpleResponse(500, e.getMessage());
         }
         return new SimpleResponse(200, "Susccess");
     }
 
     /** Deletes the menu items whose ids are listed in the request body. */
+    @PreAuthorize("@perm.has('menu.menuManagement.delete')")
     @PostMapping("/delete")
     public SimpleResponse getMethodName(@RequestBody SimpleBody request) {
         try {

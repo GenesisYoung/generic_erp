@@ -5,6 +5,7 @@ import java.time.Duration;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
@@ -42,11 +43,16 @@ public class AuthenticationController {
     @Value("${security.token.cookie.secure:true}")
     private boolean secureCookie;
 
+    /** Cookie lifetime follows the refresh-token lifetime (default 7 days). */
+    @Value("${security.token.expiracy.refresh:604800000}")
+    private long refreshLifetimeMs = Duration.ofDays(7).toMillis();
+
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     /**
      * Authenticates with username/password; returns a token pair plus user info.
      */
+    @PreAuthorize("permitAll()")
     @PostMapping("/login")
     public BasicResponse login(@RequestBody AuthenticationRequest entity, HttpServletRequest request,
             HttpServletResponse response) {
@@ -63,9 +69,9 @@ public class AuthenticationController {
      * Exchanges a valid refresh token (from the request header) for a new access
      * token.
      */
+    @PreAuthorize("permitAll()")
     @RequestMapping(path = "/refresh/access", method = RequestMethod.POST)
     public BasicResponse accessToken(HttpServletRequest request, HttpServletResponse response) {
-        log.info("Current X-Refresh-Request ===> {}", request.getHeader("X-Refresh-Request"));
         if (!"1".equals(request.getHeader("X-Refresh-Request"))) {
             return new BasicResponse(400, "Invalid refresh request", null);
         }
@@ -85,6 +91,7 @@ public class AuthenticationController {
     // }
 
     /** Revokes the current session and its refresh token. */
+    @PreAuthorize("isAuthenticated()")
     @PostMapping("/logout")
     public BasicResponse logout(Principal principal, HttpServletResponse response) {
         clearRefreshCookie(response);
@@ -127,7 +134,7 @@ public class AuthenticationController {
                 .secure(secureCookie)
                 .sameSite("Strict")
                 .path("/api/auth")
-                .maxAge(Duration.ofDays(7))
+                .maxAge(Duration.ofMillis(refreshLifetimeMs))
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }

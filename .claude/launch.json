@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "backend-qa", "runtimeExecutable": "/private/tmp/claude-501/-Users-genesisyoung-Developer-generic-erp/ef9c1148-6f94-4ffd-9327-29d690980ecd/scratchpad/run-backend.sh", "runtimeArgs": [], "port": 8081 },
+    { "name": "frontend-qa", "runtimeExecutable": "/private/tmp/claude-501/-Users-genesisyoung-Developer-generic-erp/ef9c1148-6f94-4ffd-9327-29d690980ecd/scratchpad/run-frontend.sh", "runtimeArgs": [], "port": 5174 }
+  ]
+}

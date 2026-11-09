@@ -68,4 +68,3 @@ logging:
     "[org.hibernate]": error
 app:
   language: ${LANGUAGE}
-test-mode: ${TEST_MODE}

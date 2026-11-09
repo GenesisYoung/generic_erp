@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.admin;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,6 +32,7 @@ public class PermissionController {
     }
 
     /** Returns a page of permissions, optionally filtered by name. */
+    @PreAuthorize("@perm.has('menu.permissionManagement.read')")
     @GetMapping("/fetch")
     public BasicPageResponse<Permission, PermissionDTO> getMethodName(int page, int size,
             @RequestParam(required = false) String name) {
@@ -41,6 +43,7 @@ public class PermissionController {
     }
 
     /** Deletes permissions by id; returns the number of rows removed. */
+    @PreAuthorize("@perm.has('menu.permissionManagement.delete')")
     @PostMapping("/delete")
     public BasicResponse deleteByVal(@RequestBody DeleteRecord record) {
 
@@ -53,6 +56,7 @@ public class PermissionController {
      * Deletes root permissions by code, first removing all of their
      * sub-permissions so no orphaned children remain.
      */
+    @PreAuthorize("@perm.has('menu.permissionManagement.delete')")
     @PostMapping("/deleteRoot")
     public BasicResponse deleteRoot(@RequestBody DeleteRootRecord record) {
 
@@ -63,6 +67,7 @@ public class PermissionController {
     }
 
     /** Creates or updates a permission from the submitted DTO. */
+    @PreAuthorize("@perm.canSave('menu.permissionManagement', #entity.id)")
     @PostMapping("/save")
     public SimpleResponse postMethodName(@RequestBody PermissionDTO entity) {
         return permissionService.saveOrUpdate(permissionService.transferObj(entity));

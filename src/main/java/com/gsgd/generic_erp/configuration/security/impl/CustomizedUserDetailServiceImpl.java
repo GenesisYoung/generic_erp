@@ -11,6 +11,7 @@ import com.gsgd.generic_erp.configuration.security.UserDetail;
 import com.gsgd.generic_erp.entity.auth.Role;
 import com.gsgd.generic_erp.entity.auth.User;
 import com.gsgd.generic_erp.entity.auth.UserRole;
+import com.gsgd.generic_erp.repository.admin.PermissionRepository;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.repository.auth.UserRoleRepository;
@@ -25,13 +26,16 @@ public class CustomizedUserDetailServiceImpl implements UserDetailsService {
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final RoleRepository roleRepository;
+    private final PermissionRepository permissionRepository;
 
     public CustomizedUserDetailServiceImpl(UserRepository userRepository,
             UserRoleRepository userRoleRepository,
-            RoleRepository roleRepository) {
+            RoleRepository roleRepository,
+            PermissionRepository permissionRepository) {
         this.userRepository = userRepository;
         this.userRoleRepository = userRoleRepository;
         this.roleRepository = roleRepository;
+        this.permissionRepository = permissionRepository;
     }
 
     // This method is called by Spring Security during the authentication process.
@@ -45,7 +49,9 @@ public class CustomizedUserDetailServiceImpl implements UserDetailsService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
         List<Role> roles = convertToRoles(userRoleRepository.findByUserId(user.getId()));
-        return new UserDetail(user, roles);
+        // Loaded on every request, so grant/revoke changes apply immediately.
+        List<String> permissions = permissionRepository.findGrantedCodesByUserId(user.getId());
+        return new UserDetail(user, roles, permissions);
     }
 
     // Helper method to convert a list of UserRole entities to a list of Role

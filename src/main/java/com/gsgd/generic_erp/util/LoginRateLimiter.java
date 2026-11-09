@@ -36,9 +36,12 @@ public class LoginRateLimiter {
      *         otherwise
      */
     public boolean allow(String key, int limit, Duration window) {
-        Long n = redis.opsForValue().increment("ratelimit:" + key);
-        if (n != null && n == 1)
-            redis.expire("ratelimit:" + key, window);
+        String redisKey = "ratelimit:" + key;
+        Long n = redis.opsForValue().increment(redisKey);
+        // Also repair a counter left without a TTL (e.g. EXPIRE failed after INCR),
+        // which would otherwise block the key forever.
+        if (n != null && (n == 1 || Long.valueOf(-1L).equals(redis.getExpire(redisKey))))
+            redis.expire(redisKey, window);
         return n != null && n <= limit;
     }
 }

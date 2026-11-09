@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 
 import com.gsgd.generic_erp.dto.PermissionDTO;
 import com.gsgd.generic_erp.entity.auth.Permission;
-import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.repository.admin.PermissionRepository;
 import com.gsgd.generic_erp.spec.PermissionSpecification;
 import com.gsgd.generic_erp.util.BasicPageResponse;
@@ -64,7 +63,9 @@ public class PermissionService {
     public SimpleResponse saveOrUpdate(Permission transferObj) {
         Boolean exist = permissionRepository.existsByPermissionCode(transferObj.getPermissionCode());
         if (exist) {
-            return new SimpleResponse(201, Language_CN.NAME_DULICATED.getMessage());
+            Permission existingPermission = permissionRepository.findByPermissionCode(transferObj.getPermissionCode());
+            permissionRepository.enable(existingPermission.getId());
+            return new SimpleResponse(200, "Old Version reactivated");
         }
         transferObj.setCreateDate(LocalDate.now());
         permissionRepository.saveAndFlush(transferObj);

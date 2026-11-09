@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -20,6 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.gsgd.generic_erp.configuration.exception.NoneDeleteableException;
+import com.gsgd.generic_erp.configuration.security.PermissionChecker;
+import com.gsgd.generic_erp.configuration.security.RefreshTokenStore;
+import com.gsgd.generic_erp.configuration.security.RoleGuard;
 import com.gsgd.generic_erp.configuration.security.impl.AuthenticationImpl;
 import com.gsgd.generic_erp.controller.exception.GlobalExceptionHandler;
 import com.gsgd.generic_erp.dto.UserDTO;
@@ -30,6 +34,7 @@ import com.gsgd.generic_erp.entity.auth.UserInfo;
 import com.gsgd.generic_erp.entity.auth.UserRole;
 import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.enums.Language_EN;
+import com.gsgd.generic_erp.repository.admin.PermissionRepository;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
 import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
@@ -56,12 +61,18 @@ public class UserManagementService {
     private final UserInfoRepository infoRepository;
     private final UserDepartmentRepository uDepartmentRepositoryrepository;
     private final Language language;
+    private final RoleGuard roleGuard;
+    private final RefreshTokenStore refreshTokenStore;
+    private final PermissionChecker permissionChecker;
+    private final PermissionRepository permissionRepository;
     private final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     public UserManagementService(UserRepository repository, RoleRepository roleRepository,
             UserRoleRepository userRoleRepository, UserRepository userRepository,
             AuthenticationImpl aService, Language language, UserInfoRepository infoRepository,
-            UserDepartmentRepository userDepartmentRepository) {
+            UserDepartmentRepository userDepartmentRepository, RoleGuard roleGuard,
+            RefreshTokenStore refreshTokenStore, PermissionChecker permissionChecker,
+            PermissionRepository permissionRepository) {
         this.repository = repository;
         this.roleRepository = roleRepository;
         this.userRoleRepository = userRoleRepository;
@@ -71,6 +82,10 @@ public class UserManagementService {
         this.language = language;
         this.infoRepository = infoRepository;
         this.uDepartmentRepositoryrepository = userDepartmentRepository;
+        this.roleGuard = roleGuard;
+        this.refreshTokenStore = refreshTokenStore;
+        this.permissionChecker = permissionChecker;
+        this.permissionRepository = permissionRepository;
     }
 
     /**
@@ -123,230 +138,248 @@ public class UserManagementService {
     }
 
     /**
-     * Creates a user ({@code userId == 0}) or updates an existing one.
+     * Creates a user ({@code userId} null or 0) or updates an existing one.
      * <p>
-     * On update, the user's role links are reconciled with a set diff:
-     * roles no longer selected are bulk-deleted and newly selected roles are
-     * bulk-inserted, keeping the whole operation to a handful of queries.
-     * New users must be provisioned with an explicit strong initial password.
+     * On update, the user's role and department links are reconciled with a set
+     * diff: links no longer selected are bulk-deleted and newly selected ones
+     * inserted. A {@code null} role or department list leaves that side
+     * unchanged; an empty list clears it.
+     * <p>
+     * Only a ROOT caller may assign the ROOT role or modify an account that
+     * already holds it, and the seeded root account can never be disabled or
+     * lose ROOT. New users must be provisioned with a strong initial password.
      */
     @Transactional
     @CacheEvict(cacheNames = "userQuery", allEntries = true)
     public SimpleResponse saveOrUpdate(Long userId, UserDTO user) {
-        try {
-            // Check for duplicate username/email on create
-            if (userId == 0) {
-                if (user.getInitialPassword() == null || user.getInitialPassword().length() < 12) {
-                    throw new IllegalArgumentException("Initial password must be at least 12 characters");
-                }
-                if (userRepository.existsByUsername(user.getName())) {
-                    if (language.getLanguage().equals("EN")) {
-                        throw new DataIntegrityViolationException(Language_EN.USERNAME_DULICATED.getMessage());
-                    } else if (language.getLanguage().equals("CN")) {
-                        throw new DataIntegrityViolationException(Language_CN.USERNAME_DULICATED.getMessage());
-                    }
-                }
-                if (userRepository.existsByEmail(user.getEmail())) {
-                    if (language.getLanguage().equals("EN")) {
-                        throw new DataIntegrityViolationException(Language_EN.EMAIL_DULICATED.getMessage());
-                    } else if (language.getLanguage().equals("CN")) {
-                        throw new DataIntegrityViolationException(Language_CN.EMAIL_DULICATED.getMessage());
-                    }
-                }
-                User saved = repository.save(injectUserDTO(user, userId));
-                /**
-                 * Upate related infomation of current user
-                 */
-                UserInfo info = new UserInfo();
-                info.setUserId(user.getId());
-                info.setRealName(user.getRealName());
-                info.setTitle(user.getTitle());
-                info.setCreateDate(LocalDate.now());
-                if (user.getBirthday() != null)
-                    info.setBirthday(user.getBirthday());
-                if (user.getHireDate() != null)
-                    info.setHireDate(user.getHireDate());
-                infoRepository.save(info);
-                /**
-                 * Build constraints between users and departments
-                 */
-                if (user.getDepartments() != null)
-                    user.getDepartments().stream().forEach(ele -> {
-                        uDepartmentRepositoryrepository.save(
-                                UserDepartment.builder()
-                                        .deptId(ele)
-                                        .userId(saved.getId())
-                                        .build());
-                    });
-                /**
-                 * Assign roles for current user
-                 */
-                for (Integer role : user.getRoleList()) {
-                    Long id = roleRepository.getIdByVal(role);
-                    userRoleRepository.save(new UserRole(null, saved.getId(), id, (byte) 1, LocalDate.now()));
-                }
-                return new SimpleResponse(200, "Successfully created");
-            } else {
-                /**
-                 * Update information of this user
-                 */
-                Optional<UserInfo> i = infoRepository.findByUserId(userId);
-                if (!i.isEmpty()) {
-                    UserInfo info = i.get();
-                    info.setUserId(userId);
-                    info.setRealName(user.getRealName());
-                    info.setTitle(user.getTitle());
-                    info.setCreateDate(LocalDate.now());
-                    if (user.getBirthday() != null)
-                        info.setBirthday(
-                                user.getBirthday());
-                    if (user.getHireDate() != null)
-                        info.setHireDate(
-                                user.getHireDate());
-                    infoRepository.save(info);
-                } else {
-                    UserInfo info = new UserInfo();
-                    info.setRealName(user.getRealName());
-                    info.setTitle(user.getTitle());
-                    info.setCreateDate(LocalDate.now());
-                    info.setUserId(userId);
-                    if (user.getBirthday() != null)
-                        info.setBirthday(
-                                user.getBirthday());
-                    if (user.getHireDate() != null)
-                        info.setHireDate(
-                                user.getHireDate());
-                    infoRepository.save(info);
-                }
-                Set<Long> toRemove = null;
-                Set<Long> toAdd = null;
-                /**
-                 * Update department infomation of the user
-                 */
-                List<UserDepartment> ud = uDepartmentRepositoryrepository.findByUserId(userId);
-                @SuppressWarnings("null")
-                Set<Long> existedDepts = ud
-                        .stream()
-                        .map(UserDepartment::getDeptId)
-                        .collect(Collectors.toSet());
-                toRemove = new HashSet<>(existedDepts);
-                toRemove.removeAll(user.getDepartments());
-                toAdd = new HashSet<>(user.getDepartments());
-                toAdd.removeAll(existedDepts);
-                if (!toRemove.isEmpty()) {
-                    uDepartmentRepositoryrepository.deleteThroughUserIdAndDeptIds(userId, toRemove);
-                }
-                if (!toAdd.isEmpty()) {
-                    toAdd.stream().forEach(ele -> {
-                        uDepartmentRepositoryrepository.save(
-                                UserDepartment.builder()
-                                        .deptId(ele)
-                                        .userId(userId)
-                                        .build());
-                    });
-                }
+        boolean creating = userId == null || userId == 0;
+        boolean callerIsRoot = roleGuard.currentUserIsRoot();
 
-                List<Role> roles = roleRepository.findObjByValue(user.getRoleList());
-                List<UserRole> userRoles = userRoleRepository.findByUserId(userId);
-                if (roles != null && userRoles != null && !roles.isEmpty() && !userRoles.isEmpty()) {
-                    // 1. Resolve the latest roles to a Set of IDs (one query)
-                    @SuppressWarnings("null")
-                    Set<Long> latestIds = roles
-                            .stream()
-                            .map(Role::getId)
-                            .collect(Collectors.toSet());
-
-                    // 2. Resolve the current role IDs (one query)
-                    @SuppressWarnings("null")
-                    Set<Long> currentIds = userRoles
-                            .stream()
-                            .map(UserRole::getRoleId)
-                            .collect(Collectors.toSet());
-
-                    // 3. Compute the diff
-                    // toRemove = current - latest
-                    toRemove = new HashSet<>(currentIds);
-                    toRemove.removeAll(latestIds);
-
-                    // toAdd = latest - current
-                    toAdd = new HashSet<>(latestIds);
-                    toAdd.removeAll(currentIds);
-
-                    // 4. Bulk delete (one query)
-                    if (!toRemove.isEmpty()) {
-                        userRoleRepository.deleteByUserIdAndRoleIdIn(userId, toRemove);
-                    }
-
-                    // 5. Bulk insert (one query)
-                    if (!toAdd.isEmpty()) {
-                        List<UserRole> newLinks = toAdd.stream()
-                                .map(roleId -> {
-                                    UserRole ur = new UserRole();
-                                    ur.setUserId(userId);
-                                    ur.setRoleId(roleId);
-                                    return ur;
-                                })
-                                .toList();
-                        userRoleRepository.saveAll(newLinks);
-                    }
-                }
-
-                repository.save(injectUserDTO(user, userId));
-
-                return new SimpleResponse(200, "Successfully created");
+        // Resolve requested role codes up front so unknown codes are rejected.
+        List<Role> requestedRoles = null;
+        if (user.getRoleList() != null) {
+            List<Integer> codes = user.getRoleList().stream().filter(Objects::nonNull).distinct().toList();
+            requestedRoles = codes.isEmpty() ? List.of() : roleRepository.findObjByValue(codes);
+            if (requestedRoles.size() != codes.size()) {
+                return new SimpleResponse(400, "Unknown role");
             }
-        } catch (NullPointerException exception) {
-            log.error("Exeception on saving user ==> [UserManagementService]{}", exception);
-            throw new NullPointerException(exception.getLocalizedMessage());
         }
+        boolean requestsRoot = requestedRoles != null && requestedRoles.stream()
+                .anyMatch(r -> RoleGuard.ROOT_ROLE.equals(r.getRoleName()));
+        if (requestsRoot && !callerIsRoot) {
+            return new SimpleResponse(403, "Only ROOT can assign the ROOT role");
+        }
+
+        if (creating) {
+            if (user.getInitialPassword() == null || user.getInitialPassword().length() < 12) {
+                throw new IllegalArgumentException("Initial password must be at least 12 characters");
+            }
+            if (userRepository.existsByUsername(user.getName())) {
+                throw new DataIntegrityViolationException(message(Language_EN.USERNAME_DULICATED.getMessage(),
+                        Language_CN.USERNAME_DULICATED.getMessage()));
+            }
+            if (userRepository.existsByEmail(user.getEmail())) {
+                throw new DataIntegrityViolationException(message(Language_EN.EMAIL_DULICATED.getMessage(),
+                        Language_CN.EMAIL_DULICATED.getMessage()));
+            }
+            if (requestedRoles != null && !canAssign(requestedRoles.stream().map(Role::getId).toList())) {
+                return new SimpleResponse(403, "You cannot assign a role with permissions you do not hold");
+            }
+            User saved = repository.save(injectUserDTO(user, null));
+            UserInfo info = new UserInfo();
+            info.setUserId(saved.getId());
+            applyInfo(info, user);
+            infoRepository.save(info);
+            if (user.getDepartments() != null) {
+                new HashSet<>(user.getDepartments()).forEach(deptId -> uDepartmentRepositoryrepository.save(
+                        UserDepartment.builder().deptId(deptId).userId(saved.getId()).build()));
+            }
+            if (requestedRoles != null && !requestedRoles.isEmpty()) {
+                userRoleRepository.saveAll(requestedRoles.stream()
+                        .map(r -> newUserRole(saved.getId(), r.getId()))
+                        .toList());
+            }
+            return new SimpleResponse(200, "Successfully created");
+        }
+
+        User existing = userRepository.findById(userId).orElse(null);
+        if (existing == null) {
+            return new SimpleResponse(404, "User not found");
+        }
+        List<UserRole> userRoles = userRoleRepository.findByUserId(userId);
+        Set<Long> currentRoleIds = userRoles.stream().map(UserRole::getRoleId).collect(Collectors.toSet());
+        Long rootRoleId = roleRepository.findByRoleName(RoleGuard.ROOT_ROLE).map(Role::getId).orElse(null);
+        boolean targetIsRoot = userId == RoleGuard.ROOT_USER_ID
+                || (rootRoleId != null && currentRoleIds.contains(rootRoleId));
+        if (targetIsRoot && !callerIsRoot) {
+            return new SimpleResponse(403, "Only ROOT can modify a ROOT account");
+        }
+        if (userId == RoleGuard.ROOT_USER_ID) {
+            if ((requestedRoles != null && !requestsRoot)
+                    || (user.getIsEnabled() != null && user.getIsEnabled() != 1)
+                    || Boolean.FALSE.equals(user.getActive())) {
+                return new SimpleResponse(403, "The root account cannot be disabled or lose ROOT");
+            }
+        }
+        if (user.getName() != null && !user.getName().equals(existing.getUsername())
+                && userRepository.existsByUsername(user.getName())) {
+            throw new DataIntegrityViolationException(message(Language_EN.USERNAME_DULICATED.getMessage(),
+                    Language_CN.USERNAME_DULICATED.getMessage()));
+        }
+        if (user.getEmail() != null && !user.getEmail().equals(existing.getEmail())
+                && userRepository.existsByEmail(user.getEmail())) {
+            throw new DataIntegrityViolationException(message(Language_EN.EMAIL_DULICATED.getMessage(),
+                    Language_CN.EMAIL_DULICATED.getMessage()));
+        }
+
+        if (requestedRoles != null) {
+            List<Long> added = requestedRoles.stream().map(Role::getId)
+                    .filter(id -> !currentRoleIds.contains(id)).toList();
+            if (!canAssign(added)) {
+                return new SimpleResponse(403, "You cannot assign a role with permissions you do not hold");
+            }
+        }
+
+        UserInfo info = infoRepository.findByUserId(userId).orElseGet(UserInfo::new);
+        info.setUserId(userId);
+        applyInfo(info, user);
+        infoRepository.save(info);
+
+        if (user.getDepartments() != null) {
+            Set<Long> existedDepts = uDepartmentRepositoryrepository.findByUserId(userId).stream()
+                    .map(UserDepartment::getDeptId)
+                    .collect(Collectors.toSet());
+            Set<Long> latestDepts = new HashSet<>(user.getDepartments());
+            Set<Long> deptsToRemove = new HashSet<>(existedDepts);
+            deptsToRemove.removeAll(latestDepts);
+            Set<Long> deptsToAdd = new HashSet<>(latestDepts);
+            deptsToAdd.removeAll(existedDepts);
+            if (!deptsToRemove.isEmpty()) {
+                uDepartmentRepositoryrepository.deleteThroughUserIdAndDeptIds(userId, deptsToRemove);
+            }
+            deptsToAdd.forEach(deptId -> uDepartmentRepositoryrepository.save(
+                    UserDepartment.builder().deptId(deptId).userId(userId).build()));
+        }
+
+        if (requestedRoles != null) {
+            Set<Long> latestIds = requestedRoles.stream().map(Role::getId).collect(Collectors.toSet());
+            Set<Long> rolesToRemove = new HashSet<>(currentRoleIds);
+            rolesToRemove.removeAll(latestIds);
+            Set<Long> rolesToAdd = new HashSet<>(latestIds);
+            rolesToAdd.removeAll(currentRoleIds);
+            if (!rolesToRemove.isEmpty()) {
+                userRoleRepository.deleteByUserIdAndRoleIdIn(userId, rolesToRemove);
+            }
+            if (!rolesToAdd.isEmpty()) {
+                userRoleRepository.saveAll(rolesToAdd.stream().map(roleId -> newUserRole(userId, roleId)).toList());
+            }
+        }
+
+        String previousUsername = existing.getUsername();
+        User updated = injectUserDTO(user, existing);
+        boolean deactivated = updated.getIsEnabled() == null || updated.getIsEnabled() != 1
+                || Boolean.FALSE.equals(updated.getStatus());
+        boolean renamed = !previousUsername.equals(updated.getUsername());
+        if (deactivated || renamed) {
+            // Kill the live session immediately instead of waiting for token expiry.
+            updated.setCurrentSessionId(null);
+            refreshTokenStore.revoke(previousUsername);
+        }
+        repository.save(updated);
+
+        return new SimpleResponse(200, "Successfully updated");
     }
 
     /**
      * Soft-deletes a user by setting {@code isEnabled = 0}; the row is kept for
-     * audit history. The root user (id 1) cannot be deleted.
-     * 
+     * audit history. The root user (id 1) cannot be deleted, and only ROOT may
+     * delete another ROOT account. The user's session is revoked immediately.
+     *
      * @throws NoneDeleteableException
      */
     @Transactional
     @CacheEvict(cacheNames = "userQuery", allEntries = true)
     public SimpleResponse deleteUser(Long id) throws NoneDeleteableException {
-        if (id == 1L) {
-            if (language.getLanguage().equals("EN")) {
-                throw new NoneDeleteableException(Language_EN.CANT_DELETE_ROOT_USER.getMessage());
-            } else {
-                throw new NoneDeleteableException(Language_CN.CANT_DELETE_ROOT_USER.getMessage());
-            }
+        if (id == null) {
+            return new SimpleResponse(400, "User id is required");
         }
-        userRepository.updateIsEnabled(id, (byte) 0);
+        if (id == RoleGuard.ROOT_USER_ID) {
+            throw new NoneDeleteableException(message(Language_EN.CANT_DELETE_ROOT_USER.getMessage(),
+                    Language_CN.CANT_DELETE_ROOT_USER.getMessage()));
+        }
+        User target = userRepository.findById(id).orElse(null);
+        if (target == null) {
+            return new SimpleResponse(404, "User not found");
+        }
+        Long rootRoleId = roleRepository.findByRoleName(RoleGuard.ROOT_ROLE).map(Role::getId).orElse(null);
+        boolean targetIsRoot = rootRoleId != null && userRoleRepository.findByUserId(id).stream()
+                .anyMatch(ur -> rootRoleId.equals(ur.getRoleId()));
+        if (targetIsRoot && !roleGuard.currentUserIsRoot()) {
+            return new SimpleResponse(403, "Only ROOT can delete a ROOT account");
+        }
+        target.setIsEnabled((byte) 0);
+        target.setCurrentSessionId(null);
+        userRepository.save(target);
+        refreshTokenStore.revoke(target.getUsername());
         return new SimpleResponse(200, "successfully deleted");
     }
 
     /**
-     * Maps a {@link UserDTO} onto a {@link User} entity: loads and mutates the
-     * existing entity when {@code id != 0}, otherwise builds a fresh one with a
-     * default hashed password.
+     * Maps a {@link UserDTO} onto a {@link User} entity: mutates {@code existing}
+     * when present, otherwise builds a fresh enabled user with the hashed
+     * initial password.
      */
-    private User injectUserDTO(UserDTO user, Long id) {
-        if (id != 0) {
-            Optional<User> result = userRepository.findById(id);
-            result.get().setId(id);
-            result.get().setUsername(user.getName());
-            result.get().setDisplayName(user.getDisplayName());
-            result.get().setEmail(user.getEmail());
-            result.get().setStatus(user.getActive());
-            result.get().setIsEnabled(user.getIsEnabled());
-            return result.get();
-        } else {
-            User u = new User();
-            u.setUsername(user.getName());
-            u.setDisplayName(user.getDisplayName());
-            u.setEmail(user.getEmail());
-            u.setStatus(user.getActive());
-            u.setPassword(authenticationService.generatePass(user.getInitialPassword()));
-            u.setIsEnabled((byte) 1);
-            return u;
+    private User injectUserDTO(UserDTO user, User existing) {
+        if (existing != null) {
+            existing.setUsername(user.getName());
+            existing.setDisplayName(user.getDisplayName());
+            existing.setEmail(user.getEmail());
+            existing.setStatus(user.getActive());
+            if (user.getIsEnabled() != null) {
+                existing.setIsEnabled(user.getIsEnabled());
+            }
+            return existing;
         }
+        User u = new User();
+        u.setUsername(user.getName());
+        u.setDisplayName(user.getDisplayName());
+        u.setEmail(user.getEmail());
+        u.setStatus(user.getActive());
+        u.setPassword(authenticationService.generatePass(user.getInitialPassword()));
+        u.setIsEnabled((byte) 1);
+        return u;
+    }
 
+    private void applyInfo(UserInfo info, UserDTO user) {
+        info.setRealName(user.getRealName());
+        info.setTitle(user.getTitle());
+        if (info.getCreateDate() == null) {
+            info.setCreateDate(LocalDate.now());
+        }
+        if (user.getBirthday() != null)
+            info.setBirthday(user.getBirthday());
+        if (user.getHireDate() != null)
+            info.setHireDate(user.getHireDate());
+    }
+
+    /**
+     * A caller may only hand out roles whose permissions they hold themselves,
+     * otherwise anyone with user-management rights could escalate via roles.
+     */
+    private boolean canAssign(List<Long> roleIds) {
+        if (roleIds.isEmpty() || roleGuard.currentUserIsRoot()) {
+            return true;
+        }
+        return permissionChecker.hasAll(permissionRepository.findEnabledCodesByRoleIds(roleIds));
+    }
+
+    private UserRole newUserRole(Long userId, Long roleId) {
+        return new UserRole(null, userId, roleId, (byte) 1, LocalDate.now());
+    }
+
+    /** Localized message; falls back to English for any non-CN setting. */
+    private String message(String en, String cn) {
+        return "CN".equals(language.getLanguage()) ? cn : en;
     }
 
 }

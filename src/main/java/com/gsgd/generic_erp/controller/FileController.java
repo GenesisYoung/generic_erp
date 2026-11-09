@@ -3,6 +3,7 @@ package com.gsgd.generic_erp.controller;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +19,7 @@ import com.gsgd.generic_erp.util.SimpleResponse;
 import lombok.RequiredArgsConstructor;
 
 @RestController
+@PreAuthorize("isAuthenticated()")
 @RequestMapping("/api")
 @RequiredArgsConstructor
 public class FileController {

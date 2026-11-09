@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.admin;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,6 +36,7 @@ public class RoleController {
     }
 
     /** A page of roles (20 per page by default), newest last by id. */
+    @PreAuthorize("@perm.hasAny('menu.roleManagement.read', 'menu.userManagement.read')")
     @GetMapping("/fetch")
     public BasicPageResponse<Role, RoleDTO> fetchRoles(int page, int size) {
         BasicPage p = new BasicPage(page, size);
@@ -43,6 +45,7 @@ public class RoleController {
     }
 
     /** Creates a role (no id) or updates an existing one. */
+    @PreAuthorize("@perm.canSave('menu.roleManagement', #role.id)")
     @PostMapping("/save")
     public SimpleResponse save(@RequestBody RoleDTO role) {
         return service.saveOrUpdate(role);
@@ -54,6 +57,7 @@ public class RoleController {
      * can show the reason without tripping the axios refresh-and-retry path that
      * fires on non-2xx responses.
      */
+    @PreAuthorize("@perm.has('menu.roleManagement.delete')")
     @DeleteMapping("/delete/{id}")
     public SimpleResponse delete(@PathVariable Long id) {
         try {
@@ -64,6 +68,7 @@ public class RoleController {
     }
 
     /** A page of permissions flagged with whether this role holds each one. */
+    @PreAuthorize("@perm.has('menu.roleManagement.read')")
     @GetMapping("/{roleId}/permissions")
     public BasicPageResponse<Permission, PermissionAccessDTO> permissionsForRole(@PathVariable Long roleId,
             int page, int size) {
@@ -73,6 +78,7 @@ public class RoleController {
     }
 
     /** Grants or revokes a single permission for a role. */
+    @PreAuthorize("@perm.has('menu.roleManagement.update')")
     @PostMapping("/permission")
     public SimpleResponse setPermission(@RequestBody RolePermissionRequest request) {
         return service.setRolePermission(request.roleId(), request.permissionId(), request.granted());

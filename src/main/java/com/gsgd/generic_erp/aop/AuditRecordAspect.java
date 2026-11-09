@@ -120,10 +120,8 @@ public class AuditRecordAspect {
     private String clientIp() {
         if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attrs) {
             HttpServletRequest request = attrs.getRequest();
-            String forwarded = request.getHeader("X-Forwarded-For");
-            if (forwarded != null && !forwarded.isBlank()) {
-                return forwarded.split(",")[0].trim();
-            }
+            // X-Forwarded-For is client-controlled; behind a trusted proxy enable
+            // server.forward-headers-strategy so getRemoteAddr() reflects the real client.
             return request.getRemoteAddr();
         }
         return null;

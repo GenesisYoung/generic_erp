@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.gsgd.generic_erp.configuration.security.PermissionChecker;
 import com.gsgd.generic_erp.dto.PermissionAccessDTO;
 import com.gsgd.generic_erp.dto.PermissionRegistrationDTO;
 import com.gsgd.generic_erp.dto.UserAccessDTO;
@@ -52,16 +53,18 @@ public class MenuAccessService {
     private final PermissionRepository permissionRepository;
     private final MenuRegisteredPermissionRecordRepository registeredPermissionRepository;
     private final PagePermissinApprovalRecordRepository approvalRepository;
+    private final PermissionChecker permissionChecker;
 
     public MenuAccessService(UserNavMenuRepository userNavMenuRepository, UserRepository userRepository,
             PermissionRepository permissionRepository,
             MenuRegisteredPermissionRecordRepository registeredPermissionRepository,
-            PagePermissinApprovalRecordRepository approvalRepository) {
+            PagePermissinApprovalRecordRepository approvalRepository, PermissionChecker permissionChecker) {
         this.userNavMenuRepository = userNavMenuRepository;
         this.userRepository = userRepository;
         this.permissionRepository = permissionRepository;
         this.registeredPermissionRepository = registeredPermissionRepository;
         this.approvalRepository = approvalRepository;
+        this.permissionChecker = permissionChecker;
     }
 
     /**
@@ -145,6 +148,17 @@ public class MenuAccessService {
         List<PagePermissionApprovalsRecord> rows = approvalRepository.findByUserIdAndMenuIdAndPermissionId(userId,
                 navId, permissionId);
         if (granted) {
+            // Approvals become API authorities, so the permission must be registered on
+            // this menu and held by the caller (no granting what you do not have).
+            boolean registered = !registeredPermissionRepository.findByMenuIdAndPermissionId(navId, permissionId)
+                    .isEmpty();
+            Permission permission = permissionRepository.findById(permissionId).orElse(null);
+            if (!registered || permission == null) {
+                return new SimpleResponse(404, "Permission is not registered on this menu");
+            }
+            if (!permissionChecker.has(permission.getPermissionCode())) {
+                return new SimpleResponse(403, "You cannot grant a permission you do not hold");
+            }
             if (rows.isEmpty()) {
                 approvalRepository
                         .save(new PagePermissionApprovalsRecord(null, userId, permissionId, navId, (byte) 1, null));

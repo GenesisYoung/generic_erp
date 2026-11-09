@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.admin;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,12 +32,15 @@ class UserManagementController {
     }
 
     /** Returns a page of users mapped to {@link UserDTO}. */
+    // The permission-allocation screens pick users from this list too.
+    @PreAuthorize("@perm.hasAny('menu.userManagement.read', 'menu.permissionManagement.read')")
     @GetMapping("/user/fetch")
     public BasicPageResponse<User, UserDTO> fetchUsers(Pageable pageable) {
         return service.fetchUserList(pageable);
     }
 
     /** Returns a single user's detail. TODO: not yet implemented. */
+    @PreAuthorize("@perm.has('menu.userManagement.read')")
     @RequestMapping(path = "/user/detail", method = RequestMethod.GET)
     public String fetchUserDetail(@RequestParam String id) {
         return new String();
@@ -45,6 +49,7 @@ class UserManagementController {
     /**
      * Creates a new user, or updates an existing one when the DTO carries an id.
      */
+    @PreAuthorize("@perm.canSave('menu.userManagement', #user.id)")
     @RequestMapping(path = "/users")
     public SimpleResponse saveOrUpdate(@RequestBody UserDTO user) {
         return service.saveOrUpdate(user.getId(), user);
@@ -55,6 +60,7 @@ class UserManagementController {
      * 
      * @throws NoneDeleteableException
      */
+    @PreAuthorize("@perm.has('menu.userManagement.delete')")
     @RequestMapping(path = "/delete/{id}", method = RequestMethod.DELETE)
     public SimpleResponse deleteUser(@PathVariable Long id) throws NoneDeleteableException {
         return service.deleteUser(id);

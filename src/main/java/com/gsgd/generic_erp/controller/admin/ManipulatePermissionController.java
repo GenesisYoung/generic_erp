@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.admin;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,6 +28,7 @@ public class ManipulatePermissionController {
     }
 
     /** Grant or revoke a user's baseline access to a menu. */
+    @PreAuthorize("@perm.has('menu.permissionManagement.update')")
     @PostMapping("/user")
     public SimpleResponse setUserAccess(@RequestBody UserAccessRequest request) {
         return service.setUserAccess(request.navId(), request.userId(), request.granted());
@@ -34,6 +36,7 @@ public class ManipulatePermissionController {
     }
 
     /** Grant or revoke one permission for a user, scoped to a menu. */
+    @PreAuthorize("@perm.has('menu.permissionManagement.update')")
     @PostMapping("/permission")
     public SimpleResponse setPermissionAccess(@RequestBody PermissionAccessRequest request) {
         return service.setPermissionAccess(request.navId(), request.userId(), request.permissionId(),
@@ -42,6 +45,7 @@ public class ManipulatePermissionController {
     }
 
     /** Register or de-register a permission against a menu. */
+    @PreAuthorize("@perm.has('menu.permissionManagement.update')")
     @PostMapping("/registration")
     public SimpleResponse setPermissionRegistration(@RequestBody PermissionRegistrationRequest request) {
         return service.setPermissionRegistration(request.navId(), request.permissionId(),
@@ -49,6 +53,7 @@ public class ManipulatePermissionController {
 
     }
 
+    @PreAuthorize("@perm.has('menu.permissionManagement.read')")
     @GetMapping("/defaults")
     public String getMethodName(@RequestParam String param) {
         return new String();
