@@ -40,6 +40,9 @@ public class UserRole {
     @Column(name = "role_id", nullable = false)
     private Long roleId;
 
+    @Column(name = "user_enabled", nullable = false)
+    private Byte userEnabled;
+
     @Column(name = "create_date")
     private LocalDate createDate;
 }

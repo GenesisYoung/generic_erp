@@ -29,4 +29,7 @@ public interface PermissionRepository extends JpaRepository<Permission, Long>, J
     @NativeQuery("UPDATE permission_tb p SET p.is_enabled=0 WHERE p.id = ?1")
     void disable(Long id);
 
+    @NativeQuery("SELECT * FROM permission_tb p WHERE p.is_enabled = 1")
+    List<Permission> findExists();
+
 }

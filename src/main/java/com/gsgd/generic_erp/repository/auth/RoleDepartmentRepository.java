@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 
 import com.gsgd.generic_erp.entity.auth.RoleDepartment;
 
@@ -18,6 +19,7 @@ public interface RoleDepartmentRepository extends JpaRepository<RoleDepartment, 
 
     List<RoleDepartment> findByRoleId(Long roleId);
 
+    @Query("SELECT r.id FROM RoleDepartment r WHERE r.roleId = :roleId AND r.departmentId = :departmentId")
     boolean existsByRoleIdAndDepartmentId(Long roleId, Long departmentId);
 
     @Modifying

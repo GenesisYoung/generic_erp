@@ -33,6 +33,9 @@ public class MenuRegisteredPermissionsRecord {
     @Column(name = "permission_id", nullable = false)
     private Long permissionId;
 
+    @Column(name = "permission_enabled", nullable = false)
+    private Byte permissionEnabled;
+
     @Column(name = "create_date", nullable = false, insertable = false, updatable = false)
     private LocalDateTime createDate;
 }

@@ -36,6 +36,9 @@ public class PagePermissionApprovalsRecord {
     @Column(name = "menu_id", nullable = false)
     private Long menuId;
 
+    @Column(name = "permission_enabled", nullable = false)
+    private Byte permissionEnabled;
+
     @Column(name = "create_date", nullable = false, insertable = false, updatable = false)
     private LocalDateTime createDate;
 }

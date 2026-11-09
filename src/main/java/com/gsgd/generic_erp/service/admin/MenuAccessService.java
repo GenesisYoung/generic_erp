@@ -64,7 +64,10 @@ public class MenuAccessService {
         this.approvalRepository = approvalRepository;
     }
 
-    /** Every enabled user, flagged with whether they hold direct access to this menu. */
+    /**
+     * Every enabled user, flagged with whether they hold direct access to this
+     * menu.
+     */
     public List<UserAccessDTO> listUsersForMenu(Long navId) {
         Set<Long> grantedUserIds = userNavMenuRepository.findByNavIdAndIsEnabledTrue(navId).stream()
                 .map(UserNavMenu::getUserId)
@@ -133,14 +136,18 @@ public class MenuAccessService {
         return new SimpleResponse(200, "");
     }
 
-    /** Grants or revokes a single permission approval for a user on a menu (idempotent). */
+    /**
+     * Grants or revokes a single permission approval for a user on a menu
+     * (idempotent).
+     */
     @Transactional
     public SimpleResponse setPermissionAccess(Long navId, Long userId, Long permissionId, boolean granted) {
         List<PagePermissionApprovalsRecord> rows = approvalRepository.findByUserIdAndMenuIdAndPermissionId(userId,
                 navId, permissionId);
         if (granted) {
             if (rows.isEmpty()) {
-                approvalRepository.save(new PagePermissionApprovalsRecord(null, userId, permissionId, navId, null));
+                approvalRepository
+                        .save(new PagePermissionApprovalsRecord(null, userId, permissionId, navId, (byte) 1, null));
             }
         } else if (!rows.isEmpty()) {
             approvalRepository.deleteAll(rows);
@@ -155,7 +162,7 @@ public class MenuAccessService {
         Set<Long> registeredPermissionIds = registeredPermissionRepository.findByMenuId(navId).stream()
                 .map(MenuRegisteredPermissionsRecord::getPermissionId)
                 .collect(Collectors.toSet());
-        return permissionRepository.findAll().stream()
+        return permissionRepository.findExists().stream()
                 .sorted(Comparator.comparing(Permission::getPermissionCode, String.CASE_INSENSITIVE_ORDER))
                 .map(p -> new PermissionRegistrationDTO(p.getId(), p.getPermissionCode(),
                         registeredPermissionIds.contains(p.getId())))
@@ -174,8 +181,9 @@ public class MenuAccessService {
                 .findByMenuIdAndPermissionId(navId, permissionId);
         if (registered) {
             if (rows.isEmpty()) {
-                registeredPermissionRepository.save(new MenuRegisteredPermissionsRecord(null, navId, permissionId,
-                        null));
+                registeredPermissionRepository
+                        .save(new MenuRegisteredPermissionsRecord(null, navId, permissionId, (byte) 1,
+                                null));
             }
         } else {
             if (!rows.isEmpty()) {

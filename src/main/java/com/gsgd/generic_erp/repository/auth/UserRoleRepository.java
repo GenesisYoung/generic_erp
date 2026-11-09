@@ -24,6 +24,7 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
 
     List<UserRole> findByUserId(Long userId);
 
+    @Query("SELECT u FROM UserRole u WHERE u.roleId = :roleId AND u.userEnabled=1")
     List<UserRole> findByRoleId(Long roleId);
 
     boolean existsByUserIdAndRoleId(Long userId, Long roleId);

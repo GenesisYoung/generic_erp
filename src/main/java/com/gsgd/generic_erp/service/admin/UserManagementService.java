@@ -183,7 +183,7 @@ public class UserManagementService {
                  */
                 for (Integer role : user.getRoleList()) {
                     Long id = roleRepository.getIdByVal(role);
-                    userRoleRepository.save(new UserRole(null, saved.getId(), id, LocalDate.now()));
+                    userRoleRepository.save(new UserRole(null, saved.getId(), id, (byte) 1, LocalDate.now()));
                 }
                 return new SimpleResponse(200, "Successfully created");
             } else {
