@@ -34,7 +34,9 @@ import com.gsgd.generic_erp.entity.auth.UserInfo;
 import com.gsgd.generic_erp.entity.auth.UserRole;
 import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.enums.Language_EN;
+import com.gsgd.generic_erp.repository.admin.PagePermissinApprovalRecordRepository;
 import com.gsgd.generic_erp.repository.admin.PermissionRepository;
+import com.gsgd.generic_erp.repository.admin.UserNavMenuRepository;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
 import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
@@ -65,6 +67,8 @@ public class UserManagementService {
     private final RefreshTokenStore refreshTokenStore;
     private final PermissionChecker permissionChecker;
     private final PermissionRepository permissionRepository;
+    private final UserNavMenuRepository userNavMenuRepository;
+    private final PagePermissinApprovalRecordRepository approvalRecordRepository;
     private final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     public UserManagementService(UserRepository repository, RoleRepository roleRepository,
@@ -72,7 +76,8 @@ public class UserManagementService {
             AuthenticationImpl aService, Language language, UserInfoRepository infoRepository,
             UserDepartmentRepository userDepartmentRepository, RoleGuard roleGuard,
             RefreshTokenStore refreshTokenStore, PermissionChecker permissionChecker,
-            PermissionRepository permissionRepository) {
+            PermissionRepository permissionRepository, UserNavMenuRepository userNavMenuRepository,
+            PagePermissinApprovalRecordRepository approvalRecordRepository) {
         this.repository = repository;
         this.roleRepository = roleRepository;
         this.userRoleRepository = userRoleRepository;
@@ -86,6 +91,8 @@ public class UserManagementService {
         this.refreshTokenStore = refreshTokenStore;
         this.permissionChecker = permissionChecker;
         this.permissionRepository = permissionRepository;
+        this.userNavMenuRepository = userNavMenuRepository;
+        this.approvalRecordRepository = approvalRecordRepository;
     }
 
     /**
@@ -291,8 +298,10 @@ public class UserManagementService {
     }
 
     /**
-     * Soft-deletes a user by setting {@code isEnabled = 0}; the row is kept for
-     * audit history. The root user (id 1) cannot be deleted, and only ROOT may
+     * Soft-deletes a user by setting {@code isEnabled = 0}; the row (and its
+     * {@code user_info_tb} profile and login logs) is kept for audit history.
+     * Every access binding is removed: role links, department links, direct
+     * menu grants and per-menu permission approvals. The root user (id 1) cannot be deleted, and only ROOT may
      * delete another ROOT account. The user's session is revoked immediately.
      *
      * @throws NoneDeleteableException
@@ -317,6 +326,14 @@ public class UserManagementService {
         if (targetIsRoot && !roleGuard.currentUserIsRoot()) {
             return new SimpleResponse(403, "Only ROOT can delete a ROOT account");
         }
+        // Unbind everything that grants the user access, so a disabled user holds
+        // no roles, departments, menus or approvals (and stops showing up in
+        // role/department member lists).
+        userRoleRepository.deleteByUserId(id);
+        uDepartmentRepositoryrepository.deleteByUserId(id);
+        userNavMenuRepository.deleteByUserId(id);
+        approvalRecordRepository.deleteByUserId(id);
+
         target.setIsEnabled((byte) 0);
         target.setCurrentSessionId(null);
         userRepository.save(target);

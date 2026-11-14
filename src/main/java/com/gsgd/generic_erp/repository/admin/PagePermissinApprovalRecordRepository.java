@@ -5,6 +5,9 @@ import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.gsgd.generic_erp.entity.auth.PagePermissionApprovalsRecord;
 
@@ -29,4 +32,9 @@ public interface PagePermissinApprovalRecordRepository
 
     /** Every user's approval of one permission for one menu — cleared when the permission is de-registered. */
     List<PagePermissionApprovalsRecord> findByMenuIdAndPermissionId(Long menuId, Long permissionId);
+
+    /** Removes every permission approval held by a user; used when the user is deleted. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM PagePermissionApprovalsRecord r WHERE r.userId = :userId")
+    int deleteByUserId(@Param("userId") Long userId);
 }

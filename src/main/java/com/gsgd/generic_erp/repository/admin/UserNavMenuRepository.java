@@ -26,6 +26,12 @@ public interface UserNavMenuRepository extends JpaRepository<UserNavMenu, Long>,
     @NativeQuery("DELETE FROM user_nav_menu WHERE nav_id IN (:navIds)")
     int deleteByNavIds(@Param("navIds") Collection<Long> navIds);
 
+    /** Removes every direct menu grant held by a user; used when the user is deleted. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @NativeQuery("DELETE FROM user_nav_menu WHERE user_id = :userId")
+    int deleteByUserId(@Param("userId") Long userId);
+
     /** Every enabled grant for a menu, across all users. */
     List<UserNavMenu> findByNavIdAndIsEnabledTrue(Long navId);
 

@@ -27,7 +27,9 @@ import com.gsgd.generic_erp.entity.auth.Permission;
 import com.gsgd.generic_erp.entity.auth.Role;
 import com.gsgd.generic_erp.entity.auth.User;
 import com.gsgd.generic_erp.entity.auth.UserRole;
+import com.gsgd.generic_erp.repository.admin.PagePermissinApprovalRecordRepository;
 import com.gsgd.generic_erp.repository.admin.PermissionRepository;
+import com.gsgd.generic_erp.repository.admin.UserNavMenuRepository;
 import com.gsgd.generic_erp.repository.auth.RoleDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.RolePermissionRepository;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
@@ -62,7 +64,8 @@ class PrivilegeEscalationTest {
         when(roles.findByRoleName("ROOT")).thenReturn(Optional.of(ROOT));
         userService = new UserManagementService(users, roles, userRoles, users, mock(AuthenticationImpl.class),
                 mock(Language.class), mock(UserInfoRepository.class), mock(UserDepartmentRepository.class), guard,
-                mock(RefreshTokenStore.class), checker, permissions);
+                mock(RefreshTokenStore.class), checker, permissions, mock(UserNavMenuRepository.class),
+                mock(PagePermissinApprovalRecordRepository.class));
         roleService = new RoleManagementService(roles, userRoles, permissions,
                 mock(RolePermissionRepository.class), mock(RoleDepartmentRepository.class), users, guard, checker);
         authenticateAs("ADMIN", "menu.roleManagement", "menu.userManagement");
