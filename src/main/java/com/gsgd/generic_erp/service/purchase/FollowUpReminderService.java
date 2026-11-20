@@ -1,0 +1,207 @@
+package com.gsgd.generic_erp.service.purchase;
+
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.gsgd.generic_erp.entity.purchase.FollowUpCheckpoint;
+import com.gsgd.generic_erp.entity.purchase.FollowUpRule;
+import com.gsgd.generic_erp.entity.purchase.PurchaseOrder;
+import com.gsgd.generic_erp.enums.CheckpointStatus;
+import com.gsgd.generic_erp.enums.FollowUpStage;
+import com.gsgd.generic_erp.enums.NotifactionPriority;
+import com.gsgd.generic_erp.enums.NotificationType;
+import com.gsgd.generic_erp.enums.PurchaseOrderStatus;
+import com.gsgd.generic_erp.repository.purchase.CheckpointAndOrder;
+import com.gsgd.generic_erp.repository.purchase.FollowUpCheckpointRepository;
+import com.gsgd.generic_erp.repository.purchase.FollowUpRuleRepository;
+import com.gsgd.generic_erp.repository.purchase.PurchaseOrderRepository;
+import com.gsgd.generic_erp.service.notification.NotificationRecipientResolver;
+import com.gsgd.generic_erp.service.notification.NotificationRequestedEvent;
+
+import lombok.RequiredArgsConstructor;
+
+/**
+ * The three passes the hourly follow-up job runs, in this order:
+ * <ol>
+ * <li><b>Missed.</b> OPEN checkpoints whose window ended before today become
+ * MISSED. Each purchaser gets one summary, and every {@code purchaser_manager}
+ * gets one summary of all missed follow-ups.</li>
+ * <li><b>Overdue.</b> An active order that has run past the last day of its
+ * rule, and has no window reaching today, gets a new OVERDUE checkpoint
+ * covering today ({@code overdue_period_days} long, 1 day in the default rule;
+ * none when the rule leaves it empty).</li>
+ * <li><b>Due.</b> OPEN checkpoints whose window contains today and that were
+ * never reminded: each purchaser gets one summary, then {@code reminded_at}
+ * is set.</li>
+ * </ol>
+ * Every pass only touches rows still in the state it looks for, so running the
+ * job twice in an hour sends nothing new. Notifications go out only after the
+ * transaction commits (see {@code NotificationDispatcher}).
+ */
+@Service
+@RequiredArgsConstructor
+public class FollowUpReminderService {
+
+    private static final Logger log = LoggerFactory.getLogger(FollowUpReminderService.class);
+
+    static final String MANAGER_ROLE = "purchaser_manager";
+    static final String BIZ_TYPE = "PURCHASE_ORDER";
+    /** How many order numbers a summary lists before "and N more". */
+    static final int LIST_LIMIT = 10;
+    private static final List<PurchaseOrderStatus> ACTIVE = List.of(PurchaseOrderStatus.PLACED,
+            PurchaseOrderStatus.PARTIALLY_RECEIVED);
+
+    private final FollowUpCheckpointRepository checkpointRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
+    private final FollowUpRuleRepository ruleRepository;
+    private final FollowUpRuleService ruleService;
+    private final NotificationRecipientResolver recipientResolver;
+    private final ApplicationEventPublisher events;
+    private final Clock clock;
+
+    public record RunResult(int missed, int overdueCreated, int reminded) {
+    }
+
+    @Transactional
+    public RunResult runOnce() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDate today = now.toLocalDate();
+        int missed = markMissed(today);
+        int overdue = createOverdueWindows(today, now);
+        int reminded = remindDue(today, now);
+        return new RunResult(missed, overdue, reminded);
+    }
+
+    int markMissed(LocalDate today) {
+        List<CheckpointAndOrder> rows = checkpointRepository.findOpenEndedBefore(today);
+        if (rows.isEmpty()) {
+            return 0;
+        }
+        rows.forEach(r -> r.checkpoint().setStatus(CheckpointStatus.MISSED));
+        checkpointRepository.saveAll(rows.stream().map(CheckpointAndOrder::checkpoint).toList());
+
+        byPurchaser(rows).forEach((purchaserId, list) -> events.publishEvent(NotificationRequestedEvent.of(
+                NotificationType.FOLLOWUP_MISSED, NotifactionPriority.HIGH,
+                list.size() == 1 ? "1 follow-up was missed" : list.size() + " follow-ups were missed",
+                "No follow-up was saved in time for: " + summary(list),
+                BIZ_TYPE, singleOrderId(list), Set.of(purchaserId))));
+
+        Set<Long> managers = recipientResolver.usersWithRoles(List.of(MANAGER_ROLE));
+        if (!managers.isEmpty()) {
+            events.publishEvent(NotificationRequestedEvent.of(
+                    NotificationType.FOLLOWUP_MISSED, NotifactionPriority.HIGH,
+                    rows.size() == 1 ? "1 follow-up was missed" : rows.size() + " follow-ups were missed",
+                    "Missed follow-ups: " + summary(rows) + unassignedNote(rows),
+                    BIZ_TYPE, singleOrderId(rows), managers));
+        }
+        return rows.size();
+    }
+
+    int createOverdueWindows(LocalDate today, LocalDateTime now) {
+        List<PurchaseOrder> orders = purchaseOrderRepository.findWithoutWindowReaching(ACTIVE, today);
+        Map<Long, Integer> periodByRule = new LinkedHashMap<>();
+        List<FollowUpCheckpoint> created = new ArrayList<>();
+        for (PurchaseOrder po : orders) {
+            int lastDay = FollowUpPlanBuilder.lastDay(ruleService.stagesOf(po.getFollowupRuleId()));
+            long day = ChronoUnit.DAYS.between(po.getOrderDate(), today);
+            if (day <= lastDay) {
+                continue; // still inside the planned stages
+            }
+            int period = periodByRule.computeIfAbsent(po.getFollowupRuleId(), this::overduePeriodDays);
+            if (period == 0) {
+                continue; // the rule asks for no follow-up after its last stage
+            }
+            created.add(FollowUpCheckpoint.builder()
+                    .purchaseOrderId(po.getId())
+                    .stage(FollowUpStage.OVERDUE)
+                    .seq(checkpointRepository.maxSeq(po.getId()) + 1)
+                    .windowStart(today)
+                    .windowEnd(today.plusDays(period - 1L))
+                    .status(CheckpointStatus.OPEN)
+                    .createdAt(now)
+                    .build());
+        }
+        checkpointRepository.saveAll(created);
+        return created.size();
+    }
+
+    int remindDue(LocalDate today, LocalDateTime now) {
+        List<CheckpointAndOrder> rows = checkpointRepository.findDueNotReminded(today);
+        if (rows.isEmpty()) {
+            return 0;
+        }
+        rows.forEach(r -> r.checkpoint().setRemindedAt(now));
+        checkpointRepository.saveAll(rows.stream().map(CheckpointAndOrder::checkpoint).toList());
+
+        Map<Long, List<CheckpointAndOrder>> byPurchaser = byPurchaser(rows);
+        byPurchaser.forEach((purchaserId, list) -> events.publishEvent(NotificationRequestedEvent.of(
+                NotificationType.FOLLOWUP_DUE, NotifactionPriority.NORMAL,
+                list.size() == 1 ? "1 follow-up is due" : list.size() + " follow-ups are due",
+                "Please follow up on: " + summary(list),
+                BIZ_TYPE, singleOrderId(list), Set.of(purchaserId))));
+
+        long unassigned = rows.stream().filter(r -> r.order().getPurchaserId() == null).count();
+        if (unassigned > 0) {
+            log.warn("{} due follow-ups belong to orders with no purchaser; map their buyer codes in legacy_user_map_tb",
+                    unassigned);
+        }
+        return rows.size();
+    }
+
+    /**
+     * Length of each OVERDUE window for a rule. 0 when the rule has
+     * {@code overdue_period_days} empty (no follow-up after its last stage).
+     * An order with no rule, or a rule that no longer exists, gets the built-in
+     * default of 1 (daily).
+     */
+    int overduePeriodDays(Long ruleId) {
+        if (ruleId == null) {
+            return 1;
+        }
+        return ruleRepository.findById(ruleId)
+                .map(rule -> rule.getOverduePeriodDays() == null ? 0 : Math.max(rule.getOverduePeriodDays(), 1))
+                .orElse(1);
+    }
+
+    /** Rows grouped by purchaser in query order; orders with no purchaser are left out. */
+    private static Map<Long, List<CheckpointAndOrder>> byPurchaser(List<CheckpointAndOrder> rows) {
+        return rows.stream()
+                .filter(r -> r.order().getPurchaserId() != null)
+                .collect(Collectors.groupingBy(r -> r.order().getPurchaserId(), LinkedHashMap::new,
+                        Collectors.toList()));
+    }
+
+    /** "PO1 (by 11-21), PO2 (by 11-22) and 3 more". */
+    static String summary(List<CheckpointAndOrder> rows) {
+        String shown = rows.stream().limit(LIST_LIMIT)
+                .map(r -> r.order().getExternalPoNo() + " (by " + r.checkpoint().getWindowEnd() + ")")
+                .collect(Collectors.joining(", "));
+        int more = rows.size() - LIST_LIMIT;
+        return more > 0 ? shown + " and " + more + " more" : shown;
+    }
+
+    private static String unassignedNote(List<CheckpointAndOrder> rows) {
+        long n = rows.stream().filter(r -> r.order().getPurchaserId() == null).count();
+        return n == 0 ? "" : ". " + n + " of them belong to orders with no purchaser yet";
+    }
+
+    /** The order id when every row is the same order, so a click can open it; otherwise null. */
+    private static Long singleOrderId(List<CheckpointAndOrder> rows) {
+        Set<Long> ids = rows.stream().map(r -> r.order().getId()).collect(Collectors.toSet());
+        return ids.size() == 1 ? ids.iterator().next() : null;
+    }
+}
