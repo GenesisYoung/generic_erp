@@ -22,7 +22,6 @@ import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
-import com.gsgd.generic_erp.util.GlobalVariable;
 import com.gsgd.generic_erp.util.LoginRateLimiter;
 
 class AuthenticationServiceTest {
@@ -37,14 +36,11 @@ class AuthenticationServiceTest {
         jwt = mock(JWTUtil.class);
         users = mock(UserRepository.class);
         tokens = mock(RefreshTokenStore.class);
-        GlobalVariable language = mock(GlobalVariable.class);
-        when(language.getDEFAULT_LANGUAGE()).thenReturn("EN");
         service = new AuthenticationService(
                 mock(AuthenticationManager.class),
                 jwt,
                 users,
                 mock(LoginLogRepository.class),
-                language,
                 tokens,
                 mock(UserInfoRepository.class),
                 mock(UserDepartmentRepository.class),

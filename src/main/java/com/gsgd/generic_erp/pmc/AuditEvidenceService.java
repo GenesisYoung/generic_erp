@@ -42,17 +42,17 @@ public class AuditEvidenceService {
         var a = access.actor();
         access.lockActor(a);
         var t = tasks.detail(taskId);
-        require(access.executes(t, a) || a.id().equals(t.createdBy), 403, "FORBIDDEN", "不能向该任务上传凭证");
+        require(access.executes(t, a) || a.id().equals(t.createdBy), 403, "FORBIDDEN", "audit.error.cannotUploadToTask");
         require(access.can("update") || access.can("submit") || access.can("verify") || access.can("rules.configure")
                 || access.can("rules.approve") || access.can("approve") || access.can("confirm")
-                || access.can("change.request"), 403, "FORBIDDEN", "没有凭证上传权限");
-        require(key != null && key.matches("[a-zA-Z0-9-]{16,100}"), 400, "IDEMPOTENCY_KEY_REQUIRED", "请提供有效幂等键");
+                || access.can("change.request"), 403, "FORBIDDEN", "audit.error.noUploadPermission");
+        require(key != null && key.matches("[a-zA-Z0-9-]{16,100}"), 400, "IDEMPOTENCY_KEY_REQUIRED", "audit.error.idempotencyKeyRequired");
         require(file != null && !file.isEmpty() && file.getSize() <= 20 * 1024 * 1024, 422, "INVALID_FILE",
-                "凭证须为非空且不超过20MB的文件");
-        purpose = AuditService.text(purpose, 1000, true, "凭证用途");
-        String name = AuditService.text(file.getOriginalFilename(), 128, true, "文件名");
+                "audit.error.evidenceFileSize");
+        purpose = AuditService.text(purpose, 1000, true, "audit.field.evidencePurpose");
+        String name = AuditService.text(file.getOriginalFilename(), 128, true, "audit.field.fileName");
         require(!name.contains("/") && !name.contains("\\") && name.chars().noneMatch(c -> c < 32), 422,
-                "INVALID_FILENAME", "文件名不合法");
+                "INVALID_FILENAME", "audit.error.invalidFileName");
         byte[] bytes = file.getBytes();
         String ext = extension(name, bytes);
         String fingerprint;
@@ -66,7 +66,7 @@ public class AuditEvidenceService {
         String id = UUID.nameUUIDFromBytes((a.id() + ":" + key).getBytes(StandardCharsets.UTF_8)).toString();
         var old = evidence.findById(id);
         if (old.isPresent()) {
-            require(old.get().requestHash.equals(fingerprint), 409, "IDEMPOTENCY_CONFLICT", "同一上传幂等键不可用于不同内容");
+            require(old.get().requestHash.equals(fingerprint), 409, "IDEMPOTENCY_CONFLICT", "audit.error.uploadKeyReused");
             return receipt(old.get());
         }
         AuditService.version(lockVersion, t);
@@ -129,13 +129,13 @@ public class AuditEvidenceService {
         if (n.endsWith(".txt")) {
             try {
                 StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(b));
-                require(new String(b, StandardCharsets.UTF_8).indexOf('\0') < 0, 422, "INVALID_FILE", "文本文件含无效字符");
+                require(new String(b, StandardCharsets.UTF_8).indexOf('\0') < 0, 422, "INVALID_FILE", "audit.error.textInvalidChars");
                 return ".txt";
             } catch (java.nio.charset.CharacterCodingException ex) {
-                throw new AuditException(422, "INVALID_FILE", "文本须使用UTF-8编码");
+                throw new AuditException(422, "INVALID_FILE", "audit.error.textNotUtf8");
             }
         }
-        throw new AuditException(422, "INVALID_FILE", "首版只接受内容匹配的PDF、PNG、JPEG或UTF-8文本凭证");
+        throw new AuditException(422, "INVALID_FILE", "audit.error.unsupportedFileType");
     }
 
     public record Download(FileSystemResource resource, String fileName) {
@@ -146,11 +146,11 @@ public class AuditEvidenceService {
             return personal.downloadForTask(taskId, ref);
         tasks.detail(taskId);
         String id = ref.startsWith("audit:") ? ref.substring(6) : ref;
-        var e = evidence.findById(id).orElseThrow(() -> new AuditException(404, "NOT_FOUND", "凭证不存在"));
-        require(e.taskId.equals(taskId), 404, "NOT_FOUND", "凭证不属于本任务");
+        var e = evidence.findById(id).orElseThrow(() -> new AuditException(404, "NOT_FOUND", "audit.error.evidenceNotFound"));
+        require(e.taskId.equals(taskId), 404, "NOT_FOUND", "audit.error.evidenceNotThisTask");
         Path actualRoot = root.toRealPath(), file = actualRoot.resolve(e.storageKey).normalize();
         require(file.startsWith(actualRoot) && Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
-                && file.toRealPath().startsWith(actualRoot), 404, "NOT_FOUND", "凭证文件不可用");
+                && file.toRealPath().startsWith(actualRoot), 404, "NOT_FOUND", "audit.error.evidenceFileUnavailable");
         return new Download(new FileSystemResource(file), e.fileName);
     }
 }

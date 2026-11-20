@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.notification;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.util.Map;
 
 import org.springframework.data.domain.Page;
@@ -47,7 +48,7 @@ public class NotificationController {
         BasicPage p = new BasicPage(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE));
         p.defineSort(Sort.by("id").descending());
         Page<UserNotificationDTO> result = service.list(me.getUser().getId(), unreadOnly, p);
-        return new BasicResponse(200, "OK", Map.of(
+        return new BasicResponse(200, I18n.t("common.ok"), Map.of(
                 "content", result.getContent(),
                 "totalElements", result.getTotalElements(),
                 "totalPages", result.getTotalPages(),
@@ -56,18 +57,18 @@ public class NotificationController {
 
     @GetMapping("/unread-count")
     public BasicResponse unreadCount(@AuthenticationPrincipal UserDetail me) {
-        return new BasicResponse(200, "OK", service.unreadCount(me.getUser().getId()));
+        return new BasicResponse(200, I18n.t("common.ok"), service.unreadCount(me.getUser().getId()));
     }
 
     @PostMapping("/{id}/read")
     public SimpleResponse markRead(@AuthenticationPrincipal UserDetail me, @PathVariable Long id) {
         return service.markRead(me.getUser().getId(), id)
-                ? new SimpleResponse(200, "OK")
-                : new SimpleResponse(404, "Notification not found");
+                ? new SimpleResponse(200, I18n.t("common.ok"))
+                : new SimpleResponse(404, I18n.t("notification.error.notFound"));
     }
 
     @PostMapping("/read-all")
     public BasicResponse markAllRead(@AuthenticationPrincipal UserDetail me) {
-        return new BasicResponse(200, "OK", service.markAllRead(me.getUser().getId()));
+        return new BasicResponse(200, I18n.t("common.ok"), service.markAllRead(me.getUser().getId()));
     }
 }

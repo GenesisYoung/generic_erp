@@ -18,7 +18,7 @@ public class AuditJson {
         try {
             return mapper.readValue(value, type);
         } catch (Exception e) {
-            throw new AuditException(400, "INVALID_BODY", "请求字段、类型或带时区时间格式不合法");
+            throw new AuditException(400, "INVALID_BODY", "audit.error.invalidBody");
         }
     }
 }

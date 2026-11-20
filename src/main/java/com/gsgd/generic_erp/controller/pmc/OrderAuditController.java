@@ -42,7 +42,7 @@ public class OrderAuditController {
         try {
             return value == null || value.isBlank() ? null : Instant.parse(value);
         } catch (Exception ex) {
-            throw new AuditException(400, "INVALID_TIME", "时间须使用带时区的ISO-8601格式");
+            throw new AuditException(400, "INVALID_TIME", "audit.error.isoTimeRequired");
         }
     }
 
@@ -50,7 +50,7 @@ public class OrderAuditController {
     public Map<String, Object> assignees(@RequestParam(defaultValue = "") String keyword,
             @RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size) {
         AuditException.require(page >= 1 && List.of(20, 50, 100).contains(size) && keyword.length() <= 100, 400,
-                "INVALID_QUERY", "人员查询参数无效");
+                "INVALID_QUERY", "audit.error.invalidPeopleQuery");
         var people = service.metadata().users().stream()
                 .filter(p -> p.name().contains(keyword) || p.id().equals(keyword)).toList();
         long start = (long) (page - 1) * size;
@@ -62,7 +62,7 @@ public class OrderAuditController {
     @GetMapping("/source-orders")
     public Object sourceOrders() {
         service.metadata();
-        throw new AuditException(501, "SOURCE_NOT_CONNECTED", "尚未对接旧ERP订单来源；可保存手工来源草稿，不表示原单已核对");
+        throw new AuditException(501, "SOURCE_NOT_CONNECTED", "audit.error.sourceNotConnected");
     }
 
     @GetMapping("/{id}")
@@ -117,7 +117,7 @@ public class OrderAuditController {
     public Task confirm(@PathVariable String id, @RequestBody String body,
             @RequestHeader("Idempotency-Key") String key) {
         var p = json.read(body, Confirmation.class);
-        AuditException.require(p != null, 400, "INVALID_BODY", "请提供确认内容");
+        AuditException.require(p != null, 400, "INVALID_BODY", "audit.error.confirmationRequired");
         return service.businessConfirmation(id, p.submissionVersion(), p.decision(), p.reason(), p.evidenceRef(),
                 p.lockVersion(), key);
     }
@@ -131,7 +131,7 @@ public class OrderAuditController {
     @GetMapping("/{id}/change-requests")
     public Map<String, Object> changes(@PathVariable String id, @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        AuditException.require(page >= 1 && List.of(20, 50, 100).contains(size), 400, "INVALID_PAGE", "分页参数无效");
+        AuditException.require(page >= 1 && List.of(20, 50, 100).contains(size), 400, "INVALID_PAGE", "audit.error.invalidPaging");
         var changes = service.changes(id);
         long start = (long) (page - 1) * size;
         return Map.of("items",
@@ -150,7 +150,7 @@ public class OrderAuditController {
             @RequestParam(required = false) String ownerUserId, @RequestParam(required = false) String status,
             @RequestParam(required = false) String dueFrom, @RequestParam(required = false) String dueTo,
             @RequestParam(required = false) String timing, @RequestParam(defaultValue = "csv") String format) {
-        AuditException.require("csv".equals(format), 400, "UNSUPPORTED_FORMAT", "首版仅提供CSV导出");
+        AuditException.require("csv".equals(format), 400, "UNSUPPORTED_FORMAT", "audit.error.csvOnly");
         return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=order-audit.csv")
                 .contentType(new MediaType("text", "csv", java.nio.charset.StandardCharsets.UTF_8))
                 .body(service.export(query(keyword, ownerUserId, status, dueFrom, dueTo, timing, 1, 100)));

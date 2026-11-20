@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.admin;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -49,7 +50,7 @@ public class MenuController {
         } catch (Exception e) {
             return new SimpleResponse(500, e.getMessage());
         }
-        return new SimpleResponse(200, "Susccess");
+        return new SimpleResponse(200, I18n.t("common.success"));
     }
 
     /** Deletes the menu items whose ids are listed in the request body. */

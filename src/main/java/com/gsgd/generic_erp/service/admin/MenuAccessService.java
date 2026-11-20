@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service.admin;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -115,11 +116,11 @@ public class MenuAccessService {
         if (granted) {
             var menu = menus.findById(navId).orElse(null);
             if (menu == null || !Boolean.TRUE.equals(menu.getIsEnabled()))
-                return new SimpleResponse(404, "Menu is unavailable");
+                return new SimpleResponse(404, I18n.t("access.error.menuUnavailable"));
             String readCode = "/pmc/order-audit-task".equals(menu.getRoute()) ? "menu.order-audit-task.read"
                     : "/pmc/evidence".equals(menu.getRoute()) ? "menu.evidence.read" : null;
             if (readCode != null && !permissionChecker.has(readCode))
-                return new SimpleResponse(403, "You cannot grant menu access you do not hold");
+                return new SimpleResponse(403, I18n.t("access.error.cannotGrantMenu"));
         }
         List<UserNavMenu> rows = userNavMenuRepository.findByNavIdAndUserId(navId, userId);
         if (granted) {
@@ -158,10 +159,10 @@ public class MenuAccessService {
                     .stream().anyMatch(r -> Byte.valueOf((byte) 1).equals(r.getPermissionEnabled()));
             Permission permission = permissionRepository.findById(permissionId).orElse(null);
             if (!registered || permission == null || !Integer.valueOf(1).equals(permission.getIsEnabled())) {
-                return new SimpleResponse(404, "Permission is not registered on this menu");
+                return new SimpleResponse(404, I18n.t("access.error.permissionNotOnMenu"));
             }
             if (!permissionChecker.has(permission.getPermissionCode())) {
-                return new SimpleResponse(403, "You cannot grant a permission you do not hold");
+                return new SimpleResponse(403, I18n.t("access.error.cannotGrantPermission"));
             }
             if (rows.isEmpty()) {
                 approvalRepository
@@ -199,7 +200,7 @@ public class MenuAccessService {
         if (registered) {
             Permission permission = permissionRepository.findById(permissionId).orElse(null);
             if (permission == null || !Integer.valueOf(1).equals(permission.getIsEnabled()))
-                return new SimpleResponse(404, "Permission is unavailable");
+                return new SimpleResponse(404, I18n.t("access.error.permissionUnavailable"));
             if (rows.isEmpty()) {
                 registeredPermissionRepository
                         .save(new MenuRegisteredPermissionsRecord(null, navId, permissionId, (byte) 1, null));

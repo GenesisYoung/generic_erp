@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.admin;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -48,7 +49,7 @@ public class PermissionController {
     public BasicResponse deleteByVal(@RequestBody DeleteRecord record) {
 
         long b = permissionService.deleteByGroup(record.deleteVal());
-        return new BasicResponse(200, "success", b);
+        return new BasicResponse(200, I18n.t("common.success"), b);
 
     }
 
@@ -61,7 +62,7 @@ public class PermissionController {
     public BasicResponse deleteRoot(@RequestBody DeleteRootRecord record) {
 
         long b = permissionService.deleteRoots(record.deleteVal());
-        return new BasicResponse(200, "success", b);
+        return new BasicResponse(200, I18n.t("common.success"), b);
 
     }
 

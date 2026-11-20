@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.auth;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.security.Principal;
 import java.time.Duration;
 
@@ -73,7 +74,7 @@ public class AuthenticationController {
     @RequestMapping(path = "/refresh/access", method = RequestMethod.POST)
     public BasicResponse accessToken(HttpServletRequest request, HttpServletResponse response) {
         if (!"1".equals(request.getHeader("X-Refresh-Request"))) {
-            return new BasicResponse(400, "Invalid refresh request", null);
+            return new BasicResponse(400, I18n.t("auth.invalidRefreshRequest"), null);
         }
         return moveRefreshTokenToCookie(service.refreshAccessToken(refreshCookie(request)), response);
     }

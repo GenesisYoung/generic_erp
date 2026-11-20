@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.auth;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.util.List;
 
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -45,7 +46,7 @@ public class UserController {
                 .toList();
         boolean root = me.getAuthorities().stream()
                 .anyMatch(a -> ("ROLE_" + RoleGuard.ROOT_ROLE).equals(a.getAuthority()));
-        return new BasicResponse(200, "Permissions", new PermissionSet(root, codes));
+        return new BasicResponse(200, I18n.t("auth.permissions"), new PermissionSet(root, codes));
     }
 
     /** Returns all sidebar menu items visible to the given user. */
