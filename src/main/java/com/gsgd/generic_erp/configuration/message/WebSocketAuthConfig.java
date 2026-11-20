@@ -1,6 +1,7 @@
 package com.gsgd.generic_erp.configuration.message;
 
 import java.security.Principal;
+import java.util.Locale;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
@@ -15,6 +16,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
+import com.gsgd.generic_erp.configuration.i18n.UserLocaleRegistry;
 import com.gsgd.generic_erp.configuration.security.JWTUtil;
 
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ public class WebSocketAuthConfig implements WebSocketMessageBrokerConfigurer {
     private static final String SESSION_ID_ATTRIBUTE = "sid";
     private final JWTUtil jwtService;
     private final UserDetailsService userDetailsService;
+    private final UserLocaleRegistry userLocales;
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
@@ -63,6 +66,11 @@ public class WebSocketAuthConfig implements WebSocketMessageBrokerConfigurer {
                     // is superseded or logged out.
                     if (accessor.getSessionAttributes() != null) {
                         accessor.getSessionAttributes().put(SESSION_ID_ATTRIBUTE, sessionId);
+                    }
+                    // Pushed notifications use the language the frontend sends here.
+                    String language = accessor.getFirstNativeHeader("Accept-Language");
+                    if (language != null && !language.isBlank()) {
+                        userLocales.remember(username, Locale.forLanguageTag(language.split(",")[0].trim()));
                     }
                     return message;
                 }

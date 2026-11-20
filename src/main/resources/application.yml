@@ -1,4 +1,12 @@
 spring:
+  messages:
+    # User-facing texts: i18n/messages.properties (English) and messages_zh_CN.properties.
+    # Code reads them through configuration.i18n.I18n; this block only lets Spring use the same files.
+    basename: i18n/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+    use-code-as-default-message: true
+    always-use-message-format: true
   servlet:
     multipart:
       max-file-size: 20MB
@@ -28,8 +36,6 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: ${DB_DRIVER_CLASS_NAME}
   global:
-    variable:
-      default-language: ${LANGUAGE}
     file:
       home_path: ${FILE_PATH}
   jpa:
@@ -66,10 +72,11 @@ logging:
     "[org.hibernate.type.descriptor.sql.BasicBinder]": TRACE
     web: DEBUG
     "[org.hibernate]": error
-app:
-  language: ${LANGUAGE}
 
 erp:
+  i18n:
+    # Language used when the frontend sends no Accept-Language header (zh-CN or en-US).
+    default-locale: ${ERP_DEFAULT_LOCALE:zh-CN}
   purchase:
     # Business time zone: follow-up windows are calendar dates in this zone.
     zone: ${ERP_PURCHASE_ZONE:Asia/Shanghai}
@@ -93,7 +100,8 @@ erp:
       batch-limit: 5000
       # Old ERP (高格 VEPRO) purchase orders: ORDSPHS1 header + ORDSPHS2 lines.
       # Source and assumptions: Implementation Doc/Purchase Follow-Up Module/legacy_po_sync_query.sql
-      # Override with LEGACY_ERP_PO_QUERY if needed. Must return the aliases the reader expects.
+      # Override with the environment variable ERP_LEGACY_PURCHASEORDER_QUERY if needed (Spring maps it
+      # to erp.legacy.purchase-order.query). Must return the aliases the reader expects.
       query: |
         SELECT
             RTRIM(h.CODE)                                         AS po_no,

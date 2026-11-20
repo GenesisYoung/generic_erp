@@ -1,6 +1,5 @@
 package com.gsgd.generic_erp.util;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -23,13 +22,6 @@ import lombok.RequiredArgsConstructor;
 public class GlobalVariable {
 
     private final UserRepository userRepository;
-
-    @Value("${spring.global.variable.default-language}")
-    private String DEFAULT_LANGUAGE;
-
-    public String getDEFAULT_LANGUAGE() {
-        return DEFAULT_LANGUAGE;
-    }
 
     public String currentUsername() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();

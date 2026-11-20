@@ -34,7 +34,6 @@ import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.repository.auth.UserRoleRepository;
-import com.gsgd.generic_erp.util.Language;
 
 /** Deleting a user must remove every access binding, and only after the ROOT checks pass. */
 class UserDeletionTest {
@@ -60,7 +59,7 @@ class UserDeletionTest {
         refreshTokens = mock(RefreshTokenStore.class);
         when(roles.findByRoleName("ROOT")).thenReturn(Optional.of(ROOT));
         service = new UserManagementService(users, roles, userRoles, users, mock(AuthenticationImpl.class),
-                mock(Language.class), mock(UserInfoRepository.class), userDepartments, new RoleGuard(),
+                mock(UserInfoRepository.class), userDepartments, new RoleGuard(),
                 refreshTokens, new PermissionChecker(), mock(PermissionRepository.class), userNavMenus, approvals);
         authenticateAs("ADMIN");
     }

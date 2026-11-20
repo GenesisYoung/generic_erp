@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -236,7 +237,10 @@ class FollowUpIntegrationTest {
         assertEquals(NotificationType.FOLLOWUP_DUE, due.type());
         assertEquals(Set.of(ME), due.recipientIds());
         assertEquals(po.getId(), due.bizId());
-        assertTrue(due.content().contains("PO-1 (by 2026-11-04)"), due.content());
+        // Stored as keys and shown in each reader's language.
+        assertEquals("1 follow-up is due", due.titleText().render(Locale.US));
+        assertEquals("Please follow up on: PO-1 (by 2026-11-04)", due.contentText().render(Locale.US));
+        assertEquals("请跟进：PO-1（2026-11-04 前）", due.contentText().render(Locale.SIMPLIFIED_CHINESE));
 
         clock.set(LocalDateTime.of(2026, 11, 2, 10, 0)); // an hour later: nothing new
         assertEquals(new FollowUpReminderService.RunResult(0, 0, 0), reminders.runOnce());

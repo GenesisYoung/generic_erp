@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service.product;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -118,7 +119,7 @@ public class ProductService {
                 return BasicResponse.builder()
                                 .status(200)
                                 .object(variant.get())
-                                .message("Success")
+                                .message(I18n.t("common.success"))
                                 .build();
 
         }
@@ -191,7 +192,7 @@ public class ProductService {
                 return BasicResponse.builder()
                                 .object(p.isPresent() ? p.get() : null)
                                 .status(200)
-                                .message("Success")
+                                .message(I18n.t("common.success"))
                                 .build();
         }
 

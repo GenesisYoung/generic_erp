@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service.auth;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -54,7 +55,7 @@ public class UserService {
                 List<NavigationMenu> nav = navigationMenuRepository.findAllById(navIds);
                 List<UserNavMenuDTO> menu = nav.stream().map(ele -> new UserNavMenuDTO(ele.getId(), ele.getParentId(),
                                 ele.getTitleKey(), ele.getIcon(), ele.getRoute(), ele.getColor())).toList();
-                return new BasicResponse(200, "Navigation Menu", menu);
+                return new BasicResponse(200, I18n.t("auth.navigationMenu"), menu);
         }
 
         public Long fetchDashboard(Long userId) {

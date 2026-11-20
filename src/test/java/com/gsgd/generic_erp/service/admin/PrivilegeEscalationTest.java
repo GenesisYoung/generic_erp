@@ -37,7 +37,6 @@ import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.repository.auth.UserRoleRepository;
-import com.gsgd.generic_erp.util.Language;
 import com.gsgd.generic_erp.util.SimpleResponse;
 
 class PrivilegeEscalationTest {
@@ -63,7 +62,7 @@ class PrivilegeEscalationTest {
         PermissionChecker checker = new PermissionChecker();
         when(roles.findByRoleName("ROOT")).thenReturn(Optional.of(ROOT));
         userService = new UserManagementService(users, roles, userRoles, users, mock(AuthenticationImpl.class),
-                mock(Language.class), mock(UserInfoRepository.class), mock(UserDepartmentRepository.class), guard,
+                mock(UserInfoRepository.class), mock(UserDepartmentRepository.class), guard,
                 mock(RefreshTokenStore.class), checker, permissions, mock(UserNavMenuRepository.class),
                 mock(PagePermissinApprovalRecordRepository.class));
         roleService = new RoleManagementService(roles, userRoles, permissions, mock(RolePermissionRepository.class),

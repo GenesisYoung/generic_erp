@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.purchase;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,6 +25,6 @@ public class FollowUpController {
     @PreAuthorize("@perm.has('menu.purchaseOrder.read')")
     @GetMapping("/todo")
     public BasicResponse todo(@AuthenticationPrincipal UserDetail me) {
-        return new BasicResponse(200, "OK", followUpService.todo(me.getUser().getId()));
+        return new BasicResponse(200, I18n.t("common.ok"), followUpService.todo(me.getUser().getId()));
     }
 }

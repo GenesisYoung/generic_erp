@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service.purchase;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -82,7 +83,8 @@ public class FollowUpRecordService {
         validate(req);
         if (!po.getStatus().isActive()) {
             throw new InvalidFollowUpException(409,
-                    "Purchase order " + po.getExternalPoNo() + " is " + po.getStatus() + " and needs no follow-up");
+                    I18n.t("followup.error.orderInactive", po.getExternalPoNo(),
+                            I18n.ref("purchase.status." + po.getStatus().name())));
         }
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDate today = now.toLocalDate();
@@ -129,10 +131,10 @@ public class FollowUpRecordService {
 
     private static void validate(FollowUpRecordRequest req) {
         if (req == null || req.materialStatus() == null) {
-            throw new InvalidFollowUpException(400, "materialStatus is required");
+            throw new InvalidFollowUpException(400, I18n.t("followup.error.materialStatusRequired"));
         }
         if (req.note() != null && req.note().length() > NOTE_MAX) {
-            throw new InvalidFollowUpException(400, "note must be at most " + NOTE_MAX + " characters");
+            throw new InvalidFollowUpException(400, I18n.t("followup.error.noteTooLong", NOTE_MAX));
         }
     }
 

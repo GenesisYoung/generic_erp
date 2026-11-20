@@ -1,7 +1,9 @@
 package com.gsgd.generic_erp.dto;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import com.gsgd.generic_erp.entity.notification.Notification;
 import com.gsgd.generic_erp.enums.NotifactionPriority;
 import com.gsgd.generic_erp.enums.NotificationType;
@@ -22,8 +24,19 @@ public record UserNotificationDTO(
         boolean read,
         LocalDateTime createdAt) {
 
+    /** In the current request's language. */
     public static UserNotificationDTO from(Notification n) {
-        return new UserNotificationDTO(n.getId(), n.getType(), n.getPriority(), n.getTitle(),
-                n.getContent(), n.getBizType(), n.getBizId(), n.getReadAt() != null, n.getCreatedAt());
+        return from(n, I18n.currentLocale());
+    }
+
+    /**
+     * Title and content in {@code locale} when the notification was stored as
+     * keys; otherwise the stored text.
+     */
+    public static UserNotificationDTO from(Notification n, Locale locale) {
+        String title = n.getTitleText() != null ? I18n.t(locale, n.getTitleText()) : n.getTitle();
+        String content = n.getContentText() != null ? I18n.t(locale, n.getContentText()) : n.getContent();
+        return new UserNotificationDTO(n.getId(), n.getType(), n.getPriority(), title,
+                content, n.getBizType(), n.getBizId(), n.getReadAt() != null, n.getCreatedAt());
     }
 }

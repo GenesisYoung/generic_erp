@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service.auth;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,15 +29,12 @@ import com.gsgd.generic_erp.dto.UserDTO;
 import com.gsgd.generic_erp.entity.auth.LoginLog;
 import com.gsgd.generic_erp.entity.auth.User;
 import com.gsgd.generic_erp.entity.auth.UserInfo;
-import com.gsgd.generic_erp.enums.Language_CN;
-import com.gsgd.generic_erp.enums.Language_EN;
 import com.gsgd.generic_erp.enums.StatusCommand;
 import com.gsgd.generic_erp.repository.auth.LoginLogRepository;
 import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.UserInfoRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
-import com.gsgd.generic_erp.util.GlobalVariable;
 import com.gsgd.generic_erp.util.LoginRateLimiter;
 
 import jakarta.annotation.PostConstruct;
@@ -63,8 +61,6 @@ public class AuthenticationService {
         private final UserRepository userRepository;
 
         private final LoginLogRepository loginLogRepository;
-
-        private final GlobalVariable globalVariable;
 
         private final RefreshTokenStore refreshTokenStore;
 
@@ -111,7 +107,7 @@ public class AuthenticationService {
                 // Limit the login attempts from a same id
                 if (!limiter.allow("ip:" + request.getRemoteAddr(), 20, Duration.ofMinutes(1))
                                 || !limiter.allow("user:" + username, 10, Duration.ofMinutes(1))) {
-                        return new BasicResponse(429, "Too many attempts", null);
+                        return new BasicResponse(429, I18n.t("auth.tooManyAttempts"), null);
                 }
                 if (username.isEmpty() || entity.password() == null || entity.password().isEmpty()) {
                         return invalidCredentials();
@@ -181,9 +177,7 @@ public class AuthenticationService {
                                         StatusNotificationDTO.builder().code(StatusCommand.SESSION_SUPERSEDED.getCode())
                                                         .object(new SessionChangedMessage(sessionId)).build());
                         return new BasicResponse(200,
-                                        globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                        ? Language_EN.LOGIN_SUCCESSFUL.getMessage()
-                                                        : Language_CN.LOGIN_SUCCESSFUL.getMessage(),
+                                        I18n.t("auth.loginSuccessful"),
                                         new AuthenticationResponse(new TokenPair(refreshToken, accessToken), userDTO));
                 } catch (BadCredentialsException e) {
                         userRepository.findByUsername(username)
@@ -222,9 +216,7 @@ public class AuthenticationService {
 
         private BasicResponse invalidCredentials() {
                 return new BasicResponse(401,
-                                globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                ? Language_EN.INVALID_CREDENTIALS.getMessage()
-                                                : Language_CN.INVALID_CREDENTIALS.getMessage(),
+                                I18n.t("auth.invalidCredentials"),
                                 null);
         }
 
@@ -297,9 +289,7 @@ public class AuthenticationService {
 
                 String newAccessToken = jwtUtil.generateAccessToken(username, sid);
                 return new BasicResponse(200,
-                                globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                ? Language_EN.TOKEN_REFRESH_SUCCESSFUL.getMessage()
-                                                : Language_CN.TOKEN_REFRESH_SUCCESSFUL.getMessage(),
+                                I18n.t("auth.tokenRefreshSuccessful"),
                                 new TokenPair(newRefreshToken, newAccessToken));
         }
 
@@ -314,9 +304,7 @@ public class AuthenticationService {
 
         private BasicResponse refreshFailure() {
                 return new BasicResponse(401,
-                                globalVariable.getDEFAULT_LANGUAGE().equals("EN")
-                                                ? Language_EN.TOKEN_REFRESH_FAILED.getMessage()
-                                                : Language_CN.TOKEN_REFRESH_FAILED.getMessage(),
+                                I18n.t("auth.tokenRefreshFailed"),
                                 null);
         }
 
@@ -327,7 +315,7 @@ public class AuthenticationService {
                         user.setCurrentSessionId(null);
                         userRepository.save(user);
                 }
-                return new BasicResponse(200, "Logged out", null);
+                return new BasicResponse(200, I18n.t("auth.loggedOut"), null);
         }
 
         public static String getClientIp(HttpServletRequest request) {
