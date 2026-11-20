@@ -8,12 +8,16 @@
      ORDSPHS2  purchase order lines  (86,136 rows), SERIAL = line number
      SUPPLIER  supplier master (CODE, CNAME)
 
-   ASSUMPTIONS TO CHECK with legacy_po_sync_check.sql before turning the sync on:
-     A1  ORDSPHS2.ERI is the header's ERI (lines join on ERI + SERIAL).
-     A2  ORDSPHS1.CLOSETYPE = 0 means open; any other value means closed
-         (finished, short-closed or cancelled). Follow-up stops when closed.
-     A3  An order counts as placed once it is audited (SCRUTINY not empty).
-     A4  ORDSPHS1.STAFF holds the buyer. It may be a code or a name; either way
+   ASSUMPTIONS, checked with legacy_po_sync_check.sql:
+     A1  CONFIRMED 2026-11-20 (C1): lines point to their header through
+         ORDSPHS2.MASTERI = ORDSPHS1.ERI (86,126 of 86,136 lines match;
+         none match on ERI).
+     A2  CONFIRMED 2026-11-20 (C2): CLOSETYPE is 0, 1 or 2; 0 on most orders
+         (16,243 of 17,288 in two years), so 0 = not closed and a finished
+         order is recognised by its received quantity instead.
+     A3  CONFIRMED 2026-11-20 (C3): AUDITSTATE is always 0, so SCRUTINY is
+         the audit flag; 65 of 17,288 orders in two years are not audited.
+     A4  OPEN (C4 not received yet): ORDSPHS1.STAFF holds the buyer. It may be a code or a name; either way
          map it to a user in legacy_user_map_tb if it is not the username.
 
    Output columns (names are required by the reader):
@@ -44,10 +48,10 @@ SELECT
     COALESCE(h.UPDATETIME, h.SCRDATE, h.INDATETIME, h.SDATE) AS updated_at
 FROM ORDSPHS1 h WITH (NOLOCK)
 LEFT JOIN (
-    SELECT ERI, SUM(QTY) AS qty, SUM(RECQTY) AS recqty
+    SELECT MASTERI, SUM(QTY) AS qty, SUM(RECQTY) AS recqty
     FROM ORDSPHS2 WITH (NOLOCK)
-    GROUP BY ERI
-) l ON l.ERI = h.ERI
+    GROUP BY MASTERI
+) l ON l.MASTERI = h.ERI
 LEFT JOIN SUPPLIER s WITH (NOLOCK) ON s.CODE = h.SUPP
 WHERE ISNULL(h.SCRUTINY, '') <> ''
   AND h.CODE IS NOT NULL

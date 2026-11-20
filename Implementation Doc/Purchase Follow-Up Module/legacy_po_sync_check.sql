@@ -5,7 +5,8 @@
    Each answers one assumption in legacy_po_sync_query.sql.
    ============================================================================ */
 
-/* C1 (A1). Do lines join to headers on ERI? Expect matched ~= all lines. */
+/* C1 (A1). Do lines join to headers on ERI? Expect matched ~= all lines.
+   Result 2026-11-20: 86,136 lines, 0 on ERI, 86,126 on MASTERI -> join on MASTERI. */
 SELECT
     (SELECT COUNT(*) FROM ORDSPHS2)                                       AS lines_total,
     (SELECT COUNT(*) FROM ORDSPHS2 l JOIN ORDSPHS1 h ON h.ERI = l.ERI)     AS lines_matched_on_eri,

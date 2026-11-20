@@ -107,10 +107,10 @@ erp:
             COALESCE(h.UPDATETIME, h.SCRDATE, h.INDATETIME, h.SDATE) AS updated_at
         FROM ORDSPHS1 h WITH (NOLOCK)
         LEFT JOIN (
-            SELECT ERI, SUM(QTY) AS qty, SUM(RECQTY) AS recqty
+            SELECT MASTERI, SUM(QTY) AS qty, SUM(RECQTY) AS recqty
             FROM ORDSPHS2 WITH (NOLOCK)
-            GROUP BY ERI
-        ) l ON l.ERI = h.ERI
+            GROUP BY MASTERI
+        ) l ON l.MASTERI = h.ERI
         LEFT JOIN SUPPLIER s WITH (NOLOCK) ON s.CODE = h.SUPP
         WHERE ISNULL(h.SCRUTINY, '') <> ''
           AND h.CODE IS NOT NULL
