@@ -80,6 +80,12 @@
 			<scope>runtime</scope>
 		</dependency>
 		<dependency>
+			<!-- Read-only connection to the old ERP (SQL Server), used by the purchase order sync. -->
+			<groupId>com.microsoft.sqlserver</groupId>
+			<artifactId>mssql-jdbc</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
 			<optional>true</optional>

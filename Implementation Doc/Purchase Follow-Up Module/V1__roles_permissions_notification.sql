@@ -56,7 +56,6 @@ SELECT seed.code, 1, CURDATE(), seed.name
 FROM (
     SELECT 'menu.pmcDashboard'       AS code, 'PMC Dashboard'        AS name UNION ALL
     SELECT 'menu.purchaseDashboard',          'Purchasing Dashboard'         UNION ALL
-    SELECT 'menu.orderReview',                'Order Review'                 UNION ALL
     SELECT 'menu.purchaseOrder',              'Purchase Order Follow-Up'     UNION ALL
     SELECT 'menu.purchaseException',          'Purchasing Exception'
 ) AS seed
@@ -66,8 +65,7 @@ WHERE NOT EXISTS (SELECT 1 FROM permission_tb p WHERE p.permission_code = seed.c
 INSERT INTO permission_tb (permission_code, is_enabled, create_date)
 SELECT CONCAT(r.code, '.', a.action), 1, CURDATE()
 FROM (
-    SELECT 'menu.orderReview'      AS code UNION ALL
-    SELECT 'menu.purchaseOrder'            UNION ALL
+    SELECT 'menu.purchaseOrder'    AS code UNION ALL
     SELECT 'menu.purchaseException'
 ) r
 CROSS JOIN (
@@ -81,16 +79,16 @@ WHERE NOT EXISTS (SELECT 1 FROM permission_tb p WHERE p.permission_code = CONCAT
 INSERT INTO permission_tb (permission_code, is_enabled, create_date, permission_name)
 SELECT seed.code, 1, CURDATE(), seed.name
 FROM (
-    SELECT 'data.orderReview.all'       AS code, 'See all order reviews'        AS name UNION ALL
-    SELECT 'data.purchaseOrder.all',             'See all purchase orders'               UNION ALL
+    SELECT 'data.purchaseOrder.all'     AS code, 'See all purchase orders'      AS name UNION ALL
     SELECT 'data.purchaseException.all',         'See all purchasing exceptions'
 ) AS seed
 WHERE NOT EXISTS (SELECT 1 FROM permission_tb p WHERE p.permission_code = seed.code);
 
 -- -----------------------------------------------------------------------------
 -- 4. Default grants (created_by = root user, as in the auth seeds).
---    pmc_manager       : PMC dashboard, all order reviews, sees all exceptions
---    pmc_clerk         : PMC dashboard, read/update own order reviews only
+--    pmc_manager       : PMC dashboard, sees all exceptions
+--    pmc_clerk         : PMC dashboard
+--    (order review codes come from the order review module; see V2)
 --    purchaser_manager : purchasing dashboard, all purchase orders and exceptions
 --    purchaser         : purchasing dashboard, own purchase orders, report and
 --                        read own exceptions
@@ -101,10 +99,10 @@ SELECT r.id, p.id, NULL, u.id, NOW(6), CURDATE()
 FROM role_tb r
 JOIN permission_tb p ON (
        (r.role_name = 'pmc_manager' AND p.permission_code IN (
-            'menu.pmcDashboard', 'menu.orderReview', 'data.orderReview.all',
+            'menu.pmcDashboard',
             'menu.purchaseException.read', 'data.purchaseException.all'))
     OR (r.role_name = 'pmc_clerk' AND p.permission_code IN (
-            'menu.pmcDashboard', 'menu.orderReview.read', 'menu.orderReview.update'))
+            'menu.pmcDashboard'))
     OR (r.role_name = 'purchaser_manager' AND p.permission_code IN (
             'menu.purchaseDashboard', 'menu.purchaseOrder', 'data.purchaseOrder.all',
             'menu.purchaseException', 'data.purchaseException.all'))
