@@ -56,7 +56,8 @@ public class LegacyErpDataSourceConfig {
             LegacyErpProperties props) {
         JdbcTemplate template = new JdbcTemplate(pool.dataSource());
         template.setQueryTimeout(props.getDatasource().getQueryTimeoutSeconds());
-        return new JdbcLegacyCustomerOrderReader(template, props.getCustomerOrder().getQuery());
+        return new JdbcLegacyCustomerOrderReader(template, props.getCustomerOrder().getQuery(),
+                props.getCustomerOrder().getPoLinkQuery());
     }
 
     /** Wraps the pool so it is not a DataSource bean (see class comment). */

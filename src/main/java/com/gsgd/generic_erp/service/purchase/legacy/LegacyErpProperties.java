@@ -96,6 +96,19 @@ public class LegacyErpProperties {
          */
         private int lookbackDays = 60;
 
+        /**
+         * SELECT that links purchase orders dated on or after {@code :since} to
+         * the customer order lines they buy for. Required aliases:
+         * customer_order_id, customer_order_no, customer_line_id, po_no, po_date.
+         */
+        private String poLinkQuery;
+
+        /** Purchase orders dated in the last N days are re-read for links on every run. */
+        private int poLinkLookbackDays = 60;
+
+        /** Maximum link rows per run (about 3,000 PO lines in 60 days). */
+        private int poLinkBatchLimit = 20000;
+
         /** Maximum rows per run (about 35 orders a month are entered). */
         private int batchLimit = 2000;
 

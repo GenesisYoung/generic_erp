@@ -125,7 +125,8 @@ class FollowUpIntegrationTest {
         LocalContainerEntityManagerFactoryBean entityManagerFactory(DataSource ds) {
             var f = new LocalContainerEntityManagerFactoryBean();
             f.setDataSource(ds);
-            f.setPackagesToScan("com.gsgd.generic_erp.entity.purchase", "com.gsgd.generic_erp.entity.auth");
+            f.setPackagesToScan("com.gsgd.generic_erp.entity.purchase", "com.gsgd.generic_erp.entity.auth",
+                    "com.gsgd.generic_erp.pmc");
             f.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
             f.setJpaPropertyMap(Map.of("hibernate.hbm2ddl.auto", "create-drop"));
             return f;

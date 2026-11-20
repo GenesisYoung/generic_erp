@@ -84,6 +84,14 @@ erp:
       # Hourly job: marks missed follow-ups, adds daily OVERDUE windows and sends due reminders.
       enabled: ${ERP_FOLLOWUP_JOB_ENABLED:true}
       cron: "0 0 * * * *"
+    placement:
+      # 采购下单任务: purchase orders must be placed within deadline-days of the order audit passing.
+      # Runs every 15 minutes: creates tasks from VERIFIED audits, closes tasks with a linked PO,
+      # and sends one reminder remind-hours before the deadline and one overdue alert.
+      enabled: ${ERP_PLACEMENT_JOB_ENABLED:true}
+      cron: ${ERP_PLACEMENT_CRON:0 */15 * * * *}
+      deadline-days: 2
+      remind-hours: 12
   legacy:
     # Read-only sync of purchase orders and customer orders from the old ERP (SQL Server).
     # Off by default. Set LEGACY_ERP_ENABLED=true and the LEGACY_ERP_DB_* variables
@@ -167,3 +175,26 @@ erp:
         WHERE h.SDATE >= :since
           AND h.CODE IS NOT NULL
         ORDER BY h.SDATE, h.CODE
+      # PO -> customer order links, used to close placement tasks (采购下单任务).
+      # Chain found by the round 2/3 checks (2026-11-20): PO line ORDSPHS2.PLANERI -> plan line
+      # PLANORDER2.ERI, PLANORDER2.FROMORDERI -> customer order line ORDCORD2.ERI,
+      # ORDCORD2.MASTERI -> customer order ORDCORD1.ERI. About 85% of PO lines reach a customer order.
+      po-link-lookback-days: 60
+      po-link-batch-limit: 20000
+      po-link-query: |
+        SELECT
+            RTRIM(co.ERI)  AS customer_order_id,
+            RTRIM(co.CODE) AS customer_order_no,
+            RTRIM(cl.ERI)  AS customer_line_id,
+            RTRIM(h.CODE)  AS po_no,
+            MIN(h.SDATE)   AS po_date
+        FROM ORDSPHS2 p WITH (NOLOCK)
+        JOIN ORDSPHS1   h  WITH (NOLOCK) ON h.ERI  = p.MASTERI
+        JOIN PLANORDER2 pl WITH (NOLOCK) ON pl.ERI = p.PLANERI
+        JOIN ORDCORD2   cl WITH (NOLOCK) ON cl.ERI = pl.FROMORDERI
+        JOIN ORDCORD1   co WITH (NOLOCK) ON co.ERI = cl.MASTERI
+        WHERE h.SDATE >= :since
+          AND h.CODE IS NOT NULL
+          AND co.CODE IS NOT NULL
+        GROUP BY co.ERI, co.CODE, cl.ERI, h.CODE
+        ORDER BY MIN(h.SDATE), h.CODE

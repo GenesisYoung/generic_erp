@@ -20,16 +20,19 @@ import org.springframework.transaction.annotation.Transactional;
 import com.gsgd.generic_erp.configuration.i18n.I18n;
 import com.gsgd.generic_erp.configuration.i18n.LocalizedText;
 import com.gsgd.generic_erp.entity.customer.CustomerOrder;
+import com.gsgd.generic_erp.entity.customer.PoCustomerLink;
 import com.gsgd.generic_erp.entity.purchase.LegacySyncState;
 import com.gsgd.generic_erp.enums.NotifactionPriority;
 import com.gsgd.generic_erp.enums.NotificationType;
 import com.gsgd.generic_erp.repository.customer.CustomerOrderRepository;
+import com.gsgd.generic_erp.repository.customer.PoCustomerLinkRepository;
 import com.gsgd.generic_erp.repository.purchase.LegacySyncStateRepository;
 import com.gsgd.generic_erp.service.notification.NotificationRecipientResolver;
 import com.gsgd.generic_erp.service.notification.NotificationRequestedEvent;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyCustomerOrderReader;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyCustomerOrderRow;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyErpProperties;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyPoLinkRow;
 
 import lombok.RequiredArgsConstructor;
 
@@ -49,6 +52,9 @@ import lombok.RequiredArgsConstructor;
  * users with {@code notify-roles} (default pmc_manager, pmc_clerk), listing the
  * order numbers. The very first run only imports: the backlog of the last 60
  * days shows on the list page without a notification storm.</li>
+ * <li>Purchase orders of the last {@code po-link-lookback-days} days are
+ * linked to the customer order lines they buy for (legacy_po_customer_link_tb);
+ * placement tasks close from these links.</li>
  * </ol>
  * One run is one transaction; a failure leaves nothing half-written and the
  * next run simply reads the same window again.
@@ -65,6 +71,7 @@ public class CustomerOrderSyncService {
     private final ObjectProvider<LegacyCustomerOrderReader> readerProvider;
     private final LegacyErpProperties props;
     private final CustomerOrderRepository orderRepository;
+    private final PoCustomerLinkRepository linkRepository;
     private final LegacySyncStateRepository syncStateRepository;
     private final NotificationRecipientResolver recipientResolver;
     private final ApplicationEventPublisher events;
@@ -72,9 +79,9 @@ public class CustomerOrderSyncService {
 
     /** What one run did. {@code status} is OK or DISABLED. */
     public record SyncResult(String status, int rowsRead, int created, int updated, int newOpen,
-            boolean notified, String message) {
+            boolean notified, int poLinksAdded, String message) {
         static SyncResult disabled() {
-            return new SyncResult("DISABLED", 0, 0, 0, 0, false, null);
+            return new SyncResult("DISABLED", 0, 0, 0, 0, false, 0, null);
         }
     }
 
@@ -140,6 +147,8 @@ public class CustomerOrderSyncService {
             }
         }
 
+        int linksAdded = syncPoLinks(reader, cfg, now);
+
         String message = skipped.isEmpty() ? null
                 : I18n.t(I18n.defaultLocale(), "customerOrder.sync.skippedRows", String.join(", ", skipped));
         state.setLastRunAt(now);
@@ -147,7 +156,46 @@ public class CustomerOrderSyncService {
         state.setLastRowCount(rows.size());
         state.setLastMessage(message == null ? null : truncate(message, 1000));
         syncStateRepository.save(state);
-        return new SyncResult("OK", rows.size(), created, updated, newOpen.size(), notified, message);
+        return new SyncResult("OK", rows.size(), created, updated, newOpen.size(), notified, linksAdded, message);
+    }
+
+    /**
+     * Stores links from purchase orders of the last {@code po-link-lookback-days}
+     * days to the customer order lines they buy for. Links are only added: a
+     * PO that once existed for an order keeps counting as placed.
+     */
+    int syncPoLinks(LegacyCustomerOrderReader reader, LegacyErpProperties.CustomerOrder cfg, LocalDateTime now) {
+        LocalDate since = now.toLocalDate().minusDays(cfg.getPoLinkLookbackDays());
+        List<LegacyPoLinkRow> rows = reader.fetchPoLinksSince(since, cfg.getPoLinkBatchLimit()).stream()
+                .filter(r -> notBlank(r.customerOrderId()) && notBlank(r.customerOrderNo())
+                        && notBlank(r.customerLineId()) && notBlank(r.poNo()))
+                .toList();
+        if (rows.isEmpty()) {
+            return 0;
+        }
+        Set<String> known = linkRepository
+                .findByCustomerLineLegacyIdIn(rows.stream().map(LegacyPoLinkRow::customerLineId).distinct().toList())
+                .stream().map(l -> l.getCustomerLineLegacyId() + "|" + l.getPoNo())
+                .collect(Collectors.toSet());
+        List<PoCustomerLink> added = new ArrayList<>();
+        for (LegacyPoLinkRow r : rows) {
+            if (known.add(r.customerLineId() + "|" + r.poNo())) {
+                added.add(PoCustomerLink.builder()
+                        .customerOrderLegacyId(truncate(r.customerOrderId(), 32))
+                        .customerOrderNo(truncate(r.customerOrderNo(), 50))
+                        .customerLineLegacyId(truncate(r.customerLineId(), 32))
+                        .poNo(truncate(r.poNo(), 50))
+                        .poDate(r.poDate())
+                        .firstSeenAt(now)
+                        .build());
+            }
+        }
+        linkRepository.saveAll(added);
+        return added.size();
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 
     /** Records a failed run; the next run reads the same window again. */

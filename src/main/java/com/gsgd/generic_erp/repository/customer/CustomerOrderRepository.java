@@ -15,6 +15,8 @@ public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, Lo
 
     List<CustomerOrder> findByLegacyIdIn(Collection<String> legacyIds);
 
+    List<CustomerOrder> findByOrderNoIn(Collection<String> orderNos);
+
     /** Open orders with no order audit yet (any round), matching on the order number. */
     @Query("""
             select c from CustomerOrder c

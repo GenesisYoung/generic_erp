@@ -47,12 +47,14 @@ import com.gsgd.generic_erp.enums.NotificationType;
 import com.gsgd.generic_erp.pmc.AuditTaskEntity;
 import com.gsgd.generic_erp.pmc.AuditTaskRepository;
 import com.gsgd.generic_erp.repository.customer.CustomerOrderRepository;
+import com.gsgd.generic_erp.repository.customer.PoCustomerLinkRepository;
 import com.gsgd.generic_erp.repository.purchase.LegacySyncStateRepository;
 import com.gsgd.generic_erp.service.notification.NotificationRecipientResolver;
 import com.gsgd.generic_erp.service.notification.NotificationRequestedEvent;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyCustomerOrderReader;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyCustomerOrderRow;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyErpProperties;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyPoLinkRow;
 
 /**
  * Customer order sync and the pending-audit list against a real (H2)
@@ -67,12 +69,20 @@ class CustomerOrderSyncIntegrationTest {
     /** The rows the fake old ERP returns; tests change it between runs. */
     static class FakeReader implements LegacyCustomerOrderReader {
         final List<LegacyCustomerOrderRow> rows = new ArrayList<>();
+        final List<LegacyPoLinkRow> links = new ArrayList<>();
         LocalDate lastSince;
+        LocalDate lastLinkSince;
 
         @Override
         public List<LegacyCustomerOrderRow> fetchDatedSince(LocalDate since, int limit) {
             lastSince = since;
             return List.copyOf(rows);
+        }
+
+        @Override
+        public List<LegacyPoLinkRow> fetchPoLinksSince(LocalDate since, int limit) {
+            lastLinkSince = since;
+            return List.copyOf(links);
         }
     }
 
@@ -151,6 +161,8 @@ class CustomerOrderSyncIntegrationTest {
     @Autowired
     AuditTaskRepository tasks;
     @Autowired
+    PoCustomerLinkRepository links;
+    @Autowired
     FakeReader reader;
     @Autowired
     EventSink sink;
@@ -158,9 +170,11 @@ class CustomerOrderSyncIntegrationTest {
     @BeforeEach
     void setUp() {
         tasks.deleteAll();
+        links.deleteAll();
         orders.deleteAll();
         states.deleteAll();
         reader.rows.clear();
+        reader.links.clear();
         sink.events.clear();
     }
 
@@ -230,6 +244,21 @@ class CustomerOrderSyncIntegrationTest {
         var saved = orders.findAll().get(0);
         assertEquals("Acme Ltd", saved.getCustomerName());
         assertTrue(saved.isLegacyClosed());
+    }
+
+    @Test
+    void poLinksAreAddedOnceAndKeptWhenTheOldErpStopsReturningThem() {
+        reader.links.add(new LegacyPoLinkRow("E1", "SO-1", "L1", "PO-9", LocalDate.of(2026, 11, 19)));
+        reader.links.add(new LegacyPoLinkRow("E1", "SO-1", "L2", "PO-9", LocalDate.of(2026, 11, 19)));
+        reader.links.add(new LegacyPoLinkRow("E1", "SO-1", " ", "PO-X", null)); // no line: ignored
+
+        assertEquals(2, sync.syncNow().poLinksAdded());
+        assertEquals(LocalDate.of(2026, 9, 21), reader.lastLinkSince, "60-day window");
+        assertEquals(0, sync.syncNow().poLinksAdded(), "the same links are not added twice");
+
+        reader.links.clear();
+        sync.syncNow();
+        assertEquals(2, links.findByCustomerOrderNoIn(List.of("SO-1")).size());
     }
 
     private static LegacyCustomerOrderRow row(String eri, String no, String customer, boolean closed) {

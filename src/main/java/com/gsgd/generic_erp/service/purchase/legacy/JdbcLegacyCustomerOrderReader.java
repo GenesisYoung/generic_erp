@@ -20,10 +20,25 @@ public class JdbcLegacyCustomerOrderReader implements LegacyCustomerOrderReader 
 
     private final NamedParameterJdbcTemplate jdbc;
     private final String query;
+    private final String poLinkQuery;
 
-    public JdbcLegacyCustomerOrderReader(JdbcTemplate jdbcTemplate, String query) {
+    public JdbcLegacyCustomerOrderReader(JdbcTemplate jdbcTemplate, String query, String poLinkQuery) {
         this.jdbc = new NamedParameterJdbcTemplate(jdbcTemplate);
         this.query = JdbcLegacyPurchaseOrderReader.requireSelect(query, "erp.legacy.customer-order.query");
+        this.poLinkQuery = JdbcLegacyPurchaseOrderReader.requireSelect(poLinkQuery,
+                "erp.legacy.customer-order.po-link-query");
+    }
+
+    @Override
+    public List<LegacyPoLinkRow> fetchPoLinksSince(LocalDate since, int limit) {
+        jdbc.getJdbcTemplate().setMaxRows(limit);
+        return jdbc.query(poLinkQuery, Map.of("since", Date.valueOf(since)),
+                (rs, i) -> new LegacyPoLinkRow(
+                        trim(rs.getString("customer_order_id")),
+                        trim(rs.getString("customer_order_no")),
+                        trim(rs.getString("customer_line_id")),
+                        trim(rs.getString("po_no")),
+                        date(rs, "po_date")));
     }
 
     @Override
