@@ -87,9 +87,40 @@ erp:
       sync-cron: ${LEGACY_ERP_PO_SYNC_CRON:0 */15 * * * *}
       initial-lookback-days: 60
       batch-limit: 5000
-      # TODO(old ERP schema): replace with the real purchase order table and columns.
-      # Must return these aliases and use the :since parameter.
-      query: ${LEGACY_ERP_PO_QUERY:}
+      # Old ERP (高格 VEPRO) purchase orders: ORDSPHS1 header + ORDSPHS2 lines.
+      # Source and assumptions: Implementation Doc/Purchase Follow-Up Module/legacy_po_sync_query.sql
+      # Override with LEGACY_ERP_PO_QUERY if needed. Must return the aliases the reader expects.
+      query: |
+        SELECT
+            RTRIM(h.CODE)                                         AS po_no,
+            RTRIM(h.SUPP)                                         AS supplier_code,
+            RTRIM(s.CNAME)                                        AS supplier_name,
+            RTRIM(h.STAFF)                                        AS buyer_code,
+            h.SDATE                                               AS order_date,
+            h.DLVDATE                                             AS expected_date,
+            CASE
+                WHEN h.CLOSETYPE <> 0                              THEN 'CLOSED'
+                WHEN l.qty > 0 AND l.recqty >= l.qty               THEN 'RECEIVED'
+                WHEN l.recqty > 0                                  THEN 'PARTIALLY_RECEIVED'
+                ELSE 'PLACED'
+            END                                                   AS status,
+            COALESCE(h.UPDATETIME, h.SCRDATE, h.INDATETIME, h.SDATE) AS updated_at
+        FROM ORDSPHS1 h WITH (NOLOCK)
+        LEFT JOIN (
+            SELECT MASTERI, SUM(QTY) AS qty, SUM(RECQTY) AS recqty
+            FROM ORDSPHS2 WITH (NOLOCK)
+            GROUP BY MASTERI
+        ) l ON l.MASTERI = h.ERI
+        LEFT JOIN SUPPLIER s WITH (NOLOCK) ON s.CODE = h.SUPP
+        WHERE ISNULL(h.SCRUTINY, '') <> ''
+          AND h.CODE IS NOT NULL
+          AND h.SDATE IS NOT NULL
+          AND (
+                COALESCE(h.UPDATETIME, h.SCRDATE, h.INDATETIME, h.SDATE) > :since
+             OR (h.CLOSETYPE = 0 AND h.SDATE >= DATEADD(day, -120, GETDATE()))
+          )
+        ORDER BY COALESCE(h.UPDATETIME, h.SCRDATE, h.INDATETIME, h.SDATE), h.CODE
       # Raw old-ERP status -> PLACED / PARTIALLY_RECEIVED / RECEIVED / CLOSED / CANCELLED.
-      # Unlisted statuses count as PLACED. Fill in once the status values are known.
+      # The default query already returns these names, so no mapping is needed.
+      # A status that is neither mapped nor one of these names counts as PLACED.
       status-map: {}

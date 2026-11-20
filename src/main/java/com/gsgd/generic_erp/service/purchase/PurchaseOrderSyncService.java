@@ -220,8 +220,17 @@ public class PurchaseOrderSyncService {
         if (raw == null) {
             return PurchaseOrderStatus.PLACED;
         }
-        PurchaseOrderStatus mapped = props.getPurchaseOrder().getStatusMap().get(raw.strip());
-        return mapped == null ? PurchaseOrderStatus.PLACED : mapped;
+        String key = raw.strip();
+        PurchaseOrderStatus mapped = props.getPurchaseOrder().getStatusMap().get(key);
+        if (mapped != null) {
+            return mapped;
+        }
+        // The default old-ERP query already returns this system's status names.
+        try {
+            return PurchaseOrderStatus.valueOf(key);
+        } catch (IllegalArgumentException e) {
+            return PurchaseOrderStatus.PLACED;
+        }
     }
 
     /** Mapping table first, then a user whose username equals the buyer code. */

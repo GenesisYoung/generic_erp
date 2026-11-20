@@ -1,0 +1,56 @@
+/* ============================================================================
+   Old ERP read-only checks for the purchase order sync.
+   Run each query in DataGrip with the SELECT-only login and send back the
+   results (counts only; no order details are needed).
+   Each answers one assumption in legacy_po_sync_query.sql.
+   ============================================================================ */
+
+/* C1 (A1). Do lines join to headers on ERI? Expect matched ~= all lines.
+   Result 2026-11-20: 86,136 lines, 0 on ERI, 86,126 on MASTERI -> join on MASTERI. */
+SELECT
+    (SELECT COUNT(*) FROM ORDSPHS2)                                       AS lines_total,
+    (SELECT COUNT(*) FROM ORDSPHS2 l JOIN ORDSPHS1 h ON h.ERI = l.ERI)     AS lines_matched_on_eri,
+    (SELECT COUNT(*) FROM ORDSPHS2 l JOIN ORDSPHS1 h ON h.ERI = l.MASTERI) AS lines_matched_on_masteri;
+
+/* C2 (A2). What CLOSETYPE values exist, and how many orders each, last 2 years. */
+SELECT CLOSETYPE, COUNT(*) AS orders
+FROM ORDSPHS1
+WHERE SDATE >= DATEADD(year, -2, GETDATE())
+GROUP BY CLOSETYPE
+ORDER BY CLOSETYPE;
+
+/* C3 (A3). Audit fields: how many orders are audited or not. */
+SELECT
+    CASE WHEN ISNULL(SCRUTINY, '') = '' THEN 'not audited' ELSE 'audited' END AS scrutiny,
+    AUDITSTATE,
+    COUNT(*) AS orders
+FROM ORDSPHS1
+WHERE SDATE >= DATEADD(year, -2, GETDATE())
+GROUP BY CASE WHEN ISNULL(SCRUTINY, '') = '' THEN 'not audited' ELSE 'audited' END, AUDITSTATE
+ORDER BY 1, 2;
+
+/* C4 (A4). Is STAFF a staff code or a name? Counts only.
+   SQL Server cannot SUM over an EXISTS subquery (error 130),
+   so each lookup is done once per order with OUTER APPLY. */
+SELECT
+    SUM(CASE WHEN c.CODE  IS NOT NULL THEN 1 ELSE 0 END) AS staff_is_code,
+    SUM(CASE WHEN n.CNAME IS NOT NULL THEN 1 ELSE 0 END) AS staff_is_name,
+    COUNT(*)                                             AS orders
+FROM ORDSPHS1 h WITH (NOLOCK)
+OUTER APPLY (SELECT TOP 1 f.CODE  FROM STAFFER f WITH (NOLOCK) WHERE f.CODE  = h.STAFF) c
+OUTER APPLY (SELECT TOP 1 f.CNAME FROM STAFFER f WITH (NOLOCK) WHERE f.CNAME = h.STAFF) n
+WHERE h.SDATE >= DATEADD(year, -1, GETDATE());
+
+/* C5. Is UPDATETIME filled in? */
+SELECT
+    SUM(CASE WHEN UPDATETIME IS NULL THEN 1 ELSE 0 END) AS updatetime_null,
+    COUNT(*)                                             AS orders
+FROM ORDSPHS1
+WHERE SDATE >= DATEADD(year, -1, GETDATE());
+
+/* C6. Dry run of the sync query: how many rows it would read for the last 60 days. */
+SELECT COUNT(*) AS rows_first_sync
+FROM ORDSPHS1 h
+WHERE ISNULL(h.SCRUTINY, '') <> ''
+  AND (COALESCE(h.UPDATETIME, h.SCRDATE, h.INDATETIME, h.SDATE) > DATEADD(day, -60, GETDATE())
+       OR (h.CLOSETYPE = 0 AND h.SDATE >= DATEADD(day, -120, GETDATE())));
