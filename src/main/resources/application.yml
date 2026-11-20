@@ -92,6 +92,12 @@ erp:
       cron: ${ERP_PLACEMENT_CRON:0 */15 * * * *}
       deadline-days: 2
       remind-hours: 12
+    exception:
+      # 采购异常: who is alerted when an exception is reported or changes status
+      # (besides the reporter, the order's purchaser and the handler).
+      notify-roles: ${ERP_EXCEPTION_NOTIFY_ROLES:purchaser_manager,pmc_manager,pmc_clerk}
+      # Planning and Operations department ids (department_tb.id), comma separated.
+      notify-dept-ids: ${ERP_EXCEPTION_NOTIFY_DEPT_IDS:}
   legacy:
     # Read-only sync of purchase orders and customer orders from the old ERP (SQL Server).
     # Off by default. Set LEGACY_ERP_ENABLED=true and the LEGACY_ERP_DB_* variables
