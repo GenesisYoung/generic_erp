@@ -204,4 +204,12 @@ class PurchaseOrderSyncServiceTest {
         assertEquals(PurchaseOrderStatus.RECEIVED, service.mapStatus(" 已入库 "));
         assertEquals(PurchaseOrderStatus.PLACED, service.mapStatus(null));
     }
+
+    @Test
+    void statusNamesFromTheDefaultQueryAreUnderstoodWithoutAMap() {
+        assertEquals(PurchaseOrderStatus.CLOSED, service.mapStatus("CLOSED"));
+        assertEquals(PurchaseOrderStatus.PARTIALLY_RECEIVED, service.mapStatus("PARTIALLY_RECEIVED"));
+        assertEquals(PurchaseOrderStatus.RECEIVED, service.mapStatus("RECEIVED"));
+        assertEquals(PurchaseOrderStatus.PLACED, service.mapStatus("something else"));
+    }
 }
