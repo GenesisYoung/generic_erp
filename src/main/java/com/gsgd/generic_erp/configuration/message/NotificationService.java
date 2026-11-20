@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import com.gsgd.generic_erp.dto.GeneralAlertDTO;
 import com.gsgd.generic_erp.dto.NotificationDTO;
 import com.gsgd.generic_erp.dto.StatusNotificationDTO;
+import com.gsgd.generic_erp.dto.UserNotificationDTO;
 
 import lombok.AllArgsConstructor;
 
@@ -19,6 +20,14 @@ public class NotificationService {
      * event or action
      */
     public void sendNotification(String username, NotificationDTO payload) {
+        simpleMessageService.convertAndSendToUser(username, "/queue/notifications", payload);
+    }
+
+    /**
+     * Pushes a stored notification (see notification_tb) to one user. The client
+     * subscribes to {@code /user/queue/notifications}.
+     */
+    public void sendUserNotification(String username, UserNotificationDTO payload) {
         simpleMessageService.convertAndSendToUser(username, "/queue/notifications", payload);
     }
 
