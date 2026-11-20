@@ -9,12 +9,16 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.gsgd.generic_erp.configuration.security.UserDetail;
+import com.gsgd.generic_erp.dto.purchase.FollowUpRecordRequest;
 import com.gsgd.generic_erp.entity.purchase.PurchaseOrder;
+import com.gsgd.generic_erp.service.purchase.FollowUpRecordService;
+import com.gsgd.generic_erp.service.purchase.FollowUpRecordService.InvalidFollowUpException;
 import com.gsgd.generic_erp.service.purchase.PurchaseOrderQueryService;
 import com.gsgd.generic_erp.service.purchase.PurchaseOrderSyncService;
 import com.gsgd.generic_erp.util.BasicPage;
@@ -33,10 +37,13 @@ public class PurchaseOrderController {
 
     private final PurchaseOrderQueryService queryService;
     private final PurchaseOrderSyncService syncService;
+    private final FollowUpRecordService followUpService;
 
-    public PurchaseOrderController(PurchaseOrderQueryService queryService, PurchaseOrderSyncService syncService) {
+    public PurchaseOrderController(PurchaseOrderQueryService queryService, PurchaseOrderSyncService syncService,
+            FollowUpRecordService followUpService) {
         this.queryService = queryService;
         this.syncService = syncService;
+        this.followUpService = followUpService;
     }
 
     /** A page of purchase orders the caller may see, newest order date first. */
@@ -62,6 +69,33 @@ public class PurchaseOrderController {
         return queryService.checkpoints(me.getUser().getId(), id)
                 .map(list -> new BasicResponse(200, "OK", list))
                 .orElseGet(() -> new BasicResponse(404, "Purchase order not found", null));
+    }
+
+    /** The order with its checkpoints and follow-up records (newest first). 404 when not visible. */
+    @PreAuthorize("@perm.has('menu.purchaseOrder.read')")
+    @GetMapping("/{id}/followups")
+    public BasicResponse followUps(@AuthenticationPrincipal UserDetail me, @PathVariable Long id) {
+        return followUpService.followUps(me.getUser().getId(), id)
+                .map(f -> new BasicResponse(200, "OK", f))
+                .orElseGet(() -> new BasicResponse(404, "Purchase order not found", null));
+    }
+
+    /**
+     * Saves a follow-up. If an open checkpoint window contains today, it is
+     * completed. 404 when the order is not visible, 400 for a bad body, 409
+     * when the order no longer needs follow-up.
+     */
+    @PreAuthorize("@perm.has('menu.purchaseOrder.update')")
+    @PostMapping("/{id}/followups")
+    public BasicResponse recordFollowUp(@AuthenticationPrincipal UserDetail me, @PathVariable Long id,
+            @RequestBody FollowUpRecordRequest body) {
+        try {
+            return followUpService.record(me.getUser().getId(), id, body)
+                    .map(saved -> new BasicResponse(200, "OK", saved))
+                    .orElseGet(() -> new BasicResponse(404, "Purchase order not found", null));
+        } catch (InvalidFollowUpException e) {
+            return new BasicResponse(e.getStatus(), e.getMessage(), null);
+        }
     }
 
     /** Result of the last sync from the old ERP. */

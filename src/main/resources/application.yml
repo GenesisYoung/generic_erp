@@ -73,6 +73,10 @@ erp:
   purchase:
     # Business time zone: follow-up windows are calendar dates in this zone.
     zone: ${ERP_PURCHASE_ZONE:Asia/Shanghai}
+    followup:
+      # Hourly job: marks missed follow-ups, adds daily OVERDUE windows and sends due reminders.
+      enabled: ${ERP_FOLLOWUP_JOB_ENABLED:true}
+      cron: "0 0 * * * *"
   legacy:
     # Read-only sync of purchase orders from the old ERP (SQL Server).
     # Off by default. Set LEGACY_ERP_ENABLED=true and the LEGACY_ERP_DB_* variables
