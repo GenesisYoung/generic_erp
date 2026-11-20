@@ -12,6 +12,7 @@ import com.gsgd.generic_erp.entity.auth.PagePermissionApprovalsRecord;
 import com.gsgd.generic_erp.repository.admin.NavigationMenuRepository;
 import com.gsgd.generic_erp.repository.admin.PagePermissinApprovalRecordRepository;
 import com.gsgd.generic_erp.repository.admin.UserNavMenuRepository;
+import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
 
 /**
@@ -24,12 +25,15 @@ public class UserService {
         private final UserNavMenuRepository userNavMenuRepository;
         private final NavigationMenuRepository navigationMenuRepository;
         private final PagePermissinApprovalRecordRepository approvalRepository;
+        private final UserDepartmentRepository departmentRepository;
 
         UserService(UserNavMenuRepository userNavMenuRepository, NavigationMenuRepository navigationMenuRepository,
-                        PagePermissinApprovalRecordRepository approvalRepository) {
+                        PagePermissinApprovalRecordRepository approvalRepository,
+                        UserDepartmentRepository departmentRepository) {
                 this.userNavMenuRepository = userNavMenuRepository;
                 this.navigationMenuRepository = navigationMenuRepository;
                 this.approvalRepository = approvalRepository;
+                this.departmentRepository = departmentRepository;
         }
 
         /**
@@ -51,6 +55,14 @@ public class UserService {
                 List<UserNavMenuDTO> menu = nav.stream().map(ele -> new UserNavMenuDTO(ele.getId(), ele.getParentId(),
                                 ele.getTitleKey(), ele.getIcon(), ele.getRoute(), ele.getColor())).toList();
                 return new BasicResponse(200, "Navigation Menu", menu);
+        }
+
+        public Long fetchDashboard(Long userId) {
+                return departmentRepository.findByUserId(userId)
+                                .stream()
+                                .map(ele -> ele.getDeptId())
+                                .findFirst()
+                                .orElse(null);
         }
 
 }

@@ -28,16 +28,15 @@ import com.gsgd.generic_erp.util.SimpleResponse;
 import jakarta.transaction.Transactional;
 
 /**
- * Backs the "Menu Access" screens: for a given navigation menu, list every
- * user (or every permission held by one user) alongside whether they
- * currently have access, and grant/revoke that access.
+ * Backs the "Menu Access" screens: for a given navigation menu, list every user
+ * (or every permission held by one user) alongside whether they currently have
+ * access, and grant/revoke that access.
  *
  * Two independent access paths, either sufficient on its own (see
- * UserService#fetchNavMenu):
- * - Direct: a row in user_nav_menu grants a user baseline access to a menu.
- * - Via permission: a permission must first be registered against a menu
- * (menu_registered_permissions_record) before it can grant anything there;
- * a user then holds it for that menu via a row in
+ * UserService#fetchNavMenu): - Direct: a row in user_nav_menu grants a user
+ * baseline access to a menu. - Via permission: a permission must first be
+ * registered against a menu (menu_registered_permissions_record) before it can
+ * grant anything there; a user then holds it for that menu via a row in
  * page_permission_approvals_record. Only registered permissions are ever
  * offered for approval.
  *
@@ -54,17 +53,20 @@ public class MenuAccessService {
     private final MenuRegisteredPermissionRecordRepository registeredPermissionRepository;
     private final PagePermissinApprovalRecordRepository approvalRepository;
     private final PermissionChecker permissionChecker;
+    private final com.gsgd.generic_erp.repository.admin.NavigationMenuRepository menus;
 
     public MenuAccessService(UserNavMenuRepository userNavMenuRepository, UserRepository userRepository,
             PermissionRepository permissionRepository,
             MenuRegisteredPermissionRecordRepository registeredPermissionRepository,
-            PagePermissinApprovalRecordRepository approvalRepository, PermissionChecker permissionChecker) {
+            PagePermissinApprovalRecordRepository approvalRepository, PermissionChecker permissionChecker,
+            com.gsgd.generic_erp.repository.admin.NavigationMenuRepository menus) {
         this.userNavMenuRepository = userNavMenuRepository;
         this.userRepository = userRepository;
         this.permissionRepository = permissionRepository;
         this.registeredPermissionRepository = registeredPermissionRepository;
         this.approvalRepository = approvalRepository;
         this.permissionChecker = permissionChecker;
+        this.menus = menus;
     }
 
     /**
@@ -73,8 +75,7 @@ public class MenuAccessService {
      */
     public List<UserAccessDTO> listUsersForMenu(Long navId) {
         Set<Long> grantedUserIds = userNavMenuRepository.findByNavIdAndIsEnabledTrue(navId).stream()
-                .map(UserNavMenu::getUserId)
-                .collect(Collectors.toSet());
+                .map(UserNavMenu::getUserId).collect(Collectors.toSet());
         return userRepository.findAll(UserSpecification.excludeDisabled((byte) 1)).stream()
                 .sorted(Comparator.comparing(User::getUsername, String.CASE_INSENSITIVE_ORDER))
                 .map(u -> new UserAccessDTO(u.getId(), u.getUsername(), u.getDisplayName(), u.getEmail(),
@@ -83,22 +84,21 @@ public class MenuAccessService {
     }
 
     /**
-     * Permissions registered against this menu, each flagged with whether the
-     * given user currently holds it. Unregistered permissions are never offered.
+     * Permissions registered against this menu, each flagged with whether the given
+     * user currently holds it. Unregistered permissions are never offered.
      */
     public List<PermissionAccessDTO> listPermissionsForMenu(Long navId, Long userId) {
         Set<Long> registeredPermissionIds = registeredPermissionRepository.findByMenuId(navId).stream()
-                .map(MenuRegisteredPermissionsRecord::getPermissionId)
-                .collect(Collectors.toSet());
+                .map(MenuRegisteredPermissionsRecord::getPermissionId).collect(Collectors.toSet());
         if (registeredPermissionIds.isEmpty()) {
             return List.of();
         }
         Set<Long> grantedPermissionIds = approvalRepository
-                .findByUserIdAndMenuIdAndPermissionIdIn(userId, navId, registeredPermissionIds)
-                .stream()
-                .map(PagePermissionApprovalsRecord::getPermissionId)
-                .collect(Collectors.toSet());
+                .findByUserIdAndMenuIdAndPermissionIdIn(userId, navId, registeredPermissionIds).stream()
+                .filter(a -> Byte.valueOf((byte) 1).equals(a.getPermissionEnabled()))
+                .map(PagePermissionApprovalsRecord::getPermissionId).collect(Collectors.toSet());
         return permissionRepository.findAllById(registeredPermissionIds).stream()
+                .filter(p -> Integer.valueOf(1).equals(p.getIsEnabled()))
                 .sorted(Comparator.comparing(Permission::getPermissionCode, String.CASE_INSENSITIVE_ORDER))
                 .map(p -> new PermissionAccessDTO(p.getId(), p.getPermissionCode(),
                         grantedPermissionIds.contains(p.getId())))
@@ -106,23 +106,27 @@ public class MenuAccessService {
     }
 
     /**
-     * Grants or revokes a user's direct (baseline) access to a menu. Revoking
-     * also clears the user's permission approvals for the menu so access does
-     * not survive through the other path (see class doc).
+     * Grants or revokes a user's direct (baseline) access to a menu. Revoking also
+     * clears the user's permission approvals for the menu so access does not
+     * survive through the other path (see class doc).
      */
     @Transactional
     public SimpleResponse setUserAccess(Long navId, Long userId, boolean granted) {
+        if (granted) {
+            var menu = menus.findById(navId).orElse(null);
+            if (menu == null || !Boolean.TRUE.equals(menu.getIsEnabled()))
+                return new SimpleResponse(404, "Menu is unavailable");
+            String readCode = "/pmc/order-audit-task".equals(menu.getRoute()) ? "menu.order-audit-task.read"
+                    : "/pmc/evidence".equals(menu.getRoute()) ? "menu.evidence.read" : null;
+            if (readCode != null && !permissionChecker.has(readCode))
+                return new SimpleResponse(403, "You cannot grant menu access you do not hold");
+        }
         List<UserNavMenu> rows = userNavMenuRepository.findByNavIdAndUserId(navId, userId);
         if (granted) {
             UserNavMenu baseline = rows.stream().filter(r -> r.getPermissionId() == null).findFirst().orElse(null);
             if (baseline == null) {
-                userNavMenuRepository.save(UserNavMenu.builder()
-                        .navId(navId)
-                        .userId(userId)
-                        .permissionId(null)
-                        .isEnabled(true)
-                        .createDate(LocalDateTime.now())
-                        .build());
+                userNavMenuRepository.save(UserNavMenu.builder().navId(navId).userId(userId).permissionId(null)
+                        .isEnabled(true).createDate(LocalDateTime.now()).build());
             } else if (!Boolean.TRUE.equals(baseline.getIsEnabled())) {
                 baseline.setIsEnabled(true);
                 userNavMenuRepository.save(baseline);
@@ -150,10 +154,10 @@ public class MenuAccessService {
         if (granted) {
             // Approvals become API authorities, so the permission must be registered on
             // this menu and held by the caller (no granting what you do not have).
-            boolean registered = !registeredPermissionRepository.findByMenuIdAndPermissionId(navId, permissionId)
-                    .isEmpty();
+            boolean registered = registeredPermissionRepository.findByMenuIdAndPermissionId(navId, permissionId)
+                    .stream().anyMatch(r -> Byte.valueOf((byte) 1).equals(r.getPermissionEnabled()));
             Permission permission = permissionRepository.findById(permissionId).orElse(null);
-            if (!registered || permission == null) {
+            if (!registered || permission == null || !Integer.valueOf(1).equals(permission.getIsEnabled())) {
                 return new SimpleResponse(404, "Permission is not registered on this menu");
             }
             if (!permissionChecker.has(permission.getPermissionCode())) {
@@ -174,8 +178,7 @@ public class MenuAccessService {
      */
     public List<PermissionRegistrationDTO> listRegistrationsForMenu(Long navId) {
         Set<Long> registeredPermissionIds = registeredPermissionRepository.findByMenuId(navId).stream()
-                .map(MenuRegisteredPermissionsRecord::getPermissionId)
-                .collect(Collectors.toSet());
+                .map(MenuRegisteredPermissionsRecord::getPermissionId).collect(Collectors.toSet());
         return permissionRepository.findExists().stream()
                 .sorted(Comparator.comparing(Permission::getPermissionCode, String.CASE_INSENSITIVE_ORDER))
                 .map(p -> new PermissionRegistrationDTO(p.getId(), p.getPermissionCode(),
@@ -185,19 +188,21 @@ public class MenuAccessService {
 
     /**
      * Register or de-register a permission against a menu. De-registering also
-     * clears every user's approval of that permission for this menu — otherwise
-     * a de-registered permission could still silently grant sidebar access via
-     * an orphaned approval row that this UI can no longer show or manage.
+     * clears every user's approval of that permission for this menu — otherwise a
+     * de-registered permission could still silently grant sidebar access via an
+     * orphaned approval row that this UI can no longer show or manage.
      */
     @Transactional
     public SimpleResponse setPermissionRegistration(Long navId, Long permissionId, boolean registered) {
-        List<MenuRegisteredPermissionsRecord> rows = registeredPermissionRepository
-                .findByMenuIdAndPermissionId(navId, permissionId);
+        List<MenuRegisteredPermissionsRecord> rows = registeredPermissionRepository.findByMenuIdAndPermissionId(navId,
+                permissionId);
         if (registered) {
+            Permission permission = permissionRepository.findById(permissionId).orElse(null);
+            if (permission == null || !Integer.valueOf(1).equals(permission.getIsEnabled()))
+                return new SimpleResponse(404, "Permission is unavailable");
             if (rows.isEmpty()) {
                 registeredPermissionRepository
-                        .save(new MenuRegisteredPermissionsRecord(null, navId, permissionId, (byte) 1,
-                                null));
+                        .save(new MenuRegisteredPermissionsRecord(null, navId, permissionId, (byte) 1, null));
             }
         } else {
             if (!rows.isEmpty()) {

@@ -3,6 +3,8 @@ package com.gsgd.generic_erp.service.admin;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Objects;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -18,16 +20,18 @@ import com.gsgd.generic_erp.util.SimpleResponse;
 
 /**
  * CRUD operations for {@link Permission} records. Permission codes are
- * hierarchical strings (children share their parent's code as a prefix),
- * which is what enables cascading deletion of sub-permissions.
+ * hierarchical strings (children share their parent's code as a prefix), which
+ * is what enables cascading deletion of sub-permissions.
  */
 @Service
 public class PermissionService {
 
     private final PermissionRepository permissionRepository;
+    private final PermissionAssociationCleanup associations;
 
-    public PermissionService(PermissionRepository permissionRepository) {
+    public PermissionService(PermissionRepository permissionRepository, PermissionAssociationCleanup associations) {
         this.permissionRepository = permissionRepository;
+        this.associations = associations;
     }
 
     /** Returns a page of permissions, filtered by name when one is provided. */
@@ -60,10 +64,14 @@ public class PermissionService {
     }
 
     /** Saves a permission, rejecting duplicate permission codes. */
+    @Transactional
     public SimpleResponse saveOrUpdate(Permission transferObj) {
         Boolean exist = permissionRepository.existsByPermissionCode(transferObj.getPermissionCode());
         if (exist) {
             Permission existingPermission = permissionRepository.findByPermissionCode(transferObj.getPermissionCode());
+            if (!Integer.valueOf(1).equals(existingPermission.getIsEnabled())) {
+                associations.remove(List.of(existingPermission.getId()));
+            }
             permissionRepository.enable(existingPermission.getId());
             return new SimpleResponse(200, "Old Version reactivated");
         }
@@ -72,33 +80,43 @@ public class PermissionService {
         return new SimpleResponse(200, "");
     }
 
-    /** Deletes permissions by id; returns the number requested. */
+    /**
+     * Soft-delete exactly the selected ids and revoke their associations
+     * atomically.
+     */
+    @Transactional
     public long deleteByGroup(Long[] deleteVal) {
-        for (Long id : deleteVal) {
-            permissionRepository.disable(id);
-        }
-        return deleteVal.length;
-    }
-
-    /** Deletes permissions by exact permission code. */
-    public long deleteByGroup(String[] deleteVal) {
-        for (String id : deleteVal) {
-            permissionRepository.deleteByPermissionCode(id);
-        }
-        return deleteVal.length;
+        if (deleteVal == null)
+            return 0;
+        var permissions = permissionRepository
+                .findAllById(Arrays.stream(deleteVal).filter(Objects::nonNull).distinct().toList());
+        return deactivate(permissions);
     }
 
     /**
-     * Deletes all sub-permissions of the given root codes, matched by the
-     * {@code code%} prefix pattern. Called before deleting the roots themselves.
+     * Legacy root endpoint: match complete dot-separated segments, never sibling
+     * prefixes.
      */
-    public void findAndDeleteSubPermission(String[] deleteVal) {
-        Arrays.asList(deleteVal).stream()
-                .forEach(ele -> {
-                    List<Permission> children = permissionRepository.findChildrenPermission(ele + "%");
-                    children.stream().forEach(e -> {
-                        permissionRepository.disable(e.getId());
-                    });
-                });
+    @Transactional
+    public long deleteRoots(String[] roots) {
+        if (roots == null)
+            return 0;
+        var codes = Arrays.stream(roots).filter(Objects::nonNull).filter(c -> !c.isBlank()).toList();
+        var permissions = permissionRepository.findAll().stream()
+                .filter(p -> codes.stream()
+                        .anyMatch(c -> p.getPermissionCode().equals(c) || p.getPermissionCode().startsWith(c + ".")))
+                .toList();
+        return deactivate(permissions);
+    }
+
+    private long deactivate(List<Permission> permissions) {
+        if (permissions.isEmpty())
+            return 0;
+        // Clear even previously disabled ids, making repeated deletion repair stale
+        // links.
+        associations.remove(permissions.stream().map(Permission::getId).toList());
+        permissions.forEach(p -> p.setIsEnabled(0));
+        permissionRepository.saveAllAndFlush(permissions);
+        return permissions.size();
     }
 }

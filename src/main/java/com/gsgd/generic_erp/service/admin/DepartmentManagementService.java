@@ -113,7 +113,7 @@ public class DepartmentManagementService {
                 .collect(Collectors.toSet());
         Page<Role> page = roleRepository.findAll(pageable);
         List<RoleGrantDTO> dto = page.getContent().stream()
-                .map(r -> new RoleGrantDTO(r.getId(), r.getRoleName(), grantedRoleIds.contains(r.getId())))
+                .map(r -> new RoleGrantDTO(r.getId(), r.getRoleName(), r.getVal(), grantedRoleIds.contains(r.getId())))
                 .toList();
         return new BasicPageResponse<>(dto, page);
     }
@@ -121,7 +121,7 @@ public class DepartmentManagementService {
     /** Links or unlinks a single role to a department (idempotent). */
     @Transactional
     public SimpleResponse setDepartmentRole(Long deptId, Long roleId, boolean granted) {
-        boolean exists = roleDepartmentRepository.existsByRoleIdAndDepartmentId(roleId, deptId);
+        boolean exists = roleDepartmentRepository.existsByRoleIdAndDepartmentId(roleId, deptId).size() > 0;
         if (granted) {
             if (!exists) {
                 roleDepartmentRepository.save(RoleDepartment.builder()

@@ -61,8 +61,8 @@ public class RoleManagementService {
 
     public RoleManagementService(RoleRepository roleRepository, UserRoleRepository userRoleRepository,
             PermissionRepository permissionRepository, RolePermissionRepository rolePermissionRepository,
-            RoleDepartmentRepository roleDepartmentRepository, UserRepository userRepository,
-            RoleGuard roleGuard, PermissionChecker permissionChecker) {
+            RoleDepartmentRepository roleDepartmentRepository, UserRepository userRepository, RoleGuard roleGuard,
+            PermissionChecker permissionChecker) {
         this.roleRepository = roleRepository;
         this.userRoleRepository = userRoleRepository;
         this.permissionRepository = permissionRepository;
@@ -76,8 +76,7 @@ public class RoleManagementService {
     /** Returns a page of roles mapped to {@link RoleDTO}. */
     public BasicPageResponse<Role, RoleDTO> fetchRoles(Pageable pageable) {
         Page<Role> page = roleRepository.findAll(pageable);
-        List<RoleDTO> dto = page.getContent().stream()
-                .map(r -> new RoleDTO(r.getId(), r.getRoleName(), r.getVal()))
+        List<RoleDTO> dto = page.getContent().stream().map(r -> new RoleDTO(r.getId(), r.getRoleName(), r.getVal()))
                 .toList();
         return new BasicPageResponse<>(dto, page);
     }
@@ -85,11 +84,10 @@ public class RoleManagementService {
     /**
      * Creates a role (id == null) or renames/updates an existing one.
      * <p>
-     * Authorities are derived from the role name, so the built-in ROOT/ADMIN
-     * roles are immutable and their names (case-insensitively) are reserved;
-     * otherwise renaming any role to "ROOT" would grant ROOT to its holders.
-     * {@code val} is the external code used to assign roles, so it must be
-     * unique too.
+     * Authorities are derived from the role name, so the built-in ROOT/ADMIN roles
+     * are immutable and their names (case-insensitively) are reserved; otherwise
+     * renaming any role to "ROOT" would grant ROOT to its holders. {@code val} is
+     * the external code used to assign roles, so it must be unique too.
      */
     public SimpleResponse saveOrUpdate(RoleDTO dto) {
         String name = dto.getRoleName() == null ? null : dto.getRoleName().trim();
@@ -106,11 +104,7 @@ public class RoleManagementService {
             if (roleRepository.existsByVal(dto.getVal())) {
                 return new SimpleResponse(201, "Role value already in use");
             }
-            roleRepository.save(Role.builder()
-                    .roleName(name)
-                    .val(dto.getVal())
-                    .createDate(LocalDate.now())
-                    .build());
+            roleRepository.save(Role.builder().roleName(name).val(dto.getVal()).createDate(LocalDate.now()).build());
             return new SimpleResponse(200, "");
         }
         Role role = roleRepository.findById(dto.getId()).orElse(null);
@@ -134,8 +128,8 @@ public class RoleManagementService {
 
     /**
      * Deletes a role, but only when no user is still assigned to it. The role's
-     * permission and department links are removed first to satisfy the foreign
-     * keys in {@code role_permission_tb} / {@code role_department_tb}.
+     * permission and department links are removed first to satisfy the foreign keys
+     * in {@code role_permission_tb} / {@code role_department_tb}.
      */
     @Transactional
     public SimpleResponse deleteRole(Long roleId) throws NoneDeleteableException {
@@ -161,8 +155,7 @@ public class RoleManagementService {
      */
     public BasicPageResponse<Permission, PermissionAccessDTO> listPermissionsForRole(Long roleId, Pageable pageable) {
         Set<Long> grantedIds = rolePermissionRepository.findByRoleId(roleId).stream()
-                .map(RolePermission::getPermissionId)
-                .collect(Collectors.toSet());
+                .map(RolePermission::getPermissionId).collect(Collectors.toSet());
         Page<Permission> page = permissionRepository.findAll(PermissionSpecification.enabled(), pageable);
         List<PermissionAccessDTO> dto = page.getContent().stream()
                 .map(p -> new PermissionAccessDTO(p.getId(), p.getPermissionCode(), grantedIds.contains(p.getId())))
@@ -175,7 +168,7 @@ public class RoleManagementService {
     public SimpleResponse setRolePermission(Long roleId, Long permissionId, boolean granted) {
         Role role = roleRepository.findById(roleId).orElse(null);
         Permission permission = permissionRepository.findById(permissionId).orElse(null);
-        if (role == null || permission == null) {
+        if (role == null || permission == null || (granted && !Integer.valueOf(1).equals(permission.getIsEnabled()))) {
             return new SimpleResponse(404, "Role or permission not found");
         }
         if (granted && !permissionChecker.has(permission.getPermissionCode())) {
@@ -187,13 +180,9 @@ public class RoleManagementService {
         boolean exists = rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, permissionId);
         if (granted) {
             if (!exists) {
-                rolePermissionRepository.save(RolePermission.builder()
-                        .roleId(roleId)
-                        .permissionId(permissionId)
-                        .createdBy(currentUserId())
-                        .createTime(LocalDateTime.now())
-                        .createDate(LocalDate.now())
-                        .build());
+                rolePermissionRepository.save(
+                        RolePermission.builder().roleId(roleId).permissionId(permissionId).createdBy(currentUserId())
+                                .createTime(LocalDateTime.now()).createDate(LocalDate.now()).build());
             }
         } else if (exists) {
             rolePermissionRepository.deleteByRoleIdAndPermissionId(roleId, permissionId);
@@ -203,16 +192,13 @@ public class RoleManagementService {
 
     /**
      * Resolves the id of the currently authenticated user for the
-     * {@code created_by}
-     * audit column. Falls back to the root user (id 1) when no username-based
-     * principal is present (e.g. system calls).
+     * {@code created_by} audit column. Falls back to the root user (id 1) when no
+     * username-based principal is present (e.g. system calls).
      */
     private Long currentUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.getPrincipal() instanceof UserDetails details) {
-            return userRepository.findByUsername(details.getUsername())
-                    .map(u -> u.getId())
-                    .orElse(1L);
+            return userRepository.findByUsername(details.getUsername()).map(u -> u.getId()).orElse(1L);
         }
         return 1L;
     }

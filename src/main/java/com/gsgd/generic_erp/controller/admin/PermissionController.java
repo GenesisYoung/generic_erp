@@ -60,8 +60,7 @@ public class PermissionController {
     @PostMapping("/deleteRoot")
     public BasicResponse deleteRoot(@RequestBody DeleteRootRecord record) {
 
-        permissionService.findAndDeleteSubPermission(record.deleteVal());
-        long b = permissionService.deleteByGroup(record.deleteVal());
+        long b = permissionService.deleteRoots(record.deleteVal());
         return new BasicResponse(200, "success", b);
 
     }

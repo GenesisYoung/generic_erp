@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -36,6 +37,13 @@ public class MenuRegisteredPermissionsRecord {
     @Column(name = "permission_enabled", nullable = false)
     private Byte permissionEnabled;
 
-    @Column(name = "create_date", nullable = false, insertable = false, updatable = false)
+    @Column(name = "create_date", nullable = false, updatable = false)
     private LocalDateTime createDate;
+    /** Fill the required creation time even when the database has no default. */
+    @PrePersist
+    protected void initializeCreateDate() {
+        if (createDate == null) {
+            createDate = LocalDateTime.now();
+        }
+    }
 }

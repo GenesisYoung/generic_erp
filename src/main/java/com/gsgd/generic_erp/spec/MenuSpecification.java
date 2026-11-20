@@ -26,7 +26,8 @@ public class MenuSpecification {
     }
 
     public static Specification<NavigationMenu> valid() {
-        return (root, query, builder) -> builder.and(root.isNotNull(), root.get("route").notEqualTo(""));
+        // Directory nodes have an empty route but must remain independently assignable.
+        return (root, query, builder) -> builder.isTrue(root.get("isEnabled"));
     }
 
     public static Specification<NavigationMenu> filter(MenuDTO f) {

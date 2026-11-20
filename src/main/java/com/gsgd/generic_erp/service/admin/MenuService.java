@@ -17,18 +17,21 @@ import com.gsgd.generic_erp.spec.MenuSpecification;
 import com.gsgd.generic_erp.util.BasicPageResponse;
 
 /**
- * CRUD operations for sidebar navigation menu items, with
- * specification-based filtering and pagination.
+ * CRUD operations for sidebar navigation menu items, with specification-based
+ * filtering and pagination.
  */
 @Service
 public class MenuService {
 
     private NavigationMenuRepository repository;
+    private final com.gsgd.generic_erp.configuration.security.PermissionChecker permissionChecker;
 
     private UserNavMenuRepository navMenuRepository;
 
-    public MenuService(NavigationMenuRepository m, UserNavMenuRepository navMenuRepository) {
+    public MenuService(NavigationMenuRepository m, UserNavMenuRepository navMenuRepository,
+            com.gsgd.generic_erp.configuration.security.PermissionChecker permissionChecker) {
         this.repository = m;
+        this.permissionChecker = permissionChecker;
         this.navMenuRepository = navMenuRepository;
     }
 
@@ -42,14 +45,17 @@ public class MenuService {
         List<MenuDTO> result = new ArrayList<>();
         for (NavigationMenu menuDTO : content) {
             result.add(new MenuDTO(menuDTO.getId(), menuDTO.getParentId(), menuDTO.getTitleKey(), menuDTO.getIcon(),
-                    menuDTO.getRoute(),
-                    menuDTO.getColor(),
-                    menuDTO.getPId()));
+                    menuDTO.getRoute(), menuDTO.getColor(), menuDTO.getPId()));
         }
         return result;
     }
 
     public void saveAndFlush(MenuDTO entity) {
+        // Changing a menu route must not become a way to grant read access one lacks.
+        String readCode = "/pmc/order-audit-task".equals(entity.getRoute()) ? "menu.order-audit-task.read"
+                : "/pmc/evidence".equals(entity.getRoute()) ? "menu.evidence.read" : null;
+        if (readCode != null && !permissionChecker.has(readCode))
+            throw new org.springframework.security.access.AccessDeniedException("Target menu read permission required");
         NavigationMenu menu = transToEntity(entity);
         repository.saveAndFlush(menu);
     }

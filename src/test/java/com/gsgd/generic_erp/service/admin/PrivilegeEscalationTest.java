@@ -66,8 +66,8 @@ class PrivilegeEscalationTest {
                 mock(Language.class), mock(UserInfoRepository.class), mock(UserDepartmentRepository.class), guard,
                 mock(RefreshTokenStore.class), checker, permissions, mock(UserNavMenuRepository.class),
                 mock(PagePermissinApprovalRecordRepository.class));
-        roleService = new RoleManagementService(roles, userRoles, permissions,
-                mock(RolePermissionRepository.class), mock(RoleDepartmentRepository.class), users, guard, checker);
+        roleService = new RoleManagementService(roles, userRoles, permissions, mock(RolePermissionRepository.class),
+                mock(RoleDepartmentRepository.class), users, guard, checker);
         authenticateAs("ADMIN", "menu.roleManagement", "menu.userManagement");
     }
 
@@ -119,6 +119,14 @@ class PrivilegeEscalationTest {
         verify(roles, never()).save(any());
     }
 
+    @Test
+    void rootCannotGrantDisabledPermissionToRole() {
+        authenticateAs("ROOT");
+        when(roles.findById(100L)).thenReturn(Optional.of(CLERK));
+        when(permissions.findById(113L)).thenReturn(Optional.of(new Permission(113L, "menu.evidence.create", 0, null)));
+        assertEquals(404, roleService.setRolePermission(100L, 113L, true).getCode());
+    }
+
     private static User user(Long id, String username) {
         User u = new User();
         u.setId(id);
@@ -154,7 +162,7 @@ class PrivilegeEscalationTest {
         for (String code : permissionCodes) {
             authorities.add(new SimpleGrantedAuthority(code));
         }
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("caller", null, authorities));
+        SecurityContextHolder.getContext()
+                .setAuthentication(new UsernamePasswordAuthenticationToken("caller", null, authorities));
     }
 }

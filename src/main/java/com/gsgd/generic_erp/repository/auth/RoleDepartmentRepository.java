@@ -20,7 +20,7 @@ public interface RoleDepartmentRepository extends JpaRepository<RoleDepartment, 
     List<RoleDepartment> findByRoleId(Long roleId);
 
     @Query("SELECT r.id FROM RoleDepartment r WHERE r.roleId = :roleId AND r.departmentId = :departmentId")
-    boolean existsByRoleIdAndDepartmentId(Long roleId, Long departmentId);
+    List<Long> existsByRoleIdAndDepartmentId(Long roleId, Long departmentId);
 
     @Modifying
     @Transactional

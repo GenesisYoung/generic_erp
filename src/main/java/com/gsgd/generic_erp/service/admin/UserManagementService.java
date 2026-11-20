@@ -178,8 +178,8 @@ public class UserManagementService {
         }
 
         if (creating) {
-            if (user.getInitialPassword() == null || user.getInitialPassword().length() < 12) {
-                throw new IllegalArgumentException("Initial password must be at least 12 characters");
+            if (user.getInitialPassword() == null || user.getInitialPassword().length() < 6) {
+                throw new IllegalArgumentException("Initial password must be at least 6 characters");
             }
             if (userRepository.existsByUsername(user.getName())) {
                 throw new DataIntegrityViolationException(message(Language_EN.USERNAME_DULICATED.getMessage(),
@@ -301,7 +301,8 @@ public class UserManagementService {
      * Soft-deletes a user by setting {@code isEnabled = 0}; the row (and its
      * {@code user_info_tb} profile and login logs) is kept for audit history.
      * Every access binding is removed: role links, department links, direct
-     * menu grants and per-menu permission approvals. The root user (id 1) cannot be deleted, and only ROOT may
+     * menu grants and per-menu permission approvals. The root user (id 1) cannot be
+     * deleted, and only ROOT may
      * delete another ROOT account. The user's session is revoked immediately.
      *
      * @throws NoneDeleteableException

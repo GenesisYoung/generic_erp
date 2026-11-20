@@ -15,5 +15,6 @@ import lombok.NoArgsConstructor;
 public class RoleGrantDTO {
     private Long id;
     private String roleName;
+    private Integer val;
     private boolean granted;
 }
