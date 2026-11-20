@@ -29,12 +29,16 @@ WHERE SDATE >= DATEADD(year, -2, GETDATE())
 GROUP BY CASE WHEN ISNULL(SCRUTINY, '') = '' THEN 'not audited' ELSE 'audited' END, AUDITSTATE
 ORDER BY 1, 2;
 
-/* C4 (A4). Is STAFF a staff code or a name? Counts only. */
+/* C4 (A4). Is STAFF a staff code or a name? Counts only.
+   SQL Server cannot SUM over an EXISTS subquery (error 130),
+   so each lookup is done once per order with OUTER APPLY. */
 SELECT
-    SUM(CASE WHEN EXISTS (SELECT 1 FROM STAFFER f WHERE f.CODE  = h.STAFF) THEN 1 ELSE 0 END) AS staff_is_code,
-    SUM(CASE WHEN EXISTS (SELECT 1 FROM STAFFER f WHERE f.CNAME = h.STAFF) THEN 1 ELSE 0 END) AS staff_is_name,
-    COUNT(*)                                                                                   AS orders
-FROM ORDSPHS1 h
+    SUM(CASE WHEN c.CODE  IS NOT NULL THEN 1 ELSE 0 END) AS staff_is_code,
+    SUM(CASE WHEN n.CNAME IS NOT NULL THEN 1 ELSE 0 END) AS staff_is_name,
+    COUNT(*)                                             AS orders
+FROM ORDSPHS1 h WITH (NOLOCK)
+OUTER APPLY (SELECT TOP 1 f.CODE  FROM STAFFER f WITH (NOLOCK) WHERE f.CODE  = h.STAFF) c
+OUTER APPLY (SELECT TOP 1 f.CNAME FROM STAFFER f WITH (NOLOCK) WHERE f.CNAME = h.STAFF) n
 WHERE h.SDATE >= DATEADD(year, -1, GETDATE());
 
 /* C5. Is UPDATETIME filled in? */
