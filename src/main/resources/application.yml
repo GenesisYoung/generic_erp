@@ -85,7 +85,7 @@ erp:
       enabled: ${ERP_FOLLOWUP_JOB_ENABLED:true}
       cron: "0 0 * * * *"
   legacy:
-    # Read-only sync of purchase orders from the old ERP (SQL Server).
+    # Read-only sync of purchase orders and customer orders from the old ERP (SQL Server).
     # Off by default. Set LEGACY_ERP_ENABLED=true and the LEGACY_ERP_DB_* variables
     # (use a SELECT-only database login) to turn it on.
     enabled: ${LEGACY_ERP_ENABLED:false}
@@ -136,3 +136,34 @@ erp:
       # The default query already returns these names, so no mapping is needed.
       # A status that is neither mapped nor one of these names counts as PLACED.
       status-map: {}
+    customer-order:
+      # New customer orders (ORDCORD1) -> PMC notification + 待评审客户订单 page.
+      # Source and assumptions: Implementation Doc/Customer Order Sync/legacy_customer_order_query.sql
+      # Override the query with ERP_LEGACY_CUSTOMERORDER_QUERY if needed (same aliases required).
+      sync-cron: ${LEGACY_ERP_CO_SYNC_CRON:0 */15 * * * *}
+      lookback-days: 60
+      batch-limit: 2000
+      notify-roles: pmc_manager,pmc_clerk
+      query: |
+        SELECT
+            RTRIM(h.ERI)                                          AS legacy_id,
+            RTRIM(h.CODE)                                         AS order_no,
+            RTRIM(h.CUST)                                         AS customer_code,
+            RTRIM(c.CNAME)                                        AS customer_name,
+            h.SDATE                                               AS order_date,
+            h.DLVDATE                                             AS delivery_date,
+            RTRIM(h.STAFF)                                        AS sales_code,
+            l.line_count                                          AS line_count,
+            h.QTY                                                 AS total_qty,
+            CASE WHEN ISNULL(h.SCRUTINY, '') <> '' THEN 1 ELSE 0 END AS legacy_audited,
+            CASE WHEN h.CLOSETYPE <> 0 THEN 1 ELSE 0 END          AS closed
+        FROM ORDCORD1 h WITH (NOLOCK)
+        LEFT JOIN (
+            SELECT MASTERI, COUNT(*) AS line_count
+            FROM ORDCORD2 WITH (NOLOCK)
+            GROUP BY MASTERI
+        ) l ON l.MASTERI = h.ERI
+        LEFT JOIN CUSTOMER c WITH (NOLOCK) ON c.CODE = h.CUST
+        WHERE h.SDATE >= :since
+          AND h.CODE IS NOT NULL
+        ORDER BY h.SDATE, h.CODE

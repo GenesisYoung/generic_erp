@@ -51,6 +51,14 @@ public class LegacyErpDataSourceConfig {
         return new JdbcLegacyPurchaseOrderReader(template, props.getPurchaseOrder().getQuery());
     }
 
+    @Bean
+    public LegacyCustomerOrderReader legacyCustomerOrderReader(HikariDataSourceHolder pool,
+            LegacyErpProperties props) {
+        JdbcTemplate template = new JdbcTemplate(pool.dataSource());
+        template.setQueryTimeout(props.getDatasource().getQueryTimeoutSeconds());
+        return new JdbcLegacyCustomerOrderReader(template, props.getCustomerOrder().getQuery());
+    }
+
     /** Wraps the pool so it is not a DataSource bean (see class comment). */
     public record HikariDataSourceHolder(HikariDataSource dataSource) implements AutoCloseable {
         @Override
