@@ -17,8 +17,9 @@
          order is recognised by its received quantity instead.
      A3  CONFIRMED 2026-11-20 (C3): AUDITSTATE is always 0, so SCRUTINY is
          the audit flag; 65 of 17,288 orders in two years are not audited.
-     A4  OPEN (C4 not received yet): ORDSPHS1.STAFF holds the buyer. It may be a code or a name; either way
-         map it to a user in legacy_user_map_tb if it is not the username.
+     A4  CONFIRMED 2026-11-20 (C4): ORDSPHS1.STAFF is a STAFFER.CODE on all
+         8,808 orders of the last year (0 match STAFFER.CNAME). Map each staff
+         code to a user in legacy_user_map_tb unless the username equals the code.
 
    Output columns (names are required by the reader):
      po_no, supplier_code, supplier_name, buyer_code, order_date,
