@@ -68,3 +68,28 @@ logging:
     "[org.hibernate]": error
 app:
   language: ${LANGUAGE}
+
+erp:
+  purchase:
+    # Business time zone: follow-up windows are calendar dates in this zone.
+    zone: ${ERP_PURCHASE_ZONE:Asia/Shanghai}
+  legacy:
+    # Read-only sync of purchase orders from the old ERP (SQL Server).
+    # Off by default. Set LEGACY_ERP_ENABLED=true and the LEGACY_ERP_DB_* variables
+    # (use a SELECT-only database login) to turn it on.
+    enabled: ${LEGACY_ERP_ENABLED:false}
+    source-system: LEGACY_ERP
+    datasource:
+      url: ${LEGACY_ERP_DB_URL:}
+      username: ${LEGACY_ERP_DB_USERNAME:}
+      password: ${LEGACY_ERP_DB_PASSWORD:}
+    purchase-order:
+      sync-cron: ${LEGACY_ERP_PO_SYNC_CRON:0 */15 * * * *}
+      initial-lookback-days: 60
+      batch-limit: 5000
+      # TODO(old ERP schema): replace with the real purchase order table and columns.
+      # Must return these aliases and use the :since parameter.
+      query: ${LEGACY_ERP_PO_QUERY:}
+      # Raw old-ERP status -> PLACED / PARTIALLY_RECEIVED / RECEIVED / CLOSED / CANCELLED.
+      # Unlisted statuses count as PLACED. Fill in once the status values are known.
+      status-map: {}
