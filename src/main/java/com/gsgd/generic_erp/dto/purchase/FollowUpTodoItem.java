@@ -23,13 +23,16 @@ public record FollowUpTodoItem(
         String supplierCode,
         String supplierName,
         LocalDate orderDate,
-        LocalDate expectedDeliveryDate) {
+        LocalDate expectedDeliveryDate,
+        Long templateId,
+        String templateName) {
 
-    public static FollowUpTodoItem of(CheckpointAndOrder row, LocalDate today) {
+    public static FollowUpTodoItem of(CheckpointAndOrder row, LocalDate today, String templateName) {
         var c = row.checkpoint();
         var po = row.order();
         return new FollowUpTodoItem(c.getId(), c.getStage(), c.getSeq(), c.getWindowStart(), c.getWindowEnd(),
                 ChronoUnit.DAYS.between(today, c.getWindowEnd()), po.getId(), po.getExternalPoNo(),
-                po.getSupplierCode(), po.getSupplierName(), po.getOrderDate(), po.getExpectedDeliveryDate());
+                po.getSupplierCode(), po.getSupplierName(), po.getOrderDate(), po.getExpectedDeliveryDate(),
+                po.getFollowupRuleId(), templateName);
     }
 }

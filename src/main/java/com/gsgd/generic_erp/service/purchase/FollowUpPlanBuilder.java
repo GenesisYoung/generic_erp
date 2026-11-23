@@ -84,4 +84,36 @@ public final class FollowUpPlanBuilder {
     public static int lastDay(List<StageDef> stages) {
         return stages.stream().mapToInt(StageDef::endDay).max().orElse(0);
     }
+
+    /**
+     * A day-based template: one task per notification day. Task i runs from
+     * its day until the day before the next notification day, so it can be
+     * done any time until the next one is due; the last task runs until the
+     * end of the production period (or just its own day when that is later).
+     *
+     * @param days           calendar days after the order date, 1 or more; any order, duplicates ignored
+     * @param productionDays the production period; null means "until the last day"
+     */
+    public static List<PlannedCheckpoint> buildFromDays(LocalDate orderDate, List<Integer> days,
+            Integer productionDays) {
+        List<Integer> sorted = days.stream().distinct().sorted().toList();
+        if (sorted.isEmpty() || sorted.get(0) < 1) {
+            throw new IllegalArgumentException("Notification days must be 1 or more");
+        }
+        int end = Math.max(sorted.get(sorted.size() - 1), productionDays == null ? 0 : productionDays);
+        List<PlannedCheckpoint> plan = new ArrayList<>();
+        for (int i = 0; i < sorted.size(); i++) {
+            int from = sorted.get(i);
+            int to = i + 1 < sorted.size() ? sorted.get(i + 1) - 1 : end;
+            plan.add(new PlannedCheckpoint(FollowUpStage.NOTIFY, i + 1, orderDate.plusDays(from),
+                    orderDate.plusDays(to)));
+        }
+        return plan;
+    }
+
+    /** Last planned day of a day-based template. */
+    public static int lastDay(List<Integer> days, Integer productionDays) {
+        int last = days.stream().mapToInt(Integer::intValue).max().orElse(0);
+        return Math.max(last, productionDays == null ? 0 : productionDays);
+    }
 }

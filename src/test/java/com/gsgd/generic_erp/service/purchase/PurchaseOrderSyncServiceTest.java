@@ -79,7 +79,8 @@ class PurchaseOrderSyncServiceTest {
         userRepo = mock(UserRepository.class);
         ruleService = mock(FollowUpRuleService.class);
         when(ruleService.defaultRuleId()).thenReturn(1L);
-        when(ruleService.stagesOf(any())).thenReturn(FollowUpPlanBuilder.defaultStages());
+        when(ruleService.plan(any(), any())).thenAnswer(inv -> FollowUpPlanBuilder.build(inv.getArgument(1),
+                FollowUpPlanBuilder.defaultStages()));
         when(poRepo.save(any())).thenAnswer(inv -> {
             PurchaseOrder po = inv.getArgument(0);
             if (po.getId() == null) {

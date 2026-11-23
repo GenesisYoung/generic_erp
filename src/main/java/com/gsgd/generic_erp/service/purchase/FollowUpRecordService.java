@@ -46,6 +46,7 @@ public class FollowUpRecordService {
     private final FollowUpCheckpointRepository checkpointRepository;
     private final FollowUpRecordRepository recordRepository;
     private final UserRepository userRepository;
+    private final com.gsgd.generic_erp.repository.purchase.FollowUpRuleRepository ruleRepository;
     private final Clock clock;
 
     /** Thrown for a request the caller can fix; the message is safe to show. */
@@ -110,6 +111,55 @@ public class FollowUpRecordService {
         return Optional.of(new Saved(FollowUpRecordView.of(saved, nameOf(userId)), completed));
     }
 
+    /**
+     * Marks one follow-up task done (the user picks the task, so it does not
+     * depend on which window contains today). Saves the follow-up record with
+     * it. The task must be OPEN and its window must have started.
+     *
+     * @return empty when the task or its order does not exist or is not visible
+     * @throws InvalidFollowUpException 400 for a bad body, 409 when the task is not open,
+     *                                  has not started or the order no longer needs follow-up
+     */
+    @Transactional
+    public Optional<Saved> completeTask(Long userId, Long checkpointId, FollowUpRecordRequest req) {
+        Optional<FollowUpCheckpoint> found = checkpointRepository.findById(checkpointId);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        FollowUpCheckpoint c = found.get();
+        Optional<PurchaseOrder> order = queryService.find(userId, c.getPurchaseOrderId());
+        if (order.isEmpty()) {
+            return Optional.empty();
+        }
+        PurchaseOrder po = order.get();
+        validate(req);
+        if (!po.getStatus().isActive()) {
+            throw new InvalidFollowUpException(409,
+                    I18n.t("followup.error.orderInactive", po.getExternalPoNo(),
+                            I18n.ref("purchase.status." + po.getStatus().name())));
+        }
+        LocalDateTime now = LocalDateTime.now(clock);
+        if (c.getStatus() != CheckpointStatus.OPEN) {
+            throw new InvalidFollowUpException(409, I18n.t("followup.error.taskNotOpen"));
+        }
+        if (c.getWindowStart().isAfter(now.toLocalDate())) {
+            throw new InvalidFollowUpException(409, I18n.t("followup.error.taskNotStarted", c.getWindowStart().toString()));
+        }
+        FollowUpRecord saved = recordRepository.save(FollowUpRecord.builder()
+                .purchaseOrderId(po.getId())
+                .checkpointId(c.getId())
+                .recordedBy(userId)
+                .materialStatus(req.materialStatus())
+                .supplierPromisedDate(req.supplierPromisedDate())
+                .missingOrderFound(Boolean.TRUE.equals(req.missingOrderFound()))
+                .note(blankToNull(req.note()))
+                .followedUpAt(now)
+                .build());
+        c.setStatus(CheckpointStatus.DONE);
+        c.setDoneRecordId(saved.getId());
+        return Optional.of(new Saved(FollowUpRecordView.of(saved, nameOf(userId)), checkpointRepository.save(c)));
+    }
+
     /** The order, its checkpoints and its records. Empty when not visible. */
     public Optional<PurchaseOrderFollowUps> followUps(Long userId, Long purchaseOrderId) {
         return queryService.find(userId, purchaseOrderId).map(po -> {
@@ -124,8 +174,13 @@ public class FollowUpRecordService {
     /** The caller's checkpoints whose window is open now, the ones ending first on top. */
     public List<FollowUpTodoItem> todo(Long userId) {
         LocalDate today = LocalDate.now(clock);
-        return checkpointRepository.findTodo(userId, today).stream()
-                .map(row -> FollowUpTodoItem.of(row, today))
+        List<com.gsgd.generic_erp.repository.purchase.CheckpointAndOrder> rows = checkpointRepository.findTodo(userId,
+                today);
+        Map<Long, String> templates = new java.util.HashMap<>();
+        ruleRepository.findAllById(rows.stream().map(r -> r.order().getFollowupRuleId()).filter(Objects::nonNull)
+                .distinct().toList()).forEach(r -> templates.put(r.getId(), r.getRuleName()));
+        return rows.stream()
+                .map(row -> FollowUpTodoItem.of(row, today, templates.get(row.order().getFollowupRuleId())))
                 .toList();
     }
 

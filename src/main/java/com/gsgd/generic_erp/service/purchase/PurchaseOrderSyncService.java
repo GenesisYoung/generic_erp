@@ -196,8 +196,7 @@ public class PurchaseOrderSyncService {
 
     private void createCheckpoints(PurchaseOrder po, LocalDateTime now) {
         LocalDate today = now.toLocalDate();
-        List<PlannedCheckpoint> plan = FollowUpPlanBuilder.build(po.getOrderDate(),
-                ruleService.stagesOf(po.getFollowupRuleId()));
+        List<PlannedCheckpoint> plan = ruleService.plan(po.getFollowupRuleId(), po.getOrderDate());
         List<FollowUpCheckpoint> rows = plan.stream()
                 .filter(p -> !p.windowEnd().isBefore(today))
                 .map(p -> FollowUpCheckpoint.builder()

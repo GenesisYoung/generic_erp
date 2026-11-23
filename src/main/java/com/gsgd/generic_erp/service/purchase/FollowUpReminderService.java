@@ -117,7 +117,7 @@ public class FollowUpReminderService {
         Map<Long, Integer> periodByRule = new LinkedHashMap<>();
         List<FollowUpCheckpoint> created = new ArrayList<>();
         for (PurchaseOrder po : orders) {
-            int lastDay = FollowUpPlanBuilder.lastDay(ruleService.stagesOf(po.getFollowupRuleId()));
+            int lastDay = ruleService.lastDay(po.getFollowupRuleId());
             long day = ChronoUnit.DAYS.between(po.getOrderDate(), today);
             if (day <= lastDay) {
                 continue; // still inside the planned stages

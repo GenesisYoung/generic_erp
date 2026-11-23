@@ -10,16 +10,19 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.gsgd.generic_erp.configuration.security.UserDetail;
+import com.gsgd.generic_erp.dto.purchase.ApplyTemplateRequest;
 import com.gsgd.generic_erp.dto.purchase.FollowUpRecordRequest;
 import com.gsgd.generic_erp.entity.purchase.PurchaseOrder;
 import com.gsgd.generic_erp.service.purchase.FollowUpRecordService;
 import com.gsgd.generic_erp.service.purchase.FollowUpRecordService.InvalidFollowUpException;
+import com.gsgd.generic_erp.service.purchase.FollowUpRuleService;
 import com.gsgd.generic_erp.service.purchase.PurchaseOrderQueryService;
 import com.gsgd.generic_erp.service.purchase.PurchaseOrderSyncService;
 import com.gsgd.generic_erp.util.BasicPage;
@@ -39,12 +42,14 @@ public class PurchaseOrderController {
     private final PurchaseOrderQueryService queryService;
     private final PurchaseOrderSyncService syncService;
     private final FollowUpRecordService followUpService;
+    private final FollowUpRuleService ruleService;
 
     public PurchaseOrderController(PurchaseOrderQueryService queryService, PurchaseOrderSyncService syncService,
-            FollowUpRecordService followUpService) {
+            FollowUpRecordService followUpService, FollowUpRuleService ruleService) {
         this.queryService = queryService;
         this.syncService = syncService;
         this.followUpService = followUpService;
+        this.ruleService = ruleService;
     }
 
     /** A page of purchase orders the caller may see, newest order date first. */
@@ -93,6 +98,24 @@ public class PurchaseOrderController {
         try {
             return followUpService.record(me.getUser().getId(), id, body)
                     .map(saved -> new BasicResponse(200, I18n.t("common.ok"), saved))
+                    .orElseGet(() -> new BasicResponse(404, I18n.t("purchase.error.orderNotFound"), null));
+        } catch (InvalidFollowUpException e) {
+            return new BasicResponse(e.getStatus(), e.getMessage(), null);
+        }
+    }
+
+    /**
+     * Switches the order to a follow-up template and re-plans its open tasks.
+     * Answers the number of open tasks it now has. 404 when the order is not
+     * visible, 409 when it no longer needs follow-up.
+     */
+    @PreAuthorize("@perm.has('menu.purchaseOrder.update')")
+    @PutMapping("/{id}/followup-template")
+    public BasicResponse applyTemplate(@AuthenticationPrincipal UserDetail me, @PathVariable Long id,
+            @RequestBody ApplyTemplateRequest body) {
+        try {
+            return ruleService.applyToOrder(me.getUser().getId(), id, body == null ? null : body.templateId())
+                    .map(n -> new BasicResponse(200, I18n.t("common.ok"), java.util.Map.of("openTasks", n)))
                     .orElseGet(() -> new BasicResponse(404, I18n.t("purchase.error.orderNotFound"), null));
         } catch (InvalidFollowUpException e) {
             return new BasicResponse(e.getStatus(), e.getMessage(), null);

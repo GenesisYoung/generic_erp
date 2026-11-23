@@ -16,9 +16,10 @@ import lombok.Setter;
 import lombok.ToString;
 
 /**
- * A named follow-up rule. Exactly one active rule is the default; a purchase
- * order may point to a different rule (decided 2026-11-20). The stages live in
- * {@link FollowUpRuleStage}. Maps to table: followup_rule_tb.
+ * A named follow-up rule, shown to users as a follow-up template. Exactly one active rule is the default; a purchase
+ * order may point to a different rule (decided 2026-11-20). A rule is either
+ * stage-based ({@link FollowUpRuleStage}) or day-based ({@link FollowUpRuleDay}:
+ * one notification task per chosen day); when it has days, the days win. Maps to table: followup_rule_tb.
  */
 @Entity
 @Table(name = "followup_rule_tb")
@@ -48,6 +49,21 @@ public class FollowUpRule {
     @Column(name = "overdue_period_days")
     private Integer overduePeriodDays;
 
+    /**
+     * Expected production period in calendar days after the order date. Used
+     * by day-based templates: the last notification task runs until this day,
+     * and OVERDUE follow-up starts after it.
+     */
+    @Column(name = "production_days")
+    private Integer productionDays;
+
+    /** Which materials the template is meant for (free text shown to users). */
+    @Column(name = "material_note", length = 200)
+    private String materialNote;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 }
