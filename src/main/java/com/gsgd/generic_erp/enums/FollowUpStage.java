@@ -8,6 +8,8 @@ public enum FollowUpStage {
     INTENSIFIED,
     /** Week 4 by default: every day. */
     DAILY,
+    /** A notification day chosen in a day-based follow-up template. */
+    NOTIFY,
     /** After the last stage while the material has still not arrived. */
     OVERDUE
 }

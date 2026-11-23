@@ -19,6 +19,12 @@ public interface FollowUpCheckpointRepository extends JpaRepository<FollowUpChec
 
     boolean existsByPurchaseOrderId(Long purchaseOrderId);
 
+    /** Removes the order's OPEN checkpoints (they have no record yet) before it is re-planned. */
+    @Modifying
+    @Query("DELETE FROM FollowUpCheckpoint c WHERE c.purchaseOrderId = :poId AND c.status = :status")
+    int deleteByPurchaseOrderIdAndStatus(@Param("poId") Long purchaseOrderId,
+            @Param("status") CheckpointStatus status);
+
     @Modifying
     @Query("UPDATE FollowUpCheckpoint c SET c.status = :to WHERE c.purchaseOrderId = :poId AND c.status IN :from")
     int changeStatus(@Param("poId") Long purchaseOrderId, @Param("from") Collection<CheckpointStatus> from,

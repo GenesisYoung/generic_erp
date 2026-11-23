@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import javax.sql.DataSource;
@@ -168,6 +169,10 @@ class FollowUpIntegrationTest {
     @Autowired
     com.gsgd.generic_erp.repository.purchase.FollowUpRuleRepository rules;
     @Autowired
+    FollowUpRuleService ruleService;
+    @Autowired
+    com.gsgd.generic_erp.repository.purchase.FollowUpRuleDayRepository ruleDays;
+    @Autowired
     MovableClock clock;
     @Autowired
     EventSink sink;
@@ -177,6 +182,7 @@ class FollowUpIntegrationTest {
         recordRepo.deleteAll();
         checkpoints.deleteAll();
         orders.deleteAll();
+        ruleDays.deleteAll();
         rules.deleteAll();
         sink.events.clear();
         loginAs(ME);
@@ -329,6 +335,135 @@ class FollowUpIntegrationTest {
         assertEquals(0, todo.get(0).daysLeft());
         assertEquals(1, todo.get(1).daysLeft());
         assertEquals(a.getId(), todo.get(0).purchaseOrderId());
+    }
+
+    // ----- follow-up templates -----
+
+    @Test
+    void templatesAreValidatedAndListedWithTheDefaultFirst() {
+        clock.set(LocalDateTime.of(2026, 11, 5, 9, 0));
+        var castings = ruleService.create(template("Castings", 30, List.of(20, 3, 10), 2));
+        assertTrue(castings.dayBased());
+        assertEquals(List.of(3, 10, 20), castings.notifyDays());
+        assertEquals(2, castings.overduePeriodDays());
+
+        List<com.gsgd.generic_erp.dto.purchase.FollowUpTemplateView> list = ruleService.templates();
+        assertEquals(2, list.size());
+        assertTrue(list.get(0).isDefault()); // the built-in default, created on first use
+        assertEquals("Castings", list.get(1).name());
+
+        assertEquals(400, badTemplate(template(" ", 30, List.of(3), 1)));
+        assertEquals(400, badTemplate(template("x".repeat(101), 30, List.of(3), 1)));
+        assertEquals(400, badTemplate(template("A", 0, List.of(3), 1)));
+        assertEquals(400, badTemplate(template("A", 366, List.of(3), 1)));
+        assertEquals(400, badTemplate(template("A", 30, List.of(), 1)));
+        assertEquals(400, badTemplate(template("A", 30, List.of(31), 1)));
+        assertEquals(400, badTemplate(template("A", 30, List.of(0), 1)));
+        assertEquals(400, badTemplate(template("A", 30, List.of(3), 31)));
+        // 0 = no reminders after the production period.
+        assertEquals(0, ruleService.create(template("No overdue", 30, List.of(3), 0)).overduePeriodDays());
+    }
+
+    @Test
+    void templatesCanBeChangedMadeDefaultAndRemovedButNotTheDefault() {
+        clock.set(LocalDateTime.of(2026, 11, 5, 9, 0));
+        Long builtIn = ruleService.defaultRuleId();
+        var t = ruleService.create(template("Castings", 30, List.of(3, 10), 1));
+
+        var changed = ruleService.update(t.id(), template("Castings v2", 40, List.of(5, 25, 35), 3));
+        assertEquals(List.of(5, 25, 35), changed.notifyDays());
+        assertEquals(40, ruleService.lastDay(t.id()));
+
+        ruleService.makeDefault(t.id());
+        assertEquals(t.id(), ruleService.defaultRuleId());
+        assertEquals(409, assertThrows(InvalidFollowUpException.class, () -> ruleService.remove(t.id()))
+                .getStatus());
+
+        ruleService.remove(builtIn);
+        assertEquals(List.of(t.id()), ruleService.templates().stream()
+                .map(com.gsgd.generic_erp.dto.purchase.FollowUpTemplateView::id).toList());
+        assertEquals(404, assertThrows(InvalidFollowUpException.class,
+                () -> ruleService.update(builtIn, template("Again", 30, List.of(3), 1))).getStatus());
+    }
+
+    @Test
+    void applyingATemplateReplansOnlyTheOpenTasks() {
+        PurchaseOrder po = orderWithPlan("PO-1", ME, PurchaseOrderStatus.PLACED);
+        clock.set(LocalDateTime.of(2026, 11, 3, 10, 0));
+        records.record(ME, po.getId(), req(MaterialStatus.ON_TRACK)).orElseThrow(); // completes task 1
+        clock.set(LocalDateTime.of(2026, 11, 5, 9, 0)); // order day 4
+        var t = ruleService.create(template("Castings", 30, List.of(3, 10, 20), 1));
+
+        assertEquals(Optional.of(3), ruleService.applyToOrder(ME, po.getId(), t.id()));
+
+        List<FollowUpCheckpoint> list = checkpoints.findByPurchaseOrderIdOrderBySeqAsc(po.getId());
+        assertEquals(4, list.size());
+        assertEquals(CheckpointStatus.DONE, list.get(0).getStatus()); // history kept
+        FollowUpCheckpoint first = list.get(1);
+        assertEquals(FollowUpStage.NOTIFY, first.getStage());
+        assertEquals(2, first.getSeq());
+        assertEquals(LocalDate.of(2026, 11, 5), first.getWindowStart()); // day 3 began yesterday: starts today
+        assertEquals(LocalDate.of(2026, 11, 10), first.getWindowEnd());
+        assertEquals(LocalDate.of(2026, 11, 11), list.get(2).getWindowStart());
+        assertEquals(LocalDate.of(2026, 12, 1), list.get(3).getWindowEnd()); // the end of the 30 days
+        assertEquals(t.id(), orders.findById(po.getId()).orElseThrow().getFollowupRuleId());
+        assertEquals(1, ruleService.templates().stream().filter(v -> v.id().equals(t.id())).findFirst()
+                .orElseThrow().activeOrders());
+
+        List<FollowUpTodoItem> todo = records.todo(ME);
+        assertEquals(1, todo.size());
+        assertEquals("Castings", todo.get(0).templateName());
+        assertEquals(t.id(), todo.get(0).templateId());
+
+        PurchaseOrder received = orderWithPlan("PO-2", ME, PurchaseOrderStatus.RECEIVED);
+        PurchaseOrder theirs = orderWithPlan("PO-3", OTHER, PurchaseOrderStatus.PLACED);
+        assertEquals(409, assertThrows(InvalidFollowUpException.class,
+                () -> ruleService.applyToOrder(ME, received.getId(), t.id())).getStatus());
+        assertTrue(ruleService.applyToOrder(ME, theirs.getId(), t.id()).isEmpty());
+        assertEquals(404, assertThrows(InvalidFollowUpException.class,
+                () -> ruleService.applyToOrder(ME, po.getId(), 9999L)).getStatus());
+    }
+
+    @Test
+    void eachTaskIsMarkedCompleteOnItsOwn() {
+        PurchaseOrder po = orders.save(order("PO-1", ME, PurchaseOrderStatus.PLACED));
+        PurchaseOrder theirs = orders.save(order("PO-3", OTHER, PurchaseOrderStatus.PLACED));
+        clock.set(LocalDateTime.of(2026, 11, 5, 9, 0));
+        var t = ruleService.create(template("Castings", 30, List.of(3, 10, 20), 1));
+        ruleService.applyToOrder(ME, po.getId(), t.id());
+        loginAs(OTHER);
+        ruleService.applyToOrder(OTHER, theirs.getId(), t.id());
+        loginAs(ME);
+        List<FollowUpCheckpoint> list = checkpoints.findByPurchaseOrderIdOrderBySeqAsc(po.getId());
+        FollowUpCheckpoint now = list.get(0);
+        FollowUpCheckpoint later = list.get(1);
+
+        assertEquals(409, assertThrows(InvalidFollowUpException.class,
+                () -> records.completeTask(ME, later.getId(), req(MaterialStatus.ON_TRACK))).getStatus());
+
+        var saved = records.completeTask(ME, now.getId(), req(MaterialStatus.AT_RISK)).orElseThrow();
+        assertEquals(now.getId(), saved.completedCheckpoint().getId());
+        assertEquals(CheckpointStatus.DONE, saved.completedCheckpoint().getStatus());
+        assertEquals(now.getId(), saved.record().checkpointId());
+        assertEquals(saved.record().id(), saved.completedCheckpoint().getDoneRecordId());
+
+        assertEquals(409, assertThrows(InvalidFollowUpException.class,
+                () -> records.completeTask(ME, now.getId(), req(MaterialStatus.ON_TRACK))).getStatus());
+        assertEquals(400, assertThrows(InvalidFollowUpException.class,
+                () -> records.completeTask(ME, later.getId(), req(null))).getStatus());
+        Long theirTask = checkpoints.findByPurchaseOrderIdOrderBySeqAsc(theirs.getId()).get(0).getId();
+        assertTrue(records.completeTask(ME, theirTask, req(MaterialStatus.ON_TRACK)).isEmpty());
+        assertTrue(records.completeTask(ME, 99999L, req(MaterialStatus.ON_TRACK)).isEmpty());
+    }
+
+    private static com.gsgd.generic_erp.dto.purchase.FollowUpTemplateRequest template(String name, int production,
+            List<Integer> days, int overdue) {
+        return new com.gsgd.generic_erp.dto.purchase.FollowUpTemplateRequest(name, "cast iron parts", production,
+                days, overdue);
+    }
+
+    private int badTemplate(com.gsgd.generic_erp.dto.purchase.FollowUpTemplateRequest req) {
+        return assertThrows(InvalidFollowUpException.class, () -> ruleService.create(req)).getStatus();
     }
 
     // ----- helpers -----

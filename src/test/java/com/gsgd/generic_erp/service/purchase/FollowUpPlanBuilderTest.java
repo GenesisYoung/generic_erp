@@ -85,4 +85,37 @@ class FollowUpPlanBuilderTest {
         assertThrows(IllegalArgumentException.class, () -> new StageDef(FollowUpStage.DAILY, 5, 4, 1, 1));
         assertThrows(IllegalArgumentException.class, () -> new StageDef(FollowUpStage.DAILY, 1, 4, 0, 1));
     }
+
+    // ----- day-based templates -----
+
+    @Test
+    void eachNotificationDayIsOneTaskRunningUntilTheNextDay() {
+        LocalDate order = LocalDate.of(2026, 11, 1);
+        List<PlannedCheckpoint> plan = FollowUpPlanBuilder.buildFromDays(order, List.of(10, 3, 20, 3), 30);
+        assertEquals(3, plan.size());
+        assertEquals(new PlannedCheckpoint(FollowUpStage.NOTIFY, 1, order.plusDays(3), order.plusDays(9)),
+                plan.get(0));
+        assertEquals(new PlannedCheckpoint(FollowUpStage.NOTIFY, 2, order.plusDays(10), order.plusDays(19)),
+                plan.get(1));
+        // The last task runs to the end of the production period.
+        assertEquals(new PlannedCheckpoint(FollowUpStage.NOTIFY, 3, order.plusDays(20), order.plusDays(30)),
+                plan.get(2));
+    }
+
+    @Test
+    void theLastTaskIsJustItsDayWhenThePeriodIsShorterOrMissing() {
+        LocalDate order = LocalDate.of(2026, 11, 1);
+        List<PlannedCheckpoint> plan = FollowUpPlanBuilder.buildFromDays(order, List.of(5), null);
+        assertEquals(order.plusDays(5), plan.get(0).windowStart());
+        assertEquals(order.plusDays(5), plan.get(0).windowEnd());
+        assertEquals(30, FollowUpPlanBuilder.lastDay(List.of(5, 12), 30));
+        assertEquals(12, FollowUpPlanBuilder.lastDay(List.of(5, 12), null));
+    }
+
+    @Test
+    void dayBasedPlansNeedAtLeastOneDayFromDayOne() {
+        LocalDate order = LocalDate.of(2026, 11, 1);
+        assertThrows(IllegalArgumentException.class, () -> FollowUpPlanBuilder.buildFromDays(order, List.of(), 10));
+        assertThrows(IllegalArgumentException.class, () -> FollowUpPlanBuilder.buildFromDays(order, List.of(0), 10));
+    }
 }
