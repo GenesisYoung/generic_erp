@@ -490,6 +490,30 @@ class AuditIntegrationTest {
     }
 
     @Test
+    void errorMessagesFollowTheFrontendLanguage() throws Exception {
+        var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
+                .standaloneSetup(new com.gsgd.generic_erp.controller.pmc.OrderAuditController(service, json))
+                .setControllerAdvice(new AuditErrorHandler()).build();
+        java.util.function.Function<String, String> messageIn = lang -> {
+            try {
+                String body = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/pmc/order-audit-tasks").param("dueFrom", "yesterday")
+                        .header("Accept-Language", lang))
+                        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
+                                .isBadRequest())
+                        .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+                return json.read(body, java.util.Map.class).get("message").toString();
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        };
+        String en = messageIn.apply("en-US");
+        String zh = messageIn.apply("zh-CN");
+        assertFalse(en.codePoints().anyMatch(c -> Character.UnicodeScript.of(c) == Character.UnicodeScript.HAN), en);
+        assertTrue(zh.codePoints().anyMatch(c -> Character.UnicodeScript.of(c) == Character.UnicodeScript.HAN), zh);
+    }
+
+    @Test
     void httpReadOnlyCallerCannotCreateAndUnrelatedActionFieldsAreRejected() throws Exception {
         Task t = accepted();
         login(1, false);

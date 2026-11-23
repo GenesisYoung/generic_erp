@@ -1,5 +1,7 @@
 package com.gsgd.generic_erp.service.admin;
 
+import com.gsgd.generic_erp.configuration.exception.DuplicateValueException;
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -14,7 +16,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -32,8 +33,6 @@ import com.gsgd.generic_erp.entity.auth.User;
 import com.gsgd.generic_erp.entity.auth.UserDepartment;
 import com.gsgd.generic_erp.entity.auth.UserInfo;
 import com.gsgd.generic_erp.entity.auth.UserRole;
-import com.gsgd.generic_erp.enums.Language_CN;
-import com.gsgd.generic_erp.enums.Language_EN;
 import com.gsgd.generic_erp.repository.admin.PagePermissinApprovalRecordRepository;
 import com.gsgd.generic_erp.repository.admin.PermissionRepository;
 import com.gsgd.generic_erp.repository.admin.UserNavMenuRepository;
@@ -44,7 +43,6 @@ import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.repository.auth.UserRoleRepository;
 import com.gsgd.generic_erp.spec.UserSpecification;
 import com.gsgd.generic_erp.util.BasicPageResponse;
-import com.gsgd.generic_erp.util.Language;
 import com.gsgd.generic_erp.util.SimpleResponse;
 import com.gsgd.generic_erp.view.UserRoleView;
 
@@ -62,7 +60,6 @@ public class UserManagementService {
     private final AuthenticationImpl authenticationService;
     private final UserInfoRepository infoRepository;
     private final UserDepartmentRepository uDepartmentRepositoryrepository;
-    private final Language language;
     private final RoleGuard roleGuard;
     private final RefreshTokenStore refreshTokenStore;
     private final PermissionChecker permissionChecker;
@@ -73,7 +70,7 @@ public class UserManagementService {
 
     public UserManagementService(UserRepository repository, RoleRepository roleRepository,
             UserRoleRepository userRoleRepository, UserRepository userRepository,
-            AuthenticationImpl aService, Language language, UserInfoRepository infoRepository,
+            AuthenticationImpl aService, UserInfoRepository infoRepository,
             UserDepartmentRepository userDepartmentRepository, RoleGuard roleGuard,
             RefreshTokenStore refreshTokenStore, PermissionChecker permissionChecker,
             PermissionRepository permissionRepository, UserNavMenuRepository userNavMenuRepository,
@@ -84,7 +81,6 @@ public class UserManagementService {
         this.userRepository = userRepository;
         // this.JWTUtil = JWTUtil;
         this.authenticationService = aService;
-        this.language = language;
         this.infoRepository = infoRepository;
         this.uDepartmentRepositoryrepository = userDepartmentRepository;
         this.roleGuard = roleGuard;
@@ -168,29 +164,27 @@ public class UserManagementService {
             List<Integer> codes = user.getRoleList().stream().filter(Objects::nonNull).distinct().toList();
             requestedRoles = codes.isEmpty() ? List.of() : roleRepository.findObjByValue(codes);
             if (requestedRoles.size() != codes.size()) {
-                return new SimpleResponse(400, "Unknown role");
+                return new SimpleResponse(400, I18n.t("user.error.unknownRole"));
             }
         }
         boolean requestsRoot = requestedRoles != null && requestedRoles.stream()
                 .anyMatch(r -> RoleGuard.ROOT_ROLE.equals(r.getRoleName()));
         if (requestsRoot && !callerIsRoot) {
-            return new SimpleResponse(403, "Only ROOT can assign the ROOT role");
+            return new SimpleResponse(403, I18n.t("user.error.onlyRootAssignsRoot"));
         }
 
         if (creating) {
             if (user.getInitialPassword() == null || user.getInitialPassword().length() < 6) {
-                throw new IllegalArgumentException("Initial password must be at least 6 characters");
+                throw new IllegalArgumentException(I18n.t("user.error.passwordTooShort"));
             }
             if (userRepository.existsByUsername(user.getName())) {
-                throw new DataIntegrityViolationException(message(Language_EN.USERNAME_DULICATED.getMessage(),
-                        Language_CN.USERNAME_DULICATED.getMessage()));
+                throw new DuplicateValueException(I18n.t("user.error.usernameDuplicated"));
             }
             if (userRepository.existsByEmail(user.getEmail())) {
-                throw new DataIntegrityViolationException(message(Language_EN.EMAIL_DULICATED.getMessage(),
-                        Language_CN.EMAIL_DULICATED.getMessage()));
+                throw new DuplicateValueException(I18n.t("user.error.emailDuplicated"));
             }
             if (requestedRoles != null && !canAssign(requestedRoles.stream().map(Role::getId).toList())) {
-                return new SimpleResponse(403, "You cannot assign a role with permissions you do not hold");
+                return new SimpleResponse(403, I18n.t("access.error.roleBeyondOwnPermissions"));
             }
             User saved = repository.save(injectUserDTO(user, null));
             UserInfo info = new UserInfo();
@@ -206,12 +200,12 @@ public class UserManagementService {
                         .map(r -> newUserRole(saved.getId(), r.getId()))
                         .toList());
             }
-            return new SimpleResponse(200, "Successfully created");
+            return new SimpleResponse(200, I18n.t("user.created"));
         }
 
         User existing = userRepository.findById(userId).orElse(null);
         if (existing == null) {
-            return new SimpleResponse(404, "User not found");
+            return new SimpleResponse(404, I18n.t("user.error.notFound"));
         }
         List<UserRole> userRoles = userRoleRepository.findByUserId(userId);
         Set<Long> currentRoleIds = userRoles.stream().map(UserRole::getRoleId).collect(Collectors.toSet());
@@ -219,31 +213,29 @@ public class UserManagementService {
         boolean targetIsRoot = userId == RoleGuard.ROOT_USER_ID
                 || (rootRoleId != null && currentRoleIds.contains(rootRoleId));
         if (targetIsRoot && !callerIsRoot) {
-            return new SimpleResponse(403, "Only ROOT can modify a ROOT account");
+            return new SimpleResponse(403, I18n.t("user.error.onlyRootModifiesRoot"));
         }
         if (userId == RoleGuard.ROOT_USER_ID) {
             if ((requestedRoles != null && !requestsRoot)
                     || (user.getIsEnabled() != null && user.getIsEnabled() != 1)
                     || Boolean.FALSE.equals(user.getActive())) {
-                return new SimpleResponse(403, "The root account cannot be disabled or lose ROOT");
+                return new SimpleResponse(403, I18n.t("user.error.rootCannotBeDisabled"));
             }
         }
         if (user.getName() != null && !user.getName().equals(existing.getUsername())
                 && userRepository.existsByUsername(user.getName())) {
-            throw new DataIntegrityViolationException(message(Language_EN.USERNAME_DULICATED.getMessage(),
-                    Language_CN.USERNAME_DULICATED.getMessage()));
+            throw new DuplicateValueException(I18n.t("user.error.usernameDuplicated"));
         }
         if (user.getEmail() != null && !user.getEmail().equals(existing.getEmail())
                 && userRepository.existsByEmail(user.getEmail())) {
-            throw new DataIntegrityViolationException(message(Language_EN.EMAIL_DULICATED.getMessage(),
-                    Language_CN.EMAIL_DULICATED.getMessage()));
+            throw new DuplicateValueException(I18n.t("user.error.emailDuplicated"));
         }
 
         if (requestedRoles != null) {
             List<Long> added = requestedRoles.stream().map(Role::getId)
                     .filter(id -> !currentRoleIds.contains(id)).toList();
             if (!canAssign(added)) {
-                return new SimpleResponse(403, "You cannot assign a role with permissions you do not hold");
+                return new SimpleResponse(403, I18n.t("access.error.roleBeyondOwnPermissions"));
             }
         }
 
@@ -294,7 +286,7 @@ public class UserManagementService {
         }
         repository.save(updated);
 
-        return new SimpleResponse(200, "Successfully updated");
+        return new SimpleResponse(200, I18n.t("user.updated"));
     }
 
     /**
@@ -311,21 +303,20 @@ public class UserManagementService {
     @CacheEvict(cacheNames = "userQuery", allEntries = true)
     public SimpleResponse deleteUser(Long id) throws NoneDeleteableException {
         if (id == null) {
-            return new SimpleResponse(400, "User id is required");
+            return new SimpleResponse(400, I18n.t("user.error.idRequired"));
         }
         if (id == RoleGuard.ROOT_USER_ID) {
-            throw new NoneDeleteableException(message(Language_EN.CANT_DELETE_ROOT_USER.getMessage(),
-                    Language_CN.CANT_DELETE_ROOT_USER.getMessage()));
+            throw new NoneDeleteableException(I18n.t("user.error.cannotDeleteRoot"));
         }
         User target = userRepository.findById(id).orElse(null);
         if (target == null) {
-            return new SimpleResponse(404, "User not found");
+            return new SimpleResponse(404, I18n.t("user.error.notFound"));
         }
         Long rootRoleId = roleRepository.findByRoleName(RoleGuard.ROOT_ROLE).map(Role::getId).orElse(null);
         boolean targetIsRoot = rootRoleId != null && userRoleRepository.findByUserId(id).stream()
                 .anyMatch(ur -> rootRoleId.equals(ur.getRoleId()));
         if (targetIsRoot && !roleGuard.currentUserIsRoot()) {
-            return new SimpleResponse(403, "Only ROOT can delete a ROOT account");
+            return new SimpleResponse(403, I18n.t("user.error.onlyRootDeletesRoot"));
         }
         // Unbind everything that grants the user access, so a disabled user holds
         // no roles, departments, menus or approvals (and stops showing up in
@@ -339,7 +330,7 @@ public class UserManagementService {
         target.setCurrentSessionId(null);
         userRepository.save(target);
         refreshTokenStore.revoke(target.getUsername());
-        return new SimpleResponse(200, "successfully deleted");
+        return new SimpleResponse(200, I18n.t("user.deleted"));
     }
 
     /**
@@ -396,8 +387,5 @@ public class UserManagementService {
     }
 
     /** Localized message; falls back to English for any non-CN setting. */
-    private String message(String en, String cn) {
-        return "CN".equals(language.getLanguage()) ? cn : en;
-    }
 
 }

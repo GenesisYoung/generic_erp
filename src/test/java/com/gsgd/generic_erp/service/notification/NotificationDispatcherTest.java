@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.gsgd.generic_erp.configuration.i18n.UserLocaleRegistry;
 import com.gsgd.generic_erp.configuration.message.NotificationService;
 import com.gsgd.generic_erp.dto.UserNotificationDTO;
 import com.gsgd.generic_erp.entity.auth.User;
@@ -41,7 +42,8 @@ class NotificationDispatcherTest {
         notificationRepository = mock(NotificationRepository.class);
         userRepository = mock(UserRepository.class);
         notificationService = mock(NotificationService.class);
-        dispatcher = new NotificationDispatcher(notificationRepository, userRepository, notificationService);
+        dispatcher = new NotificationDispatcher(notificationRepository, userRepository, notificationService,
+                new UserLocaleRegistry());
 
         AtomicLong ids = new AtomicLong(100);
         when(notificationRepository.saveAll(anyIterable())).thenAnswer(inv -> {

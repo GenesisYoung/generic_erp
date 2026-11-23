@@ -30,12 +30,17 @@ public class JdbcLegacyPurchaseOrderReader implements LegacyPurchaseOrderReader 
     }
 
     static String requireSelect(String query) {
+        return requireSelect(query, "erp.legacy.purchase-order.query");
+    }
+
+    /** The query itself when it is a SELECT (or WITH ... SELECT); fails start-up otherwise. */
+    static String requireSelect(String query, String property) {
         if (query == null || query.isBlank()) {
-            throw new IllegalStateException("erp.legacy.purchase-order.query is not set");
+            throw new IllegalStateException(property + " is not set");
         }
         String head = query.stripLeading().toUpperCase(Locale.ROOT);
         if (!(head.startsWith("SELECT") || head.startsWith("WITH"))) {
-            throw new IllegalStateException("erp.legacy.purchase-order.query must be a SELECT statement");
+            throw new IllegalStateException(property + " must be a SELECT statement");
         }
         return query;
     }

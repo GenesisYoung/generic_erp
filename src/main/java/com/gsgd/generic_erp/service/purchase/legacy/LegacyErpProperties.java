@@ -1,6 +1,7 @@
 package com.gsgd.generic_erp.service.purchase.legacy;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -32,6 +33,8 @@ public class LegacyErpProperties {
     private Datasource datasource = new Datasource();
 
     private PurchaseOrder purchaseOrder = new PurchaseOrder();
+
+    private CustomerOrder customerOrder = new CustomerOrder();
 
     @Getter
     @Setter
@@ -70,5 +73,46 @@ public class LegacyErpProperties {
          * listed counts as PLACED (still needs follow-up).
          */
         private Map<String, PurchaseOrderStatus> statusMap = new HashMap<>();
+    }
+
+    @Getter
+    @Setter
+    public static class CustomerOrder {
+        /**
+         * SELECT that returns customer order headers dated on or after the named
+         * parameter {@code :since} (a date). Required column aliases: legacy_id,
+         * order_no, customer_code, customer_name, order_date, delivery_date,
+         * sales_code, line_count, total_qty, legacy_audited (0/1), closed (0/1).
+         */
+        private String query;
+
+        /** Cron for the sync job, in the business zone. Default: every 15 minutes. */
+        private String syncCron = "0 */15 * * * *";
+
+        /**
+         * Every run re-reads orders dated in the last N days and compares them by
+         * old-ERP row id. The old ERP leaves the change time empty on about a
+         * quarter of its orders, so a time-based "changed since" is not reliable.
+         */
+        private int lookbackDays = 60;
+
+        /**
+         * SELECT that links purchase orders dated on or after {@code :since} to
+         * the customer order lines they buy for. Required aliases:
+         * customer_order_id, customer_order_no, customer_line_id, po_no, po_date.
+         */
+        private String poLinkQuery;
+
+        /** Purchase orders dated in the last N days are re-read for links on every run. */
+        private int poLinkLookbackDays = 60;
+
+        /** Maximum link rows per run (about 3,000 PO lines in 60 days). */
+        private int poLinkBatchLimit = 20000;
+
+        /** Maximum rows per run (about 35 orders a month are entered). */
+        private int batchLimit = 2000;
+
+        /** Users with these roles are told about new orders. */
+        private List<String> notifyRoles = List.of("pmc_manager", "pmc_clerk");
     }
 }

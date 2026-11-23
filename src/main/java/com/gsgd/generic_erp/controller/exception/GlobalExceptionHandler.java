@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.exception;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.gsgd.generic_erp.configuration.exception.AuthenticationException;
+import com.gsgd.generic_erp.configuration.exception.DuplicateValueException;
 import com.gsgd.generic_erp.configuration.exception.FileOwnershipMismatchException;
 import com.gsgd.generic_erp.configuration.exception.NoneDeleteableException;
 import com.gsgd.generic_erp.util.SimpleResponse;
@@ -32,7 +34,15 @@ public class GlobalExceptionHandler {
         public ResponseEntity<SimpleResponse> handleNoneDeleteable(NoneDeleteableException e) {
                 log.warn("Delete rejected: {}", e.getMessage());
                 return ResponseEntity.status(HttpStatus.LOCKED)
-                                .body(new SimpleResponse(NoneDeleteableException.code, e.getMessage()));
+                                .body(new SimpleResponse(NoneDeleteableException.code, I18n.t(e.getMessage())));
+        }
+
+        // A uniqueness check made in code: the message is already localized and safe.
+        @ExceptionHandler(DuplicateValueException.class)
+        public ResponseEntity<SimpleResponse> handleDuplicate(DuplicateValueException e) {
+                log.warn("Duplicate value: {}", e.getMessage());
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                                .body(new SimpleResponse(409, e.getMessage()));
         }
 
         @ExceptionHandler(DataIntegrityViolationException.class)
@@ -40,14 +50,14 @@ public class GlobalExceptionHandler {
                 log.warn("Constraint violation", e);
                 // Never send the raw message — it exposes table and column names.
                 return ResponseEntity.status(HttpStatus.CONFLICT)
-                                .body(new SimpleResponse(409, "This record conflicts with existing data"));
+                                .body(new SimpleResponse(409, I18n.t("error.conflict")));
         }
 
         @ExceptionHandler(AuthenticationException.class)
         public ResponseEntity<SimpleResponse> handleInvalidInvalidRequest(IllegalArgumentException e) {
                 log.warn("Invalid request: {}", e.getMessage());
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                                .body(new SimpleResponse(AuthenticationException.code, e.getMessage()));
+                                .body(new SimpleResponse(AuthenticationException.code, I18n.t(e.getMessage())));
         }
 
         // @PreAuthorize denials surface inside the MVC layer, so map them here;
@@ -57,14 +67,14 @@ public class GlobalExceptionHandler {
                         HttpServletRequest request) {
                 log.warn("Access denied: {} {}", request.getMethod(), request.getRequestURI());
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                                .body(new SimpleResponse(403, "Access denied"));
+                                .body(new SimpleResponse(403, I18n.t("error.accessDenied")));
         }
 
         @ExceptionHandler(IllegalArgumentException.class)
         public ResponseEntity<SimpleResponse> handleInvalidRequest(IllegalArgumentException e) {
                 log.warn("Invalid request: {}", e.getMessage());
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                                .body(new SimpleResponse(400, e.getMessage()));
+                                .body(new SimpleResponse(400, I18n.t(e.getMessage())));
         }
 
         // Unexpected: a bug. ERROR level, full stack trace, generic message to the
@@ -75,7 +85,7 @@ public class GlobalExceptionHandler {
                 log.error("Unhandled exception [traceId={}] {} {}",
                                 traceId, request.getMethod(), request.getRequestURI(), e);
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                                .body(new SimpleResponse(500, "Internal server error. Reference: " + traceId + "\n"
+                                .body(new SimpleResponse(500, I18n.t("error.internal", traceId) + "\n"
                                                 + "Message===>" + e.getMessage()));
         }
 
@@ -84,7 +94,7 @@ public class GlobalExceptionHandler {
                 log.error(e.getMessage());
                 return SimpleResponse.builder()
                                 .code(e.getCode())
-                                .message(e.getMessage())
+                                .message(I18n.t(e.getMessage()))
                                 .build();
         }
 }

@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service.purchase;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -108,7 +109,7 @@ public class PurchaseOrderSyncService {
         }
 
         String message = skipped.isEmpty() ? null
-                : "Skipped rows without order number or order date: " + String.join(", ", skipped);
+                : I18n.t("purchase.sync.skippedRows", String.join(", ", skipped));
         state.setLastSourceUpdatedAt(maxSeen);
         state.setLastRunAt(now);
         state.setLastStatus("OK");

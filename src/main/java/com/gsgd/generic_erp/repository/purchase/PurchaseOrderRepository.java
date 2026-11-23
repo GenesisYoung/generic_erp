@@ -20,6 +20,8 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
 
     Page<PurchaseOrder> findByPurchaserId(Long purchaserId, Pageable pageable);
 
+    List<PurchaseOrder> findByExternalPoNo(String externalPoNo);
+
     /**
      * Orders in one of the statuses, placed before the day, with no checkpoint
      * window that reaches the day: they have run past their planned stages.

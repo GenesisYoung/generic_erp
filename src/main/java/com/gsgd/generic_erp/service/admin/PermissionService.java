@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service.admin;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -73,7 +74,7 @@ public class PermissionService {
                 associations.remove(List.of(existingPermission.getId()));
             }
             permissionRepository.enable(existingPermission.getId());
-            return new SimpleResponse(200, "Old Version reactivated");
+            return new SimpleResponse(200, I18n.t("access.permissionReactivated"));
         }
         transferObj.setCreateDate(LocalDate.now());
         permissionRepository.saveAndFlush(transferObj);
