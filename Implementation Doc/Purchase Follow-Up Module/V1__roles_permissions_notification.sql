@@ -51,8 +51,8 @@ WHERE NOT EXISTS (SELECT 1 FROM role_tb r WHERE r.role_name = seed.role_name);
 -- 3. Menu permission roots (shown as selectable menus because they match
 --    'menu.%' but not 'menu.%.%').
 -- -----------------------------------------------------------------------------
-INSERT INTO permission_tb (permission_code, is_enabled, create_date, permission_name)
-SELECT seed.code, 1, CURDATE(), seed.name
+INSERT INTO permission_tb (permission_code, is_enabled, create_date)
+SELECT seed.code, 1, CURDATE()
 FROM (
     SELECT 'menu.pmcDashboard'       AS code, 'PMC Dashboard'        AS name UNION ALL
     SELECT 'menu.purchaseDashboard',          'Purchasing Dashboard'         UNION ALL
@@ -76,8 +76,8 @@ CROSS JOIN (
 WHERE NOT EXISTS (SELECT 1 FROM permission_tb p WHERE p.permission_code = CONCAT(r.code, '.', a.action));
 
 -- Data-scope codes. Not menus (they do not start with 'menu.').
-INSERT INTO permission_tb (permission_code, is_enabled, create_date, permission_name)
-SELECT seed.code, 1, CURDATE(), seed.name
+INSERT INTO permission_tb (permission_code, is_enabled, create_date)
+SELECT seed.code, 1, CURDATE()
 FROM (
     SELECT 'data.purchaseOrder.all'     AS code, 'See all purchase orders'      AS name UNION ALL
     SELECT 'data.purchaseException.all',         'See all purchasing exceptions'

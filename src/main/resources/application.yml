@@ -84,9 +84,9 @@ erp:
     enabled: ${LEGACY_ERP_ENABLED:false}
     source-system: LEGACY_ERP
     datasource:
-      url: ${LEGACY_ERP_DB_URL:}
-      username: ${LEGACY_ERP_DB_USERNAME:}
-      password: ${LEGACY_ERP_DB_PASSWORD:}
+      url: ${LEGACY_ERP_DB_URL}
+      username: ${LEGACY_ERP_DB_USERNAME}
+      password: ${LEGACY_ERP_DB_PASSWORD}
     purchase-order:
       sync-cron: ${LEGACY_ERP_PO_SYNC_CRON:0 */15 * * * *}
       initial-lookback-days: 60
