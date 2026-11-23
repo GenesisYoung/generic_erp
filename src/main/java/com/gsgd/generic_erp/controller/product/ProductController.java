@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.product;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -137,7 +138,7 @@ public class ProductController {
         String extension = StringUtils.getFilenameExtension(filename);
 
         if (file.isEmpty() || !"csv".equalsIgnoreCase(extension)) {
-            throw new IllegalArgumentException("A non-empty CSV file is required");
+            throw new IllegalArgumentException(I18n.t("error.csvRequired"));
         }
 
         return service.importProducts(file);

@@ -18,6 +18,8 @@ public enum NotificationType {
     EXCEPTION_REPORTED,
     /** A purchasing exception changed status or got a comment. */
     EXCEPTION_UPDATED,
+    /** New customer orders arrived from the old ERP and need an order audit. */
+    CUSTOMER_ORDER_NEW,
     /** Anything else. */
     GENERAL
 }

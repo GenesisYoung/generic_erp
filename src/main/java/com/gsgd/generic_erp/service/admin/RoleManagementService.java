@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service.admin;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -21,7 +22,6 @@ import com.gsgd.generic_erp.dto.RoleDTO;
 import com.gsgd.generic_erp.entity.auth.Permission;
 import com.gsgd.generic_erp.entity.auth.Role;
 import com.gsgd.generic_erp.entity.auth.RolePermission;
-import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.repository.admin.PermissionRepository;
 import com.gsgd.generic_erp.repository.auth.RoleDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.RolePermissionRepository;
@@ -92,33 +92,33 @@ public class RoleManagementService {
     public SimpleResponse saveOrUpdate(RoleDTO dto) {
         String name = dto.getRoleName() == null ? null : dto.getRoleName().trim();
         if (name == null || name.isEmpty() || dto.getVal() == null) {
-            return new SimpleResponse(400, "Role name and value are required");
+            return new SimpleResponse(400, I18n.t("role.error.nameAndValueRequired"));
         }
         if (dto.getId() == null) {
             if (roleGuard.isBuiltInRoleName(name)) {
-                return new SimpleResponse(403, "Reserved role name");
+                return new SimpleResponse(403, I18n.t("role.error.reservedName"));
             }
             if (roleRepository.existsByRoleName(name)) {
-                return new SimpleResponse(201, Language_CN.NAME_DULICATED.getMessage());
+                return new SimpleResponse(201, I18n.t("common.error.nameDuplicated"));
             }
             if (roleRepository.existsByVal(dto.getVal())) {
-                return new SimpleResponse(201, "Role value already in use");
+                return new SimpleResponse(201, I18n.t("role.error.valueInUse"));
             }
             roleRepository.save(Role.builder().roleName(name).val(dto.getVal()).createDate(LocalDate.now()).build());
             return new SimpleResponse(200, "");
         }
         Role role = roleRepository.findById(dto.getId()).orElse(null);
         if (role == null) {
-            return new SimpleResponse(404, "Role not found");
+            return new SimpleResponse(404, I18n.t("role.error.notFound"));
         }
         if (roleGuard.isBuiltInRoleName(role.getRoleName()) || roleGuard.isBuiltInRoleName(name)) {
-            return new SimpleResponse(403, "Built-in roles cannot be modified");
+            return new SimpleResponse(403, I18n.t("role.error.builtInReadOnly"));
         }
         if (roleRepository.existsByRoleNameIgnoreCaseAndIdNot(name, role.getId())) {
-            return new SimpleResponse(201, Language_CN.NAME_DULICATED.getMessage());
+            return new SimpleResponse(201, I18n.t("common.error.nameDuplicated"));
         }
         if (roleRepository.existsByValAndIdNot(dto.getVal(), role.getId())) {
-            return new SimpleResponse(201, "Role value already in use");
+            return new SimpleResponse(201, I18n.t("role.error.valueInUse"));
         }
         role.setRoleName(name);
         role.setVal(dto.getVal());
@@ -135,13 +135,13 @@ public class RoleManagementService {
     public SimpleResponse deleteRole(Long roleId) throws NoneDeleteableException {
         Role role = roleRepository.findById(roleId).orElse(null);
         if (role == null) {
-            return new SimpleResponse(404, "Role not found");
+            return new SimpleResponse(404, I18n.t("role.error.notFound"));
         }
         if (roleGuard.isBuiltInRoleName(role.getRoleName())) {
-            throw new NoneDeleteableException("Built-in roles cannot be deleted");
+            throw new NoneDeleteableException(I18n.t("role.error.builtInNotDeletable"));
         }
         if (!userRoleRepository.findByRoleId(roleId).isEmpty()) {
-            throw new NoneDeleteableException(Language_CN.ROLE_ASSIGNED.getMessage());
+            throw new NoneDeleteableException(I18n.t("role.error.assigned"));
         }
         rolePermissionRepository.deleteByRoleId(roleId);
         roleDepartmentRepository.deleteByRoleId(roleId);
@@ -169,13 +169,13 @@ public class RoleManagementService {
         Role role = roleRepository.findById(roleId).orElse(null);
         Permission permission = permissionRepository.findById(permissionId).orElse(null);
         if (role == null || permission == null || (granted && !Integer.valueOf(1).equals(permission.getIsEnabled()))) {
-            return new SimpleResponse(404, "Role or permission not found");
+            return new SimpleResponse(404, I18n.t("role.error.roleOrPermissionNotFound"));
         }
         if (granted && !permissionChecker.has(permission.getPermissionCode())) {
-            return new SimpleResponse(403, "You cannot grant a permission you do not hold");
+            return new SimpleResponse(403, I18n.t("access.error.cannotGrantPermission"));
         }
         if (RoleGuard.ROOT_ROLE.equals(role.getRoleName()) && !roleGuard.currentUserIsRoot()) {
-            return new SimpleResponse(403, "Only ROOT can change ROOT permissions");
+            return new SimpleResponse(403, I18n.t("role.error.onlyRootChangesRoot"));
         }
         boolean exists = rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, permissionId);
         if (granted) {

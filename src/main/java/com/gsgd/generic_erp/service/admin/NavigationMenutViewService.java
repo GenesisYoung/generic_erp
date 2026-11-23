@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service.admin;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -44,6 +45,6 @@ public class NavigationMenutViewService {
 
     public BasicResponse fetchOnlyMenu() {
         List<Permission> menuPermissions = permissionRepository.findAll(PermissionSpecification.findMenuPermission());
-        return new BasicResponse(200, "success", menuPermissions);
+        return new BasicResponse(200, I18n.t("common.success"), menuPermissions);
     }
 }

@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
@@ -89,35 +90,35 @@ public class AppendixService {
                 Long currentUserId = variable.currentUserId();
 
                 if (idx == null || idx < 0) {
-                        throw new IllegalArgumentException("Invalid chunk index");
+                        throw new IllegalArgumentException(I18n.t("appendix.error.invalidChunkIndex"));
                 }
 
                 try {
                         UUID.fromString(uuid);
                 } catch (IllegalArgumentException e) {
-                        throw new IllegalArgumentException("Invalid UUID", e);
+                        throw new IllegalArgumentException(I18n.t("appendix.error.invalidUuid"), e);
                 }
 
                 Appendix appendix = repository.findById(id)
                                 .orElseThrow(() -> new IllegalArgumentException(
-                                                "Appendix not found: " + id));
+                                                I18n.t("appendix.error.notFound", String.valueOf(id))));
 
                 if (!Objects.equals(
                                 appendix.getCreatedBy(),
                                 currentUserId)) {
 
                         throw new FileOwnershipMismatchException(
-                                        "File operation rejected: user does not own this appendix");
+                                        I18n.t("appendix.error.notOwner"));
                 }
 
                 UploadSession session = uploadSessionRepository.findByFileUuid(uuid);
                 if (session == null) {
                         throw new IllegalArgumentException(
-                                        "Upload session not found: " + uuid);
+                                        I18n.t("appendix.error.sessionNotFound", uuid));
                 }
                 if (!Objects.equals(session.getAppendixId(), session.getAppendixId()))
                         throw new FileOwnershipMismatchException(
-                                        "Appendix id mismatch");
+                                        I18n.t("appendix.error.idMismatch"));
 
                 long chunkSize = session.getChunkSize();
                 long totalSize = session.getTotalSize();
@@ -126,7 +127,7 @@ public class AppendixService {
 
                 if (idx >= totalChunks) {
                         throw new IllegalArgumentException(
-                                        "Chunk index exceeds total chunk count");
+                                        I18n.t("appendix.error.chunkIndexTooLarge"));
                 }
 
                 long expectedSize;
@@ -192,7 +193,7 @@ public class AppendixService {
                 if (finishedChunks == totalChunks) {
                         return SimpleResponse.builder()
                                         .code(220)
-                                        .message("Ready for mergeing")
+                                        .message(I18n.t("appendix.readyToMerge"))
                                         .build();
                 }
 
@@ -232,7 +233,7 @@ public class AppendixService {
 
                                 if (!Files.exists(currentChunk)) {
                                         throw new IOException(
-                                                        "Missing chunk: " + i);
+                                                        I18n.t("appendix.error.missingChunk", i));
                                 }
 
                                 try (
@@ -250,7 +251,7 @@ public class AppendixService {
                         if (!checkValidtyUsingSHA256(SHAValidationCode, in)) {
                                 return SimpleResponse.builder()
                                                 .code(201)
-                                                .message("File checksum mismatch, please reupload")
+                                                .message(I18n.t("appendix.error.checksumMismatch"))
                                                 .build();
                         }
                 }
@@ -259,7 +260,7 @@ public class AppendixService {
                                 UploadSessionStatus.FINISHED);
                 return SimpleResponse.builder()
                                 .code(200)
-                                .message("File merged successfully")
+                                .message(I18n.t("appendix.merged"))
                                 .build();
         }
 

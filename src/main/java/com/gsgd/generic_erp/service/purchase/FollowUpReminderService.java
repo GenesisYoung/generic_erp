@@ -17,6 +17,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.gsgd.generic_erp.configuration.i18n.LocalizedText;
 import com.gsgd.generic_erp.entity.purchase.FollowUpCheckpoint;
 import com.gsgd.generic_erp.entity.purchase.FollowUpRule;
 import com.gsgd.generic_erp.entity.purchase.PurchaseOrder;
@@ -94,18 +95,18 @@ public class FollowUpReminderService {
         rows.forEach(r -> r.checkpoint().setStatus(CheckpointStatus.MISSED));
         checkpointRepository.saveAll(rows.stream().map(CheckpointAndOrder::checkpoint).toList());
 
-        byPurchaser(rows).forEach((purchaserId, list) -> events.publishEvent(NotificationRequestedEvent.of(
+        byPurchaser(rows).forEach((purchaserId, list) -> events.publishEvent(NotificationRequestedEvent.localized(
                 NotificationType.FOLLOWUP_MISSED, NotifactionPriority.HIGH,
-                list.size() == 1 ? "1 follow-up was missed" : list.size() + " follow-ups were missed",
-                "No follow-up was saved in time for: " + summary(list),
+                LocalizedText.of("followup.notify.missedTitle", list.size()),
+                LocalizedText.of("followup.notify.missedContent", summary(list)),
                 BIZ_TYPE, singleOrderId(list), Set.of(purchaserId))));
 
         Set<Long> managers = recipientResolver.usersWithRoles(List.of(MANAGER_ROLE));
         if (!managers.isEmpty()) {
-            events.publishEvent(NotificationRequestedEvent.of(
+            events.publishEvent(NotificationRequestedEvent.localized(
                     NotificationType.FOLLOWUP_MISSED, NotifactionPriority.HIGH,
-                    rows.size() == 1 ? "1 follow-up was missed" : rows.size() + " follow-ups were missed",
-                    "Missed follow-ups: " + summary(rows) + unassignedNote(rows),
+                    LocalizedText.of("followup.notify.missedTitle", rows.size()),
+                    LocalizedText.of("followup.notify.missedManagerContent", summary(rows), unassignedNote(rows)),
                     BIZ_TYPE, singleOrderId(rows), managers));
         }
         return rows.size();
@@ -148,10 +149,10 @@ public class FollowUpReminderService {
         checkpointRepository.saveAll(rows.stream().map(CheckpointAndOrder::checkpoint).toList());
 
         Map<Long, List<CheckpointAndOrder>> byPurchaser = byPurchaser(rows);
-        byPurchaser.forEach((purchaserId, list) -> events.publishEvent(NotificationRequestedEvent.of(
+        byPurchaser.forEach((purchaserId, list) -> events.publishEvent(NotificationRequestedEvent.localized(
                 NotificationType.FOLLOWUP_DUE, NotifactionPriority.NORMAL,
-                list.size() == 1 ? "1 follow-up is due" : list.size() + " follow-ups are due",
-                "Please follow up on: " + summary(list),
+                LocalizedText.of("followup.notify.dueTitle", list.size()),
+                LocalizedText.of("followup.notify.dueContent", summary(list)),
                 BIZ_TYPE, singleOrderId(list), Set.of(purchaserId))));
 
         long unassigned = rows.stream().filter(r -> r.order().getPurchaserId() == null).count();
@@ -185,18 +186,22 @@ public class FollowUpReminderService {
                         Collectors.toList()));
     }
 
-    /** "PO1 (by 11-21), PO2 (by 11-22) and 3 more". */
-    static String summary(List<CheckpointAndOrder> rows) {
-        String shown = rows.stream().limit(LIST_LIMIT)
-                .map(r -> r.order().getExternalPoNo() + " (by " + r.checkpoint().getWindowEnd() + ")")
-                .collect(Collectors.joining(", "));
+    /**
+     * "PO1 (by 2026-11-21), PO2 (by 2026-11-22) and 3 more", as keys so each
+     * reader sees it in their own language.
+     */
+    static LocalizedText summary(List<CheckpointAndOrder> rows) {
+        LocalizedText shown = LocalizedText.join(rows.stream().limit(LIST_LIMIT)
+                .map(r -> LocalizedText.of("followup.notify.item", r.order().getExternalPoNo(),
+                        String.valueOf(r.checkpoint().getWindowEnd())))
+                .toList());
         int more = rows.size() - LIST_LIMIT;
-        return more > 0 ? shown + " and " + more + " more" : shown;
+        return more > 0 ? LocalizedText.of("followup.notify.more", shown, more) : shown;
     }
 
-    private static String unassignedNote(List<CheckpointAndOrder> rows) {
+    private static Object unassignedNote(List<CheckpointAndOrder> rows) {
         long n = rows.stream().filter(r -> r.order().getPurchaserId() == null).count();
-        return n == 0 ? "" : ". " + n + " of them belong to orders with no purchaser yet";
+        return n == 0 ? "" : LocalizedText.of("followup.notify.unassignedNote", n);
     }
 
     /** The order id when every row is the same order, so a click can open it; otherwise null. */

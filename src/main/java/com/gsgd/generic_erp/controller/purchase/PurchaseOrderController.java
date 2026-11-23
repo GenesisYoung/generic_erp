@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.controller.purchase;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.util.Map;
 
 import org.springframework.data.domain.Page;
@@ -55,7 +56,7 @@ public class PurchaseOrderController {
         BasicPage p = new BasicPage(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE));
         p.defineSort(Sort.by("orderDate").descending().and(Sort.by("id").descending()));
         Page<PurchaseOrder> result = queryService.list(me.getUser().getId(), p);
-        return new BasicResponse(200, "OK", Map.of(
+        return new BasicResponse(200, I18n.t("common.ok"), Map.of(
                 "content", result.getContent(),
                 "totalElements", result.getTotalElements(),
                 "totalPages", result.getTotalPages(),
@@ -67,8 +68,8 @@ public class PurchaseOrderController {
     @GetMapping("/{id}/checkpoints")
     public BasicResponse checkpoints(@AuthenticationPrincipal UserDetail me, @PathVariable Long id) {
         return queryService.checkpoints(me.getUser().getId(), id)
-                .map(list -> new BasicResponse(200, "OK", list))
-                .orElseGet(() -> new BasicResponse(404, "Purchase order not found", null));
+                .map(list -> new BasicResponse(200, I18n.t("common.ok"), list))
+                .orElseGet(() -> new BasicResponse(404, I18n.t("purchase.error.orderNotFound"), null));
     }
 
     /** The order with its checkpoints and follow-up records (newest first). 404 when not visible. */
@@ -76,8 +77,8 @@ public class PurchaseOrderController {
     @GetMapping("/{id}/followups")
     public BasicResponse followUps(@AuthenticationPrincipal UserDetail me, @PathVariable Long id) {
         return followUpService.followUps(me.getUser().getId(), id)
-                .map(f -> new BasicResponse(200, "OK", f))
-                .orElseGet(() -> new BasicResponse(404, "Purchase order not found", null));
+                .map(f -> new BasicResponse(200, I18n.t("common.ok"), f))
+                .orElseGet(() -> new BasicResponse(404, I18n.t("purchase.error.orderNotFound"), null));
     }
 
     /**
@@ -91,8 +92,8 @@ public class PurchaseOrderController {
             @RequestBody FollowUpRecordRequest body) {
         try {
             return followUpService.record(me.getUser().getId(), id, body)
-                    .map(saved -> new BasicResponse(200, "OK", saved))
-                    .orElseGet(() -> new BasicResponse(404, "Purchase order not found", null));
+                    .map(saved -> new BasicResponse(200, I18n.t("common.ok"), saved))
+                    .orElseGet(() -> new BasicResponse(404, I18n.t("purchase.error.orderNotFound"), null));
         } catch (InvalidFollowUpException e) {
             return new BasicResponse(e.getStatus(), e.getMessage(), null);
         }
@@ -102,7 +103,7 @@ public class PurchaseOrderController {
     @PreAuthorize("@perm.has('data.purchaseOrder.all')")
     @GetMapping("/sync/status")
     public BasicResponse syncStatus() {
-        return new BasicResponse(200, "OK", syncService.lastState().orElse(null));
+        return new BasicResponse(200, I18n.t("common.ok"), syncService.lastState().orElse(null));
     }
 
     /** Runs a sync from the old ERP now, without waiting for the schedule. */
@@ -110,10 +111,10 @@ public class PurchaseOrderController {
     @PostMapping("/sync")
     public BasicResponse syncNow() {
         try {
-            return new BasicResponse(200, "OK", syncService.syncNow());
+            return new BasicResponse(200, I18n.t("common.ok"), syncService.syncNow());
         } catch (Exception e) {
             syncService.recordFailure(e);
-            return new BasicResponse(502, "Sync from the old ERP failed; see sync status", null);
+            return new BasicResponse(502, I18n.t("purchase.error.syncFailed"), null);
         }
     }
 }

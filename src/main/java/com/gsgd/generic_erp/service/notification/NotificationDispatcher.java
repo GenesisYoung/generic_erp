@@ -15,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
+import com.gsgd.generic_erp.configuration.i18n.UserLocaleRegistry;
 import com.gsgd.generic_erp.configuration.message.NotificationService;
 import com.gsgd.generic_erp.dto.UserNotificationDTO;
 import com.gsgd.generic_erp.entity.auth.User;
@@ -43,6 +45,7 @@ public class NotificationDispatcher {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final UserLocaleRegistry userLocales;
 
     @Async("auditExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -72,6 +75,8 @@ public class NotificationDispatcher {
                         .priority(event.priority())
                         .title(event.title())
                         .content(event.content())
+                        .titleText(event.titleText())
+                        .contentText(event.contentText())
                         .bizType(event.bizType())
                         .bizId(event.bizId())
                         .createdAt(now)
@@ -82,7 +87,10 @@ public class NotificationDispatcher {
         for (Notification n : saved) {
             User user = recipients.get(n.getRecipientId());
             try {
-                notificationService.sendUserNotification(user.getUsername(), UserNotificationDTO.from(n));
+                // Pushed in the language the user's frontend last used (default if unknown).
+                var locale = userLocales.find(user.getUsername());
+                notificationService.sendUserNotification(user.getUsername(),
+                        UserNotificationDTO.from(n, locale == null ? I18n.defaultLocale() : locale));
             } catch (Exception e) {
                 // Stored already; the user sees it on the next list refresh.
                 log.warn("Push failed for notification {} to user {}", n.getId(), user.getId(), e);

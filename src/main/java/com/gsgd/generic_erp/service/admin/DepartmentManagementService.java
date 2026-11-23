@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service.admin;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
@@ -15,7 +16,6 @@ import com.gsgd.generic_erp.dto.RoleGrantDTO;
 import com.gsgd.generic_erp.entity.auth.Department;
 import com.gsgd.generic_erp.entity.auth.Role;
 import com.gsgd.generic_erp.entity.auth.RoleDepartment;
-import com.gsgd.generic_erp.enums.Language_CN;
 import com.gsgd.generic_erp.repository.admin.DepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.RoleDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
@@ -70,7 +70,7 @@ public class DepartmentManagementService {
     public SimpleResponse saveOrUpdate(DepartmentDTO dto) {
         if (dto.getId() == null) {
             if (departmentRepository.existsByDeptName(dto.getDeptName())) {
-                return new SimpleResponse(201, Language_CN.NAME_DULICATED.getMessage());
+                return new SimpleResponse(201, I18n.t("common.error.nameDuplicated"));
             }
             departmentRepository.save(Department.builder()
                     .deptName(dto.getDeptName())
@@ -96,7 +96,7 @@ public class DepartmentManagementService {
     @Transactional
     public SimpleResponse deleteDepartment(Long deptId) throws NoneDeleteableException {
         if (!userDepartmentRepository.findByDeptId(deptId).isEmpty()) {
-            throw new NoneDeleteableException(Language_CN.DEPT_ASSIGNED.getMessage());
+            throw new NoneDeleteableException(I18n.t("dept.error.assigned"));
         }
         roleDepartmentRepository.deleteByDepartmentId(deptId);
         departmentRepository.deleteById(deptId);

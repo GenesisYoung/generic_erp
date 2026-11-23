@@ -1,4 +1,12 @@
 spring:
+  messages:
+    # User-facing texts: i18n/messages.properties (English) and messages_zh_CN.properties.
+    # Code reads them through configuration.i18n.I18n; this block only lets Spring use the same files.
+    basename: i18n/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+    use-code-as-default-message: true
+    always-use-message-format: true
   servlet:
     multipart:
       max-file-size: 20MB
@@ -28,8 +36,6 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: ${DB_DRIVER_CLASS_NAME}
   global:
-    variable:
-      default-language: ${LANGUAGE}
     file:
       home_path: ${FILE_PATH}
   jpa:
@@ -66,10 +72,11 @@ logging:
     "[org.hibernate.type.descriptor.sql.BasicBinder]": TRACE
     web: DEBUG
     "[org.hibernate]": error
-app:
-  language: ${LANGUAGE}
 
 erp:
+  i18n:
+    # Language used when the frontend sends no Accept-Language header (zh-CN or en-US).
+    default-locale: ${ERP_DEFAULT_LOCALE:zh-CN}
   purchase:
     # Business time zone: follow-up windows are calendar dates in this zone.
     zone: ${ERP_PURCHASE_ZONE:Asia/Shanghai}
@@ -77,8 +84,22 @@ erp:
       # Hourly job: marks missed follow-ups, adds daily OVERDUE windows and sends due reminders.
       enabled: ${ERP_FOLLOWUP_JOB_ENABLED:true}
       cron: "0 0 * * * *"
+    placement:
+      # 采购下单任务: purchase orders must be placed within deadline-days of the order audit passing.
+      # Runs every 15 minutes: creates tasks from VERIFIED audits, closes tasks with a linked PO,
+      # and sends one reminder remind-hours before the deadline and one overdue alert.
+      enabled: ${ERP_PLACEMENT_JOB_ENABLED:true}
+      cron: ${ERP_PLACEMENT_CRON:0 */15 * * * *}
+      deadline-days: 2
+      remind-hours: 12
+    exception:
+      # 采购异常: who is alerted when an exception is reported or changes status
+      # (besides the reporter, the order's purchaser and the handler).
+      notify-roles: ${ERP_EXCEPTION_NOTIFY_ROLES:purchaser_manager,pmc_manager,pmc_clerk}
+      # Planning and Operations department ids (department_tb.id), comma separated.
+      notify-dept-ids: ${ERP_EXCEPTION_NOTIFY_DEPT_IDS:}
   legacy:
-    # Read-only sync of purchase orders from the old ERP (SQL Server).
+    # Read-only sync of purchase orders and customer orders from the old ERP (SQL Server).
     # Off by default. Set LEGACY_ERP_ENABLED=true and the LEGACY_ERP_DB_* variables
     # (use a SELECT-only database login) to turn it on.
     enabled: ${LEGACY_ERP_ENABLED:false}
@@ -93,7 +114,8 @@ erp:
       batch-limit: 5000
       # Old ERP (高格 VEPRO) purchase orders: ORDSPHS1 header + ORDSPHS2 lines.
       # Source and assumptions: Implementation Doc/Purchase Follow-Up Module/legacy_po_sync_query.sql
-      # Override with LEGACY_ERP_PO_QUERY if needed. Must return the aliases the reader expects.
+      # Override with the environment variable ERP_LEGACY_PURCHASEORDER_QUERY if needed (Spring maps it
+      # to erp.legacy.purchase-order.query). Must return the aliases the reader expects.
       query: |
         SELECT
             RTRIM(h.CODE)                                         AS po_no,
@@ -128,3 +150,57 @@ erp:
       # The default query already returns these names, so no mapping is needed.
       # A status that is neither mapped nor one of these names counts as PLACED.
       status-map: {}
+    customer-order:
+      # New customer orders (ORDCORD1) -> PMC notification + 待评审客户订单 page.
+      # Source and assumptions: Implementation Doc/Customer Order Sync/legacy_customer_order_query.sql
+      # Override the query with ERP_LEGACY_CUSTOMERORDER_QUERY if needed (same aliases required).
+      sync-cron: ${LEGACY_ERP_CO_SYNC_CRON:0 */15 * * * *}
+      lookback-days: 60
+      batch-limit: 2000
+      notify-roles: pmc_manager,pmc_clerk
+      query: |
+        SELECT
+            RTRIM(h.ERI)                                          AS legacy_id,
+            RTRIM(h.CODE)                                         AS order_no,
+            RTRIM(h.CUST)                                         AS customer_code,
+            RTRIM(c.CNAME)                                        AS customer_name,
+            h.SDATE                                               AS order_date,
+            h.DLVDATE                                             AS delivery_date,
+            RTRIM(h.STAFF)                                        AS sales_code,
+            l.line_count                                          AS line_count,
+            h.QTY                                                 AS total_qty,
+            CASE WHEN ISNULL(h.SCRUTINY, '') <> '' THEN 1 ELSE 0 END AS legacy_audited,
+            CASE WHEN h.CLOSETYPE <> 0 THEN 1 ELSE 0 END          AS closed
+        FROM ORDCORD1 h WITH (NOLOCK)
+        LEFT JOIN (
+            SELECT MASTERI, COUNT(*) AS line_count
+            FROM ORDCORD2 WITH (NOLOCK)
+            GROUP BY MASTERI
+        ) l ON l.MASTERI = h.ERI
+        LEFT JOIN CUSTOMER c WITH (NOLOCK) ON c.CODE = h.CUST
+        WHERE h.SDATE >= :since
+          AND h.CODE IS NOT NULL
+        ORDER BY h.SDATE, h.CODE
+      # PO -> customer order links, used to close placement tasks (采购下单任务).
+      # Chain found by the round 2/3 checks (2026-11-20): PO line ORDSPHS2.PLANERI -> plan line
+      # PLANORDER2.ERI, PLANORDER2.FROMORDERI -> customer order line ORDCORD2.ERI,
+      # ORDCORD2.MASTERI -> customer order ORDCORD1.ERI. About 85% of PO lines reach a customer order.
+      po-link-lookback-days: 60
+      po-link-batch-limit: 20000
+      po-link-query: |
+        SELECT
+            RTRIM(co.ERI)  AS customer_order_id,
+            RTRIM(co.CODE) AS customer_order_no,
+            RTRIM(cl.ERI)  AS customer_line_id,
+            RTRIM(h.CODE)  AS po_no,
+            MIN(h.SDATE)   AS po_date
+        FROM ORDSPHS2 p WITH (NOLOCK)
+        JOIN ORDSPHS1   h  WITH (NOLOCK) ON h.ERI  = p.MASTERI
+        JOIN PLANORDER2 pl WITH (NOLOCK) ON pl.ERI = p.PLANERI
+        JOIN ORDCORD2   cl WITH (NOLOCK) ON cl.ERI = pl.FROMORDERI
+        JOIN ORDCORD1   co WITH (NOLOCK) ON co.ERI = cl.MASTERI
+        WHERE h.SDATE >= :since
+          AND h.CODE IS NOT NULL
+          AND co.CODE IS NOT NULL
+        GROUP BY co.ERI, co.CODE, cl.ERI, h.CODE
+        ORDER BY MIN(h.SDATE), h.CODE

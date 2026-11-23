@@ -1,5 +1,6 @@
 package com.gsgd.generic_erp.service.product;
 
+import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.List;
@@ -27,7 +28,7 @@ public class ProductCatrgoryService {
         List<Category> categories = categoryRepository.findAll(ProductCategorySpecification.enabled(),
                 Sort.by("depth").ascending());
         return BasicResponse.builder()
-                .message("Success")
+                .message(I18n.t("common.success"))
                 .status(1)
                 .object(buildTree(categories))
                 .build();

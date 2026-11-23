@@ -2,10 +2,13 @@ package com.gsgd.generic_erp.entity.notification;
 
 import java.time.LocalDateTime;
 
+import com.gsgd.generic_erp.configuration.i18n.LocalizedText;
+import com.gsgd.generic_erp.configuration.i18n.LocalizedTextConverter;
 import com.gsgd.generic_erp.enums.NotifactionPriority;
 import com.gsgd.generic_erp.enums.NotificationType;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -64,6 +67,21 @@ public class Notification {
 
     @Column(name = "content", length = 1000)
     private String content;
+
+    /**
+     * Title as a message key with arguments, rendered in the reader's language
+     * when listed or pushed. Null for notifications created with plain text;
+     * then {@link #title} is shown as stored. {@link #title} always holds the
+     * text in the default language as a fallback.
+     */
+    @Convert(converter = LocalizedTextConverter.class)
+    @Column(name = "title_i18n", length = 1000)
+    private LocalizedText titleText;
+
+    /** Content as a message key with arguments; see {@link #titleText}. */
+    @Convert(converter = LocalizedTextConverter.class)
+    @Column(name = "content_i18n", length = 4000)
+    private LocalizedText contentText;
 
     @Column(name = "biz_type", length = 50)
     private String bizType;
