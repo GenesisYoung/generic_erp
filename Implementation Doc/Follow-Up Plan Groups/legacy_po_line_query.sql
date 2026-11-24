@@ -12,17 +12,23 @@
    put into a plan group; a group marked "own task" gets its own follow-up
    task series per order.
 
-   OPEN QUESTION (2026-11-24): which old-ERP field is the "purchase plan
-   type" is not decided yet. The default below uses the material's big class
-   (PRODUCT.BCLAS / BCLASNAME). Other candidates, checked by
-   "ERP Design/outputs/old-erp-discovery/legacy_plan_type_check.sql":
-     - PRODUCT.MCLAS / MCLASNAME               (material middle class)
-     - PLANORDER1.PLANTYPE via ORDSPHS2.PLANERI -> PLANORDER2.ERI -> PLANORDER2.MASTERI
-     - ORDSPHS1.TYPE / ORDSPHS2.TYPE            (order / line type)
+   Results of legacy_plan_type_check.sql (2026-11-24, audited POs, last 365
+   days: 8,658 orders, 20,760 lines):
+     - ORDSPHS1.TYPE/VCHRTYPE/ISSUETYPE/ISMOLDSPHS, ORDSPHS2.TYPE, ORDREQ1/2.TYPE:
+       always 0, useless.
+     - PRODUCT.BCLAS / MCLAS (+ names): empty on every line, useless.
+     - PLANORDER1.PLANTYPE: 0 (12,221 lines), 2 (5,513), 1 (355), no plan (2,671);
+       never mixed inside one order.
+     - PRODUCT.CLAS -> PRODCLAS: filled, a 3-level tree (e.g. 306-1 灯体贴 under
+       306, 305 说明书 under 3). Top levels seen: 1xx electronics, 2xx structure /
+       hardware, 3xx packaging, 4 extra fees.
+     - 2,410 orders buy for more than one customer order.
+   OPEN QUESTION: the user has not chosen the field yet. The default below
+   uses the material class one level up (PRODCLAS.UPPERCLAS, e.g. 306 for
+   306-1), or the class itself when it has no upper class.
    To switch, change only the two plan_type columns (and the joins they need).
 
-   ASSUMPTION to check: ORDSPHS2.PROD holds PRODUCT.CODE (not PRODUCT.ERI).
-   If plan_type comes back empty on most lines, join on pr.ERI = l.PROD.
+   ORDSPHS2.PROD = PRODUCT.CODE: confirmed by the check (P4 finds classes).
    SQL Server 2008 compatible.
    ============================================================================ */
 SELECT
@@ -30,13 +36,15 @@ SELECT
     l.SERIAL                                              AS line_no,
     RTRIM(l.PROD)                                         AS material_code,
     RTRIM(pr.CNAME)                                       AS material_name,
-    RTRIM(pr.BCLAS)                                       AS plan_type,
-    RTRIM(pr.BCLASNAME)                                   AS plan_type_name,
+    COALESCE(NULLIF(RTRIM(c.UPPERCLAS), ''), RTRIM(pr.CLAS)) AS plan_type,
+    COALESCE(RTRIM(u.NAME), RTRIM(c.NAME))                AS plan_type_name,
     l.QTY                                                 AS qty,
     l.RECQTY                                              AS received_qty
 FROM ORDSPHS1 h WITH (NOLOCK)
 JOIN ORDSPHS2 l WITH (NOLOCK) ON l.MASTERI = h.ERI
 LEFT JOIN PRODUCT pr WITH (NOLOCK) ON pr.CODE = l.PROD
+LEFT JOIN PRODCLAS c WITH (NOLOCK) ON c.CODE = pr.CLAS
+LEFT JOIN PRODCLAS u WITH (NOLOCK) ON u.CODE = c.UPPERCLAS
 WHERE h.CODE IN (:poNos)
 ORDER BY h.CODE, l.SERIAL
 

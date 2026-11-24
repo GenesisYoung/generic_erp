@@ -150,7 +150,8 @@ erp:
       # follow-up task a line belongs to: plan types are put into plan groups on the follow-up
       # template page, and a "separate" group gets its own task. Source and assumptions:
       # Implementation Doc/Follow-Up Plan Groups/legacy_po_line_query.sql
-      # plan_type below = the material's big class (PRODUCT.BCLAS). Change only the two plan_type
+      # plan_type below = the material class one level up (PRODCLAS.UPPERCLAS; PRODUCT.BCLAS is
+      # empty in the old ERP). Change only the two plan_type
       # columns to group by another field. Set ERP_LEGACY_PURCHASEORDER_LINEQUERY to an empty value
       # to stop syncing lines (every order then keeps one follow-up task).
       line-query: |
@@ -159,13 +160,15 @@ erp:
             l.SERIAL                                              AS line_no,
             RTRIM(l.PROD)                                         AS material_code,
             RTRIM(pr.CNAME)                                       AS material_name,
-            RTRIM(pr.BCLAS)                                       AS plan_type,
-            RTRIM(pr.BCLASNAME)                                   AS plan_type_name,
+            COALESCE(NULLIF(RTRIM(c.UPPERCLAS), ''), RTRIM(pr.CLAS)) AS plan_type,
+            COALESCE(RTRIM(u.NAME), RTRIM(c.NAME))                AS plan_type_name,
             l.QTY                                                 AS qty,
             l.RECQTY                                              AS received_qty
         FROM ORDSPHS1 h WITH (NOLOCK)
         JOIN ORDSPHS2 l WITH (NOLOCK) ON l.MASTERI = h.ERI
         LEFT JOIN PRODUCT pr WITH (NOLOCK) ON pr.CODE = l.PROD
+        LEFT JOIN PRODCLAS c WITH (NOLOCK) ON c.CODE = pr.CLAS
+        LEFT JOIN PRODCLAS u WITH (NOLOCK) ON u.CODE = c.UPPERCLAS
         WHERE h.CODE IN (:poNos)
         ORDER BY h.CODE, l.SERIAL
       # Raw old-ERP status -> PLACED / PARTIALLY_RECEIVED / RECEIVED / CLOSED / CANCELLED.
