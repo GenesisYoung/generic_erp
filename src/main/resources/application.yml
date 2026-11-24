@@ -146,6 +146,28 @@ erp:
              OR (h.CLOSETYPE = 0 AND h.SDATE >= DATEADD(day, -120, GETDATE()))
           )
         ORDER BY COALESCE(h.UPDATETIME, h.SCRDATE, h.INDATETIME, h.SDATE), h.CODE
+      # Lines of the orders read above (named list parameter :poNos). plan_type decides which
+      # follow-up task a line belongs to: plan types are put into plan groups on the follow-up
+      # template page, and a "separate" group gets its own task. Source and assumptions:
+      # Implementation Doc/Follow-Up Plan Groups/legacy_po_line_query.sql
+      # plan_type below = the material's big class (PRODUCT.BCLAS). Change only the two plan_type
+      # columns to group by another field. Set ERP_LEGACY_PURCHASEORDER_LINEQUERY to an empty value
+      # to stop syncing lines (every order then keeps one follow-up task).
+      line-query: |
+        SELECT
+            RTRIM(h.CODE)                                         AS po_no,
+            l.SERIAL                                              AS line_no,
+            RTRIM(l.PROD)                                         AS material_code,
+            RTRIM(pr.CNAME)                                       AS material_name,
+            RTRIM(pr.BCLAS)                                       AS plan_type,
+            RTRIM(pr.BCLASNAME)                                   AS plan_type_name,
+            l.QTY                                                 AS qty,
+            l.RECQTY                                              AS received_qty
+        FROM ORDSPHS1 h WITH (NOLOCK)
+        JOIN ORDSPHS2 l WITH (NOLOCK) ON l.MASTERI = h.ERI
+        LEFT JOIN PRODUCT pr WITH (NOLOCK) ON pr.CODE = l.PROD
+        WHERE h.CODE IN (:poNos)
+        ORDER BY h.CODE, l.SERIAL
       # Raw old-ERP status -> PLACED / PARTIALLY_RECEIVED / RECEIVED / CLOSED / CANCELLED.
       # The default query already returns these names, so no mapping is needed.
       # A status that is neither mapped nor one of these names counts as PLACED.

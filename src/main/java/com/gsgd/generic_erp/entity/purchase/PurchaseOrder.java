@@ -85,6 +85,14 @@ public class PurchaseOrder {
     @Column(name = "followup_rule_id")
     private Long followupRuleId;
 
+    /**
+     * False when every open line of the order is followed up in a separate
+     * plan-group task, so the main task has nothing left to follow. Null
+     * (orders synced before plan groups existed) counts as true.
+     */
+    @Column(name = "main_followup_active")
+    private Boolean mainFollowupActive;
+
     /** Last-change time of the row in the source system. */
     @Column(name = "source_updated_at")
     private LocalDateTime sourceUpdatedAt;
@@ -97,4 +105,9 @@ public class PurchaseOrder {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    /** True while the main follow-up task is needed (see {@link #mainFollowupActive}). */
+    public boolean isMainFollowupNeeded() {
+        return !Boolean.FALSE.equals(mainFollowupActive);
+    }
 }

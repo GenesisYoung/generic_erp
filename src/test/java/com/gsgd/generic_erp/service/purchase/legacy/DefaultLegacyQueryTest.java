@@ -30,4 +30,18 @@ class DefaultLegacyQueryTest {
             assertTrue(query.contains("AS " + alias), "missing alias " + alias);
         }
     }
+
+    @Test
+    void defaultLineQueryReturnsTheColumnsTheLineReaderNeeds() throws Exception {
+        List<PropertySource<?>> sources = new YamlPropertySourceLoader()
+                .load("application", new ClassPathResource("application.yml"));
+        String query = String.valueOf(sources.get(0).getProperty("erp.legacy.purchase-order.line-query"));
+
+        assertDoesNotThrow(() -> JdbcLegacyPurchaseOrderReader.requireSelect(query, "line-query"));
+        assertTrue(query.contains("(:poNos)"));
+        for (String alias : List.of("po_no", "line_no", "material_code", "material_name", "plan_type",
+                "plan_type_name", "qty", "received_qty")) {
+            assertTrue(query.contains("AS " + alias), "missing alias " + alias);
+        }
+    }
 }
