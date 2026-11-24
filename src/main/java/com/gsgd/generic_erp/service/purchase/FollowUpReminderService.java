@@ -39,8 +39,9 @@ import lombok.RequiredArgsConstructor;
  * The three passes the hourly follow-up job runs, in this order:
  * <ol>
  * <li><b>Missed.</b> OPEN checkpoints whose window ended before today become
- * MISSED. Each purchaser gets one summary, and every {@code purchaser_manager}
- * gets one summary of all missed follow-ups.</li>
+ * MISSED. Each purchaser gets one summary, and every member of the purchasing
+ * department (role {@code purchaser}, one role per department) gets one summary
+ * of all missed follow-ups.</li>
  * <li><b>Overdue.</b> Each follow-up series of an active order (the main one
  * and each plan group's own) that has run past the last day of its
  * rule, and has no window reaching today, gets a new OVERDUE checkpoint
@@ -113,7 +114,7 @@ public class FollowUpReminderService {
                     LocalizedText.of("followup.notify.missedTitle", rows.size()),
                     LocalizedText.of("followup.notify.missedManagerContent", summary(rows, groups),
                             unassignedNote(rows)),
-                    BIZ_TYPE, singleOrderId(rows), managers));
+                    BIZ_TYPE, singleOrderId(rows), department));
         }
         return rows.size();
     }
