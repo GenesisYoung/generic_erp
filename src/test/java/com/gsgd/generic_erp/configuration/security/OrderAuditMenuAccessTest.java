@@ -30,6 +30,8 @@ class OrderAuditMenuAccessTest {
         jdbc.execute("create table permission_tb(id bigint,permission_code varchar(100),is_enabled int)");
         jdbc.execute("create table role_permission_tb(role_id bigint,permission_id bigint)");
         jdbc.execute("create table user_roles_tb(user_id bigint,role_id bigint)");
+        jdbc.execute("create table role_department_tb(role_id bigint,department_id bigint)");
+        jdbc.execute("create table user_departments_tb(user_id bigint,dept_id bigint)");
         jdbc.execute(
                 "create table page_permission_approvals_record(user_id bigint,permission_id bigint,permission_enabled int)");
         jdbc.execute("create table navigation_menu_tb(id bigint,route varchar(100),is_enabled int)");
@@ -98,6 +100,29 @@ class OrderAuditMenuAccessTest {
         jdbc.update("insert into page_permission_approvals_record values(321,2,1)");
         assertEquals(List.of("menu.order-audit-task.read"), codes(320));
         assertEquals(List.of("menu.order-audit-task.submit"), codes(321));
+    }
+
+    @Test
+    void departmentRoleGivesDefaultsAndPageOverridesWinOverThem() {
+        jdbc.update("delete from user_nav_menu");
+        // Department 5 has role 10 with read + submit; 320 and 321 are members.
+        jdbc.update("insert into role_department_tb values(10,5)");
+        jdbc.update("insert into user_departments_tb values(320,5),(321,5)");
+        jdbc.update("insert into role_permission_tb values(10,1),(10,2)");
+        assertEquals(List.of("menu.order-audit-task.read", "menu.order-audit-task.submit"), sorted(codes(320)));
+
+        // 321: submit taken away on a page, team scope granted on a page.
+        jdbc.update("insert into page_permission_approvals_record values(321,2,0),(321,3,1)");
+        assertEquals(List.of("menu.order-audit-task.read", "pmc.order-audit.scope.team"), sorted(codes(321)));
+        assertEquals(List.of("menu.order-audit-task.read", "menu.order-audit-task.submit"), sorted(codes(320)),
+                "overrides are per user");
+
+        // A user outside the department gets nothing from it.
+        assertTrue(codes(999).isEmpty());
+    }
+
+    private static List<String> sorted(List<String> codes) {
+        return codes.stream().sorted().toList();
     }
 
     @Test

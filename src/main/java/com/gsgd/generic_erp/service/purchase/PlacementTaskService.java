@@ -39,6 +39,7 @@ import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.repository.customer.CustomerOrderRepository;
 import com.gsgd.generic_erp.repository.customer.PoCustomerLinkRepository;
 import com.gsgd.generic_erp.repository.purchase.PlacementTaskRepository;
+import com.gsgd.generic_erp.service.auth.DepartmentPeers;
 import com.gsgd.generic_erp.service.notification.NotificationRecipientResolver;
 import com.gsgd.generic_erp.service.notification.NotificationRequestedEvent;
 
@@ -50,14 +51,14 @@ import lombok.RequiredArgsConstructor;
  * <ol>
  * <li>{@link #createFromVerifiedAudits()}: every order audit round that is
  * VERIFIED gets one row. Result PASS makes an OPEN task with a deadline of
- * verification time + {@code deadline-days}, and tells the purchasing managers,
- * who assign a purchaser. Any other result, or a later round of an order that
+ * verification time + {@code deadline-days}, and tells the purchasing
+ * department, whose members take it or give it to a colleague. Any other result, or a later round of an order that
  * already has a task, is stored as SKIPPED so it is not checked again.</li>
  * <li>{@link #closeLinked()}: an OPEN task closes at the first purchase order
  * that the old ERP links to its customer order (decided 2026-11-20).</li>
  * <li>{@link #remindAndEscalate()}: one "due soon" reminder
  * {@code remind-hours} before the deadline, and one overdue alert to the
- * assignee and the purchasing managers.</li>
+ * assignee and the purchasing department.</li>
  * </ol>
  */
 @Service
@@ -65,7 +66,7 @@ import lombok.RequiredArgsConstructor;
 public class PlacementTaskService {
 
     private static final Logger log = LoggerFactory.getLogger(PlacementTaskService.class);
-    static final String MANAGER_ROLE = "purchaser_manager";
+    /** The one role of the purchasing department. */
     static final String PURCHASER_ROLE = "purchaser";
     static final String BIZ_TYPE = "PLACEMENT_TASK";
     private static final List<PlacementTaskStatus> OPEN_ONLY = List.of(PlacementTaskStatus.OPEN);
@@ -79,6 +80,7 @@ public class PlacementTaskService {
     private final CustomerOrderRepository customerOrderRepository;
     private final UserRepository userRepository;
     private final NotificationRecipientResolver recipientResolver;
+    private final DepartmentPeers departmentPeers;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
@@ -149,7 +151,7 @@ public class PlacementTaskService {
                     .build());
             if (t.getStatus() == PlacementTaskStatus.OPEN) {
                 created++;
-                notifyManagers(NotificationType.PO_PLACEMENT_DUE, NotifactionPriority.NORMAL,
+                notifyDepartment(NotificationType.PO_PLACEMENT_DUE, NotifactionPriority.NORMAL,
                         LocalizedText.of("placement.notify.newTitle", t.getOrderNo()),
                         LocalizedText.of("placement.notify.newContent", t.getOrderNo(), stamp(t.getDeadlineAt())),
                         t.getId());
@@ -194,7 +196,7 @@ public class PlacementTaskService {
         List<PlacementTask> dueSoon = taskRepository.findDueSoonNotReminded(now, now.plusHours(remindHours));
         for (PlacementTask t : dueSoon) {
             t.setRemindedAt(now);
-            Set<Long> to = t.getAssigneeId() != null ? Set.of(t.getAssigneeId()) : managers();
+            Set<Long> to = t.getAssigneeId() != null ? Set.of(t.getAssigneeId()) : department();
             publish(NotificationType.PO_PLACEMENT_DUE, NotifactionPriority.HIGH,
                     LocalizedText.of("placement.notify.dueTitle", t.getOrderNo()),
                     LocalizedText.of("placement.notify.dueContent", t.getOrderNo(), stamp(t.getDeadlineAt())),
@@ -203,7 +205,7 @@ public class PlacementTaskService {
         List<PlacementTask> overdue = taskRepository.findOverdueNotNotified(now);
         for (PlacementTask t : overdue) {
             t.setOverdueNotifiedAt(now);
-            Set<Long> to = new java.util.LinkedHashSet<>(managers());
+            Set<Long> to = new java.util.LinkedHashSet<>(department());
             if (t.getAssigneeId() != null) {
                 to.add(t.getAssigneeId());
             }
@@ -221,15 +223,18 @@ public class PlacementTaskService {
 
     // ----- user actions -------------------------------------------------------
 
-    /** The purchasing manager gives the task to a purchaser (or another one). */
+    /**
+     * Gives the task to the caller or to another member of the caller's
+     * department (re-assigning is allowed the same way).
+     */
     @Transactional
-    public PlacementTaskView assign(Long taskId, Long assigneeId, Long managerId) {
+    public PlacementTaskView assign(Long taskId, Long assigneeId, Long callerId) {
         PlacementTask t = openTask(taskId);
-        if (assigneeId == null || !purchasers().containsKey(assigneeId)) {
-            throw new PlacementException(400, I18n.t("placement.error.notPurchaser"));
+        if (assigneeId == null || !assignable(callerId).containsKey(assigneeId)) {
+            throw new PlacementException(400, I18n.t("placement.error.notInDepartment"));
         }
         t.setAssigneeId(assigneeId);
-        t.setAssignedBy(managerId);
+        t.setAssignedBy(callerId);
         t.setAssignedAt(LocalDateTime.now(clock));
         taskRepository.save(t);
         publish(NotificationType.PO_PLACEMENT_DUE, NotifactionPriority.HIGH,
@@ -240,13 +245,16 @@ public class PlacementTaskService {
     }
 
     /**
-     * Closes the task with a PO number typed by the assignee or a manager, for
-     * when the old ERP link is missing (about 15% of PO lines have none).
+     * Closes the task with a PO number typed by hand, for when the old ERP link
+     * is missing (about 15% of PO lines have none). Allowed for the assignee and
+     * the members of the assignee's department, for anyone in the department
+     * while the task has no assignee, and for holders of
+     * {@code data.purchaseOrder.all}.
      */
     @Transactional
-    public PlacementTaskView completeManually(Long taskId, String poNo, Long userId, boolean manager) {
+    public PlacementTaskView completeManually(Long taskId, String poNo, Long userId, boolean all) {
         PlacementTask t = openTask(taskId);
-        if (!manager && !userId.equals(t.getAssigneeId())) {
+        if (!all && t.getAssigneeId() != null && !departmentPeers.of(userId).contains(t.getAssigneeId())) {
             throw new PlacementException(403, I18n.t("placement.error.notYours"));
         }
         String po = poNo == null ? "" : poNo.strip();
@@ -264,20 +272,27 @@ public class PlacementTaskService {
 
     // ----- reads --------------------------------------------------------------
 
-    /** Managers see every task; a purchaser sees the tasks assigned to them. */
+    /**
+     * Holders of {@code data.purchaseOrder.all} see every task; everyone else
+     * sees the tasks of their department (assigned to them or a colleague) and
+     * the tasks nobody has taken yet.
+     */
     @Transactional(readOnly = true)
     public Page<PlacementTaskView> list(Long userId, boolean all, boolean openOnly, Pageable pageable) {
         List<PlacementTaskStatus> statuses = openOnly ? OPEN_ONLY : OPEN_AND_DONE;
         Page<PlacementTask> page = all ? taskRepository.findByStatusIn(statuses, pageable)
-                : taskRepository.findByAssigneeIdAndStatusIn(userId, statuses, pageable);
+                : taskRepository.findForDepartment(departmentPeers.of(userId), statuses, pageable);
         List<PlacementTaskView> views = views(page.getContent());
         return page.map(t -> views.get(page.getContent().indexOf(t)));
     }
 
-    /** Users who can be assigned (role purchaser), id -> display name. */
+    /**
+     * Users the caller can give a task to (themselves and the active members of
+     * their departments), id -> display name.
+     */
     @Transactional(readOnly = true)
-    public Map<Long, String> purchasers() {
-        Set<Long> ids = recipientResolver.usersWithRoles(List.of(PURCHASER_ROLE));
+    public Map<Long, String> assignable(Long callerId) {
+        Set<Long> ids = departmentPeers.of(callerId);
         Map<Long, String> out = new LinkedHashMap<>();
         userRepository.findAllById(ids).stream()
                 .filter(u -> Boolean.TRUE.equals(u.getStatus()))
@@ -353,13 +368,14 @@ public class PlacementTaskService {
         return Optional.empty();
     }
 
-    private Set<Long> managers() {
-        return recipientResolver.usersWithRoles(List.of(MANAGER_ROLE));
+    /** Every member of the purchasing department (role {@value #PURCHASER_ROLE}). */
+    private Set<Long> department() {
+        return recipientResolver.usersWithRoles(List.of(PURCHASER_ROLE));
     }
 
-    private void notifyManagers(NotificationType type, NotifactionPriority priority, LocalizedText title,
+    private void notifyDepartment(NotificationType type, NotifactionPriority priority, LocalizedText title,
             LocalizedText content, Long bizId) {
-        publish(type, priority, title, content, bizId, managers());
+        publish(type, priority, title, content, bizId, department());
     }
 
     private void publish(NotificationType type, NotifactionPriority priority, LocalizedText title,

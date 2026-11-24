@@ -32,8 +32,9 @@ import lombok.RequiredArgsConstructor;
 /**
  * Purchase placement tasks (采购下单任务, {@code /api/placement-tasks}): place
  * the purchase orders of a customer order within 2 days of its audit passing.
- * Holders of {@code data.purchaseOrder.all} (purchasing managers) see and
- * assign every task; a purchaser sees the tasks assigned to them.
+ * Anyone with {@code menu.purchaseOrder.update} can take a task or give it to
+ * a department colleague. Holders of {@code data.purchaseOrder.all} see every
+ * task; everyone else sees their department's tasks and unassigned ones.
  */
 @RestController
 @RequestMapping("/api/placement-tasks")
@@ -56,31 +57,31 @@ public class PlacementTaskController {
             @RequestParam(defaultValue = "true") boolean openOnly,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        boolean manager = perm.has(PurchaseOrderQueryService.SCOPE_ALL);
+        boolean all = perm.has(PurchaseOrderQueryService.SCOPE_ALL);
         Sort sort = openOnly ? Sort.by("deadlineAt").ascending().and(Sort.by("id").ascending())
                 : Sort.by("auditVerifiedAt").descending().and(Sort.by("id").descending());
         PageRequest p = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE), sort);
-        Page<PlacementTaskView> result = service.list(me.getUser().getId(), manager, openOnly, p);
+        Page<PlacementTaskView> result = service.list(me.getUser().getId(), all, openOnly, p);
         return new BasicResponse(200, I18n.t("common.ok"), Map.of(
                 "content", result.getContent(),
                 "totalElements", result.getTotalElements(),
                 "totalPages", result.getTotalPages(),
                 "page", result.getNumber(),
-                "canAssign", manager));
+                "canAssign", perm.has("menu.purchaseOrder.update")));
     }
 
-    /** Users who can be given a task (role purchaser). */
-    @PreAuthorize("@perm.has('data.purchaseOrder.all')")
+    /** Users the caller can give a task to: themselves and their department colleagues. */
+    @PreAuthorize("@perm.has('menu.purchaseOrder.update')")
     @GetMapping("/purchasers")
-    public BasicResponse purchasers() {
-        List<Map<String, Object>> out = service.purchasers().entrySet().stream()
+    public BasicResponse purchasers(@AuthenticationPrincipal UserDetail me) {
+        List<Map<String, Object>> out = service.assignable(me.getUser().getId()).entrySet().stream()
                 .map(e -> Map.<String, Object>of("id", e.getKey(), "name", e.getValue()))
                 .toList();
         return new BasicResponse(200, I18n.t("common.ok"), out);
     }
 
-    /** The purchasing manager assigns (or re-assigns) an open task to a purchaser. */
-    @PreAuthorize("@perm.has('menu.purchaseOrder.update') and @perm.has('data.purchaseOrder.all')")
+    /** Assigns (or re-assigns) an open task to the caller or a department colleague. */
+    @PreAuthorize("@perm.has('menu.purchaseOrder.update')")
     @PostMapping("/{id}/assign")
     public BasicResponse assign(@AuthenticationPrincipal UserDetail me, @PathVariable Long id,
             @RequestBody PlacementAssignRequest body) {

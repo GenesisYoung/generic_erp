@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Numbers for the PMC dashboard (pmc_manager, pmc_clerk). All counts are
+ * Numbers for the PMC dashboard (PMC department, role pmc). All counts are
  * computed when asked; {@code generatedAt} is in the business time zone.
  */
 public record PmcDashboard(

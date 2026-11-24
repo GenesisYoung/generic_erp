@@ -95,7 +95,7 @@ erp:
     exception:
       # 采购异常: who is alerted when an exception is reported or changes status
       # (besides the reporter, the order's purchaser and the handler).
-      notify-roles: ${ERP_EXCEPTION_NOTIFY_ROLES:purchaser_manager,pmc_manager,pmc_clerk}
+      notify-roles: ${ERP_EXCEPTION_NOTIFY_ROLES:purchaser,pmc}
       # Planning and Operations department ids (department_tb.id), comma separated.
       notify-dept-ids: ${ERP_EXCEPTION_NOTIFY_DEPT_IDS:}
   legacy:
@@ -182,7 +182,7 @@ erp:
       sync-cron: ${LEGACY_ERP_CO_SYNC_CRON:0 */15 * * * *}
       lookback-days: 60
       batch-limit: 2000
-      notify-roles: pmc_manager,pmc_clerk
+      notify-roles: pmc
       query: |
         SELECT
             RTRIM(h.ERI)                                          AS legacy_id,

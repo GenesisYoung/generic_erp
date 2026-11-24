@@ -123,6 +123,6 @@ public class LegacyErpProperties {
         private int batchLimit = 2000;
 
         /** Users with these roles are told about new orders. */
-        private List<String> notifyRoles = List.of("pmc_manager", "pmc_clerk");
+        private List<String> notifyRoles = List.of("pmc");
     }
 }

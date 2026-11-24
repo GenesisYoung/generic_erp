@@ -80,8 +80,8 @@ public class PurchaseExceptionService {
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    @Value("${erp.purchase.exception.notify-roles:purchaser_manager,pmc_manager,pmc_clerk}")
-    private List<String> notifyRoles = List.of("purchaser_manager", "pmc_manager", "pmc_clerk");
+    @Value("${erp.purchase.exception.notify-roles:purchaser,pmc}")
+    private List<String> notifyRoles = List.of("purchaser", "pmc");
 
     @Value("${erp.purchase.exception.notify-dept-ids:}")
     private List<Long> notifyDeptIds = List.of();

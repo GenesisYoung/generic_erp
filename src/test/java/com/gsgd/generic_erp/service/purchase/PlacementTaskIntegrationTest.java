@@ -58,6 +58,7 @@ import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.repository.customer.CustomerOrderRepository;
 import com.gsgd.generic_erp.repository.customer.PoCustomerLinkRepository;
 import com.gsgd.generic_erp.repository.purchase.PlacementTaskRepository;
+import com.gsgd.generic_erp.service.auth.DepartmentPeers;
 import com.gsgd.generic_erp.service.notification.NotificationRecipientResolver;
 import com.gsgd.generic_erp.service.notification.NotificationRequestedEvent;
 import com.gsgd.generic_erp.service.purchase.PlacementTaskService.PlacementException;
@@ -70,7 +71,7 @@ import com.gsgd.generic_erp.service.purchase.PlacementTaskService.PlacementExcep
 class PlacementTaskIntegrationTest {
 
     static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
-    static final long MANAGER = 50L;
+    static final long COLLEAGUE = 50L; // purchasing department member, no user row
     static final long WANG = 7L; // active purchaser
     static final long LI = 8L; // purchaser account switched off
     static final long OTHER = 9L;
@@ -152,9 +153,18 @@ class PlacementTaskIntegrationTest {
         @Bean
         NotificationRecipientResolver recipientResolver() {
             NotificationRecipientResolver r = mock(NotificationRecipientResolver.class);
-            when(r.usersWithRoles(List.of(PlacementTaskService.MANAGER_ROLE))).thenReturn(Set.of(MANAGER));
-            when(r.usersWithRoles(List.of(PlacementTaskService.PURCHASER_ROLE))).thenReturn(Set.of(WANG, LI));
+            when(r.usersWithRoles(List.of(PlacementTaskService.PURCHASER_ROLE))).thenReturn(Set.of(COLLEAGUE));
             return r;
+        }
+
+        /** COLLEAGUE, WANG and LI share the purchasing department; OTHER is elsewhere. */
+        @Bean
+        DepartmentPeers departmentPeers() {
+            DepartmentPeers p = mock(DepartmentPeers.class);
+            Set<Long> purchasing = Set.of(COLLEAGUE, WANG, LI);
+            when(p.of(any())).thenAnswer(inv -> purchasing.contains(inv.getArgument(0)) ? purchasing
+                    : Set.of((Long) inv.getArgument(0)));
+            return p;
         }
 
         @Bean
@@ -218,10 +228,10 @@ class PlacementTaskIntegrationTest {
         assertEquals(1, sink.events.size());
         NotificationRequestedEvent e = sink.events.get(0);
         assertEquals(NotificationType.PO_PLACEMENT_DUE, e.type());
-        assertEquals(Set.of(MANAGER), e.recipientIds());
-        assertEquals("Assign a purchaser to place the purchase orders for customer order SO-1 by 2026-11-22 08:30",
-                e.contentText().render(Locale.US));
-        assertEquals("请指派采购员在 2026-11-22 08:30 前为客户订单 SO-1 下采购单",
+        assertEquals(Set.of(COLLEAGUE), e.recipientIds());
+        assertEquals("Take this task or give it to a colleague: place the purchase orders for customer order SO-1 "
+                + "by 2026-11-22 08:30", e.contentText().render(Locale.US));
+        assertEquals("请认领或指派给本部门同事：在 2026-11-22 08:30 前为客户订单 SO-1 下采购单",
                 e.contentText().render(Locale.SIMPLIFIED_CHINESE));
 
         // A second passing round of the same order does not make a second task.
@@ -233,16 +243,18 @@ class PlacementTaskIntegrationTest {
     }
 
     @Test
-    void managerAssignsAndThePurchaserClosesByHand() {
+    void aColleagueAssignsInsideTheDepartmentAndThePurchaserClosesByHand() {
         audit("SO-1", 1, "VERIFIED", "PASS", LocalDateTime.of(2026, 11, 20, 8, 30));
         service.runOnce();
         Long id = tasks.findAll().get(0).getId();
         sink.events.clear();
 
-        assertEquals(Map.of(WANG, "王采购"), service.purchasers(), "switched-off accounts are not offered");
-        assertEquals(400, assertThrows(PlacementException.class, () -> service.assign(id, LI, MANAGER)).getStatus());
+        assertEquals(Map.of(WANG, "王采购"), service.assignable(COLLEAGUE), "switched-off accounts are not offered");
+        assertEquals(400, assertThrows(PlacementException.class, () -> service.assign(id, LI, COLLEAGUE)).getStatus());
+        assertEquals(400, assertThrows(PlacementException.class, () -> service.assign(id, OTHER, COLLEAGUE)).getStatus(),
+                "only yourself or a member of your department");
 
-        PlacementTaskView v = service.assign(id, WANG, MANAGER);
+        PlacementTaskView v = service.assign(id, WANG, COLLEAGUE);
         assertEquals("王采购", v.assigneeName());
         assertEquals(Set.of(WANG), sink.events.get(0).recipientIds());
 
@@ -260,6 +272,8 @@ class PlacementTaskIntegrationTest {
 
         var mine = service.list(WANG, false, false, PageRequest.of(0, 20, Sort.by("id")));
         assertEquals(1, mine.getTotalElements());
+        assertEquals(1, service.list(COLLEAGUE, false, false, PageRequest.of(0, 20, Sort.by("id"))).getTotalElements(),
+                "colleagues see the department's tasks");
         assertEquals(0, service.list(OTHER, false, false, PageRequest.of(0, 20, Sort.by("id"))).getTotalElements());
     }
 
@@ -271,7 +285,7 @@ class PlacementTaskIntegrationTest {
         audit("SO-1", 1, "VERIFIED", "PASS", LocalDateTime.of(2026, 11, 20, 8, 30));
         service.runOnce();
 
-        PlacementTaskView open = service.list(MANAGER, true, true, PageRequest.of(0, 20, Sort.by("id")))
+        PlacementTaskView open = service.list(COLLEAGUE, true, true, PageRequest.of(0, 20, Sort.by("id")))
                 .getContent().get(0);
         assertEquals("Acme", open.customerName());
         assertEquals(0, open.linesWithPo());
@@ -284,14 +298,14 @@ class PlacementTaskIntegrationTest {
         clock.set(LocalDateTime.of(2026, 11, 21, 10, 0));
         assertEquals(1, service.runOnce().closed());
 
-        PlacementTaskView done = service.list(MANAGER, true, false, PageRequest.of(0, 20, Sort.by("id")))
+        PlacementTaskView done = service.list(COLLEAGUE, true, false, PageRequest.of(0, 20, Sort.by("id")))
                 .getContent().get(0);
         assertEquals(PlacementTaskStatus.DONE, done.status());
         assertEquals("LINKED_PO", done.doneSource());
         assertEquals("PO-A", done.donePoNo(), "the earliest PO closes the task");
         assertEquals(List.of("PO-A", "PO-B"), done.linkedPoNos());
         assertEquals(2, done.linesWithPo());
-        assertTrue(service.list(MANAGER, true, true, PageRequest.of(0, 20, Sort.by("id"))).isEmpty());
+        assertTrue(service.list(COLLEAGUE, true, true, PageRequest.of(0, 20, Sort.by("id"))).isEmpty());
     }
 
     @Test
@@ -305,7 +319,7 @@ class PlacementTaskIntegrationTest {
         clock.set(LocalDateTime.of(2026, 11, 21, 21, 0)); // 11.5 h left
         assertEquals(1, service.runOnce().reminded());
         assertEquals(0, service.runOnce().reminded(), "only one reminder");
-        assertEquals(Set.of(MANAGER), sink.events.get(0).recipientIds(), "unassigned: managers are reminded");
+        assertEquals(Set.of(COLLEAGUE), sink.events.get(0).recipientIds(), "unassigned: the department is reminded");
         assertEquals(NotifactionPriority.HIGH, sink.events.get(0).priority());
 
         clock.set(LocalDateTime.of(2026, 11, 22, 8, 45));
@@ -314,7 +328,7 @@ class PlacementTaskIntegrationTest {
         NotificationRequestedEvent e = sink.events.get(1);
         assertEquals(NotifactionPriority.ERGENT, e.priority());
         assertEquals("The purchase orders for customer order SO-1 were due by 2026-11-22 08:30 and are still not "
-                + "placed (no purchaser assigned)", e.contentText().render(Locale.US));
+                + "placed (nobody has taken it yet)", e.contentText().render(Locale.US));
         assertNull(tasks.findAll().get(0).getDoneAt());
     }
 
