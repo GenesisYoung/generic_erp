@@ -2,9 +2,12 @@ package com.gsgd.generic_erp.service.purchase;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +17,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -30,6 +34,8 @@ import com.gsgd.generic_erp.entity.customer.PoCustomerLink;
 import com.gsgd.generic_erp.entity.purchase.PlacementTask;
 import com.gsgd.generic_erp.enums.NotifactionPriority;
 import com.gsgd.generic_erp.enums.NotificationType;
+import com.gsgd.generic_erp.enums.PlacementOrderType;
+import com.gsgd.generic_erp.enums.PlacementSource;
 import com.gsgd.generic_erp.enums.PlacementTaskStatus;
 import com.gsgd.generic_erp.pmc.AuditJson;
 import com.gsgd.generic_erp.pmc.AuditTaskEntity;
@@ -42,14 +48,26 @@ import com.gsgd.generic_erp.repository.purchase.PlacementTaskRepository;
 import com.gsgd.generic_erp.service.auth.DepartmentPeers;
 import com.gsgd.generic_erp.service.notification.NotificationRecipientResolver;
 import com.gsgd.generic_erp.service.notification.NotificationRequestedEvent;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyErpProperties;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyPlacementSourceReader;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyPlacementSourceRow;
 
 import lombok.RequiredArgsConstructor;
 
 /**
- * Purchase placement tasks: "place the purchase orders for customer order X
- * within 2 calendar days of its order audit passing".
+ * Purchase placement tasks: "place the purchase orders for order X within 2
+ * calendar days". Sample orders (order no. YP...) and production orders
+ * (P...) are kept apart ({@link PlacementOrderType}).
  * <ol>
- * <li>{@link #createFromVerifiedAudits()}: every order audit round that is
+ * <li>{@link #syncFromConfirmations()} (trigger {@code CONFIRMATION}, the
+ * default since 2026-11-24): reads the purchase applications (采购申请) of
+ * sample orders and the purchase plans (采购计划) of production orders from the
+ * old ERP. A document that is not confirmed for purchase gets one OPEN task
+ * per order it buys for, with a deadline of document date +
+ * {@code deadline-days}. When the old ERP marks it confirmed, the task closes
+ * ({@code doneSource = CONFIRMED}).</li>
+ * <li>{@link #createFromVerifiedAudits()} (trigger {@code ORDER_AUDIT}, the
+ * behaviour before 2026-11-24): every order audit round that is
  * VERIFIED gets one row. Result PASS makes an OPEN task with a deadline of
  * verification time + {@code deadline-days}, and tells the purchasing
  * department, whose members take it or give it to a colleague. Any other result, or a later round of an order that
@@ -83,6 +101,19 @@ public class PlacementTaskService {
     private final DepartmentPeers departmentPeers;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    /** Present only when the old ERP is connected (erp.legacy.enabled=true). */
+    private final ObjectProvider<LegacyPlacementSourceReader> sourceReader;
+    private final ObjectProvider<LegacyErpProperties> legacyProperties;
+
+    /** CONFIRMATION (default): old-ERP confirmation status; ORDER_AUDIT: PMC order review PASS. */
+    @Value("${erp.purchase.placement.trigger:CONFIRMATION}")
+    private String trigger = "CONFIRMATION";
+
+    @Value("${erp.purchase.placement.sample-prefix:YP}")
+    private String samplePrefix = "YP";
+
+    @Value("${erp.purchase.placement.production-prefix:P}")
+    private String productionPrefix = "P";
 
     @Value("${erp.purchase.placement.deadline-days:2}")
     private int deadlineDays = 2;
@@ -105,16 +136,163 @@ public class PlacementTaskService {
         }
     }
 
-    public record RunResult(int created, int skipped, int closed, int reminded, int overdue) {
+    /**
+     * @param closed    tasks closed by a linked purchase order
+     * @param confirmed tasks closed because the old ERP confirmed the document
+     */
+    public record RunResult(int created, int skipped, int closed, int confirmed, int reminded, int overdue) {
     }
 
     /** One scheduled pass: create, close, remind. */
     @Transactional
     public RunResult runOnce() {
-        int[] made = createFromVerifiedAudits();
+        int[] made = usesConfirmations() ? syncFromConfirmations() : createFromVerifiedAudits();
         int closed = closeLinked();
         int[] alerts = remindAndEscalate();
-        return new RunResult(made[0], made[1], closed, alerts[0], alerts[1]);
+        return new RunResult(made[0], made[1], closed, made.length > 2 ? made[2] : 0, alerts[0], alerts[1]);
+    }
+
+    /**
+     * True when tasks come from old-ERP confirmations: trigger CONFIRMATION
+     * and at least one of the two source queries is configured. Otherwise
+     * (old ERP not connected, or queries not filled in yet) tasks still come
+     * from order audits, so nothing stops while the queries are being set up.
+     */
+    boolean usesConfirmations() {
+        if ("ORDER_AUDIT".equalsIgnoreCase(trigger)) {
+            return false;
+        }
+        LegacyPlacementSourceReader reader = sourceReader.getIfAvailable();
+        return reader != null && (reader.supports(PlacementOrderType.SAMPLE)
+                || reader.supports(PlacementOrderType.PRODUCTION));
+    }
+
+    /** The section an order belongs to, from its number. */
+    public PlacementOrderType orderType(String orderNo) {
+        String no = orderNo == null ? "" : orderNo.strip().toUpperCase(java.util.Locale.ROOT);
+        // YP first: "YP" does not start with "P", but a configured prefix might overlap.
+        if (!samplePrefix.isBlank() && no.startsWith(samplePrefix.toUpperCase(java.util.Locale.ROOT))) {
+            return PlacementOrderType.SAMPLE;
+        }
+        if (!productionPrefix.isBlank() && no.startsWith(productionPrefix.toUpperCase(java.util.Locale.ROOT))) {
+            return PlacementOrderType.PRODUCTION;
+        }
+        return PlacementOrderType.OTHER;
+    }
+
+    /** One old-ERP document for one order, after its lines are merged. */
+    private record DocKey(String sourceNo, String orderNo) {
+    }
+
+    private static final class DocState {
+        boolean confirmed = true;
+        LocalDateTime date;
+    }
+
+    /**
+     * Creates tasks for unconfirmed purchase applications (sample orders) and
+     * purchase plans (production orders), and closes tasks whose document is
+     * now confirmed. A document counts as confirmed only when every line read
+     * for that order is confirmed. Rows whose order number does not fit the
+     * section's prefix are ignored. Returns {created, skipped, confirmed}.
+     */
+    int[] syncFromConfirmations() {
+        LegacyPlacementSourceReader reader = sourceReader.getIfAvailable();
+        if (reader == null) {
+            return new int[] { 0, 0, 0 };
+        }
+        LegacyErpProperties.PlacementSourceQueries cfg = Optional.ofNullable(legacyProperties.getIfAvailable())
+                .map(LegacyErpProperties::getPlacementSource).orElseGet(LegacyErpProperties.PlacementSourceQueries::new);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDate since = now.toLocalDate().minusDays(cfg.getLookbackDays());
+        int created = 0;
+        int skipped = 0;
+        int confirmed = 0;
+        Map<PlacementOrderType, PlacementSource> sources = new EnumMap<>(PlacementOrderType.class);
+        sources.put(PlacementOrderType.SAMPLE, PlacementSource.PURCHASE_APPLICATION);
+        sources.put(PlacementOrderType.PRODUCTION, PlacementSource.PURCHASE_PLAN);
+        for (Map.Entry<PlacementOrderType, PlacementSource> section : sources.entrySet()) {
+            PlacementOrderType type = section.getKey();
+            PlacementSource source = section.getValue();
+            if (!reader.supports(type)) {
+                continue;
+            }
+            Map<DocKey, DocState> docs = new LinkedHashMap<>();
+            int wrongPrefix = 0;
+            for (LegacyPlacementSourceRow r : reader.fetch(type, since, cfg.getBatchLimit())) {
+                if (r.orderNo() == null || r.orderNo().isBlank() || r.sourceNo() == null || r.sourceNo().isBlank()) {
+                    continue;
+                }
+                if (orderType(r.orderNo()) != type) {
+                    wrongPrefix++;
+                    continue;
+                }
+                DocState d = docs.computeIfAbsent(new DocKey(r.sourceNo(), r.orderNo()), k -> new DocState());
+                d.confirmed &= r.confirmed();
+                if (r.sourceDate() != null && (d.date == null || r.sourceDate().isBefore(d.date))) {
+                    d.date = r.sourceDate();
+                }
+            }
+            if (wrongPrefix > 0) {
+                log.debug("Placement source {}: {} rows ignored (order number is not {})", source, wrongPrefix, type);
+            }
+            if (docs.isEmpty()) {
+                continue;
+            }
+            Map<DocKey, PlacementTask> existing = new HashMap<>();
+            List<String> sourceNos = docs.keySet().stream().map(DocKey::sourceNo).distinct().toList();
+            for (int i = 0; i < sourceNos.size(); i += 500) {
+                for (PlacementTask t : taskRepository.findBySourceAndSourceNoIn(source,
+                        sourceNos.subList(i, Math.min(i + 500, sourceNos.size())))) {
+                    existing.put(new DocKey(t.getSourceNo(), t.getOrderNo()), t);
+                }
+            }
+            for (Map.Entry<DocKey, DocState> e : docs.entrySet()) {
+                DocKey key = e.getKey();
+                DocState d = e.getValue();
+                PlacementTask t = existing.get(key);
+                if (t != null) {
+                    if (d.confirmed && t.getStatus() == PlacementTaskStatus.OPEN) {
+                        t.setStatus(PlacementTaskStatus.DONE);
+                        t.setDoneAt(now);
+                        t.setDoneSource(PlacementTask.SOURCE_CONFIRMED);
+                        taskRepository.save(t);
+                        confirmed++;
+                    }
+                    continue;
+                }
+                if (d.confirmed) {
+                    continue; // nothing to do, and no row needed
+                }
+                if (taskRepository.existsOpenAuditTask(key.orderNo())) {
+                    skipped++; // the order still has an open task from its order audit
+                    continue;
+                }
+                LocalDateTime start = d.date == null ? now : d.date;
+                t = taskRepository.save(PlacementTask.builder()
+                        .orderNo(key.orderNo())
+                        .orderType(type)
+                        .source(source)
+                        .sourceNo(key.sourceNo())
+                        .startedAt(start)
+                        .deadlineAt(start.plusDays(deadlineDays))
+                        .status(PlacementTaskStatus.OPEN)
+                        .createdAt(now)
+                        .build());
+                created++;
+                notifyDepartment(NotificationType.PO_PLACEMENT_DUE, NotifactionPriority.NORMAL,
+                        LocalizedText.of("placement.notify.unconfirmedTitle", typeText(type), t.getOrderNo()),
+                        LocalizedText.of("placement.notify.unconfirmedContent", typeText(type), t.getOrderNo(),
+                                LocalizedText.of("placement.source." + source.name()), t.getSourceNo(),
+                                stamp(t.getDeadlineAt())),
+                        t.getId());
+            }
+        }
+        return new int[] { created, skipped, confirmed };
+    }
+
+    private static LocalizedText typeText(PlacementOrderType type) {
+        return LocalizedText.of("placement.type." + type.name());
     }
 
     /** Returns {created OPEN, stored SKIPPED}. */
@@ -143,6 +321,10 @@ public class PlacementTaskService {
                     .auditTaskId(e.id)
                     .auditRound(e.round)
                     .orderNo(e.orderNumber)
+                    .orderType(orderType(e.orderNumber))
+                    .source(PlacementSource.ORDER_AUDIT)
+                    .sourceNo(e.id)
+                    .startedAt(verifiedAt)
                     .auditResult(doc.verificationResult)
                     .auditVerifiedAt(verifiedAt)
                     .deadlineAt(verifiedAt.plusDays(deadlineDays))
@@ -278,12 +460,32 @@ public class PlacementTaskService {
      * the tasks nobody has taken yet.
      */
     @Transactional(readOnly = true)
-    public Page<PlacementTaskView> list(Long userId, boolean all, boolean openOnly, Pageable pageable) {
+    public Page<PlacementTaskView> list(Long userId, boolean all, boolean openOnly, PlacementOrderType type,
+            Pageable pageable) {
         List<PlacementTaskStatus> statuses = openOnly ? OPEN_ONLY : OPEN_AND_DONE;
-        Page<PlacementTask> page = all ? taskRepository.findByStatusIn(statuses, pageable)
-                : taskRepository.findForDepartment(departmentPeers.of(userId), statuses, pageable);
+        // OTHER tasks (neither prefix) are listed with the production orders.
+        List<PlacementOrderType> types = type == null ? List.of(PlacementOrderType.values())
+                : type == PlacementOrderType.SAMPLE ? List.of(PlacementOrderType.SAMPLE)
+                        : List.of(PlacementOrderType.PRODUCTION, PlacementOrderType.OTHER);
+        Page<PlacementTask> page = all ? taskRepository.findByStatusInAndOrderTypeIn(statuses, types, pageable)
+                : taskRepository.findForDepartment(departmentPeers.of(userId), statuses, types, pageable);
         List<PlacementTaskView> views = views(page.getContent());
         return page.map(t -> views.get(page.getContent().indexOf(t)));
+    }
+
+    /** Open tasks per section (SAMPLE, PRODUCTION; OTHER counts as PRODUCTION) that the caller can see. */
+    @Transactional(readOnly = true)
+    public Map<PlacementOrderType, Long> openCounts(Long userId, boolean all) {
+        Map<PlacementOrderType, Long> out = new EnumMap<>(PlacementOrderType.class);
+        out.put(PlacementOrderType.PRODUCTION, 0L);
+        out.put(PlacementOrderType.SAMPLE, 0L);
+        Set<Long> peers = all ? Set.of(-1L) : departmentPeers.of(userId);
+        for (Object[] r : taskRepository.countOpenByOrderType(all, peers.isEmpty() ? Set.of(-1L) : peers)) {
+            PlacementOrderType t = r[0] == PlacementOrderType.SAMPLE ? PlacementOrderType.SAMPLE
+                    : PlacementOrderType.PRODUCTION;
+            out.merge(t, (Long) r[1], Long::sum);
+        }
+        return out;
     }
 
     /**
@@ -318,8 +520,13 @@ public class PlacementTaskService {
         for (PlacementTask t : tasks) {
             List<PoCustomerLink> l = links.getOrDefault(t.getOrderNo(), List.of());
             CustomerOrder o = orders.get(t.getOrderNo());
-            out.add(new PlacementTaskView(t.getId(), t.getOrderNo(), o == null ? null : o.getCustomerName(),
-                    t.getAuditRound(), t.getAuditVerifiedAt(), t.getDeadlineAt(),
+            out.add(new PlacementTaskView(t.getId(), t.getOrderNo(),
+                    t.getOrderType() == null ? orderType(t.getOrderNo()) : t.getOrderType(),
+                    t.getSource() == null ? PlacementSource.ORDER_AUDIT : t.getSource(),
+                    t.getSource() == null || t.getSource() == PlacementSource.ORDER_AUDIT ? null : t.getSourceNo(),
+                    o == null ? null : o.getCustomerName(),
+                    t.getAuditRound(), t.getAuditVerifiedAt(),
+                    t.getStartedAt() == null ? t.getAuditVerifiedAt() : t.getStartedAt(), t.getDeadlineAt(),
                     Duration.between(now, t.getDeadlineAt()).toHours(), t.getStatus(), t.getAssigneeId(),
                     names.get(t.getAssigneeId()), t.getAssignedAt(), t.getDoneAt(), t.getDoneSource(),
                     t.getDonePoNo(),
