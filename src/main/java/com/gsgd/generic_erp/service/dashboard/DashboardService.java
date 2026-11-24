@@ -47,7 +47,8 @@ public class DashboardService {
     static final int LIST_SIZE = 5;
     private static final List<String> AUDIT_CLOSED = List.of("VERIFIED", "CANCELLED");
     private static final List<PurchaseExceptionStatus> EXC_OPEN = List.of(PurchaseExceptionStatus.REPORTED,
-            PurchaseExceptionStatus.ACKNOWLEDGED, PurchaseExceptionStatus.IN_PROGRESS);
+            PurchaseExceptionStatus.ACKNOWLEDGED, PurchaseExceptionStatus.IN_PROGRESS,
+            PurchaseExceptionStatus.PENDING_APPROVAL);
     private static final List<PurchaseOrderStatus> PO_ACTIVE = List.of(PurchaseOrderStatus.PLACED,
             PurchaseOrderStatus.PARTIALLY_RECEIVED);
     private static final String CUSTOMER_ORDER_SYNC_KEY = "CUSTOMER_ORDER";

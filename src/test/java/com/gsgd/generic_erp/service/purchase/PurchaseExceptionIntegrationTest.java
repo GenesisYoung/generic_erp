@@ -54,6 +54,7 @@ import com.gsgd.generic_erp.enums.PurchaseOrderStatus;
 import com.gsgd.generic_erp.pmc.AuditTaskRepository;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
 import com.gsgd.generic_erp.repository.customer.CustomerOrderRepository;
+import com.gsgd.generic_erp.repository.purchase.PurchaseExceptionApprovalRepository;
 import com.gsgd.generic_erp.repository.purchase.PurchaseExceptionLogRepository;
 import com.gsgd.generic_erp.repository.purchase.PurchaseExceptionRepository;
 import com.gsgd.generic_erp.repository.purchase.PurchaseOrderRepository;
@@ -75,11 +76,13 @@ class PurchaseExceptionIntegrationTest {
     static final long PMC = 20L; // pmc_manager / pmc_clerk: handles
     static final long BOSS = 50L; // purchaser_manager
     static final long PLANNER = 60L; // Planning department user
+    static final long APPROVER = 70L; // PMC department member: approves resolutions
 
-    static final Actor WANG_A = new Actor(WANG, false, false, true, false);
-    static final Actor ZHAO_A = new Actor(ZHAO, false, false, true, false);
-    static final Actor PMC_A = new Actor(PMC, true, true, false, false);
-    static final Actor BOSS_A = new Actor(BOSS, true, false, true, true);
+    static final Actor WANG_A = new Actor(WANG, false, false, true, false, false);
+    static final Actor ZHAO_A = new Actor(ZHAO, false, false, true, false, false);
+    static final Actor PMC_A = new Actor(PMC, true, true, false, false, false);
+    static final Actor BOSS_A = new Actor(BOSS, true, false, true, true, false);
+    static final Actor APPROVER_A = new Actor(APPROVER, false, false, false, false, true);
 
     static class EventSink {
         final List<NotificationRequestedEvent> events = new ArrayList<>();
@@ -136,10 +139,19 @@ class PurchaseExceptionIntegrationTest {
         }
 
         @Bean
+        ExceptionApprovers approvers() {
+            ExceptionApprovers a = mock(ExceptionApprovers.class);
+            when(a.users()).thenAnswer(inv -> new java.util.LinkedHashSet<>(Set.of(APPROVER, PMC)));
+            return a;
+        }
+
+        @Bean
         UserRepository userRepository() {
             Map<Long, User> all = Map.of(
                     WANG, User.builder().id(WANG).username("wang").displayName("王采购").status(true).build(),
-                    PMC, User.builder().id(PMC).username("pmc").displayName("PMC 李").status(true).build());
+                    PMC, User.builder().id(PMC).username("pmc").displayName("PMC 李").status(true).build(),
+                    APPROVER, User.builder().id(APPROVER).username("appr").displayName("PMC 审批").status(true)
+                            .build());
             UserRepository r = mock(UserRepository.class);
             when(r.findAllById(anyIterable())).thenAnswer(inv -> {
                 List<User> out = new ArrayList<>();
@@ -159,6 +171,8 @@ class PurchaseExceptionIntegrationTest {
     @Autowired
     PurchaseExceptionLogRepository logs;
     @Autowired
+    PurchaseExceptionApprovalRepository approvals;
+    @Autowired
     PurchaseOrderRepository orders;
     @Autowired
     EventSink sink;
@@ -168,6 +182,7 @@ class PurchaseExceptionIntegrationTest {
     @BeforeEach
     void setUp() {
         logs.deleteAll();
+        approvals.deleteAll();
         exceptions.deleteAll();
         orders.deleteAll();
         sink.events.clear();
@@ -246,10 +261,13 @@ class PurchaseExceptionIntegrationTest {
         service.act(PMC_A, id, new PurchaseExceptionActionRequest("START", null, null));
         assertEquals(400, assertThrows(PurchaseExceptionError.class,
                 () -> service.act(PMC_A, id, new PurchaseExceptionActionRequest("RESOLVE", " ", null))).getStatus());
-        PurchaseExceptionView resolved = service.act(PMC_A, id,
-                new PurchaseExceptionActionRequest("RESOLVE", "改由备选供应商补 200 件", null));
+        service.act(PMC_A, id, new PurchaseExceptionActionRequest("RESOLVE", "改由备选供应商补 200 件", null));
+        PurchaseExceptionView resolved = service.act(APPROVER_A, id,
+                new PurchaseExceptionActionRequest("APPROVE", null, null));
+        assertEquals(PurchaseExceptionStatus.RESOLVED, resolved.status());
         assertEquals("改由备选供应商补 200 件", resolved.resolution());
-        assertEquals(List.of(PurchaseExceptionAction.COMMENT), resolved.allowedActions(),
+        assertEquals(List.of(PurchaseExceptionAction.COMMENT),
+                service.detail(PMC_A, id).allowedActions(),
                 "PMC does not close; the reporter or the purchasing manager does");
 
         sink.events.clear();
@@ -260,11 +278,79 @@ class PurchaseExceptionIntegrationTest {
                 new PurchaseExceptionActionRequest("REOPEN", "备选供应商也缺货", null));
         assertEquals(PurchaseExceptionStatus.IN_PROGRESS, reopened.status());
         service.act(PMC_A, id, new PurchaseExceptionActionRequest("RESOLVE", "分两批交货", null));
+        assertEquals(409, assertThrows(PurchaseExceptionError.class,
+                () -> service.act(BOSS_A, id, new PurchaseExceptionActionRequest("CLOSE", null, null))).getStatus(),
+                "not resolved until PMC approves");
+        service.act(APPROVER_A, id, new PurchaseExceptionActionRequest("APPROVE", "同意", null));
         PurchaseExceptionView closed = service.act(BOSS_A, id, new PurchaseExceptionActionRequest("CLOSE", null, null));
         assertEquals(PurchaseExceptionStatus.CLOSED, closed.status());
         assertTrue(closed.allowedActions().isEmpty());
-        assertEquals(List.of("REPORT", "ACKNOWLEDGE", "START", "RESOLVE", "COMMENT", "REOPEN", "RESOLVE", "CLOSE"),
-                closed.history().stream().map(h -> h.action().name()).toList());
+        assertEquals(List.of("REPORT", "ACKNOWLEDGE", "START", "RESOLVE", "APPROVE", "COMMENT", "REOPEN", "RESOLVE",
+                "APPROVE", "CLOSE"), closed.history().stream().map(h -> h.action().name()).toList());
+        assertEquals(2, closed.approvals().size(), "each resolution got its own approval task");
         assertEquals(0, service.openCount(PMC_A));
+    }
+
+    @Test
+    void everyResolutionNeedsPmcApproval() {
+        Long id = service.report(WANG_A,
+                new PurchaseExceptionReportRequest(po1, null, "DELAY", "URGENT", "晚到 5 天", null)).id();
+        sink.events.clear();
+
+        PurchaseExceptionView pending = service.act(PMC_A, id,
+                new PurchaseExceptionActionRequest("RESOLVE", "空运补货", null));
+        assertEquals(PurchaseExceptionStatus.PENDING_APPROVAL, pending.status());
+        assertEquals(null, pending.resolvedAt(), "not resolved yet");
+        assertEquals(1, pending.approvals().size());
+        assertEquals("PENDING", pending.approvals().get(0).status().name());
+        assertEquals("PMC 李", pending.approvals().get(0).requestedByName());
+        assertEquals(List.of(PurchaseExceptionAction.COMMENT), pending.allowedActions(),
+                "the handler cannot approve their own proposal without being in PMC");
+
+        NotificationRequestedEvent task = sink.events.stream()
+                .filter(ev -> ev.type() == NotificationType.EXCEPTION_APPROVAL).findFirst().orElseThrow();
+        assertEquals(Set.of(APPROVER), task.recipientIds(), "PMC department, not the one who proposed");
+        assertEquals(NotifactionPriority.ERGENT, task.priority());
+        assertEquals("PMC approval needed: exception " + pending.exceptionNo() + " (PO PO-1)",
+                task.titleText().render(Locale.US));
+        assertEquals("待 PMC 审批：异常 " + pending.exceptionNo() + "（采购单 PO-1）",
+                task.titleText().render(Locale.SIMPLIFIED_CHINESE));
+        NotificationRequestedEvent update = sink.events.stream()
+                .filter(ev -> ev.type() == NotificationType.EXCEPTION_UPDATED).findFirst().orElseThrow();
+        assertFalse(update.recipientIds().contains(APPROVER), "approvers get the task, not a second alert");
+
+        var page = PageRequest.of(0, 20, Sort.by("id"));
+        assertEquals(1, service.list(APPROVER_A, PurchaseExceptionService.ListView.APPROVAL, page)
+                .getTotalElements(), "PMC sees the approval task");
+        assertEquals(1, service.approvalCount(APPROVER_A));
+        assertEquals(0, service.approvalCount(PMC_A));
+        assertEquals(1, service.openCount(WANG_A), "still open while waiting");
+        assertEquals(List.of(PurchaseExceptionAction.APPROVE, PurchaseExceptionAction.REJECT,
+                PurchaseExceptionAction.COMMENT), service.detail(APPROVER_A, id).allowedActions());
+
+        assertEquals(409, assertThrows(PurchaseExceptionError.class,
+                () -> service.act(PMC_A, id, new PurchaseExceptionActionRequest("APPROVE", null, null))).getStatus(),
+                "only the PMC department approves");
+        assertEquals(400, assertThrows(PurchaseExceptionError.class,
+                () -> service.act(APPROVER_A, id, new PurchaseExceptionActionRequest("REJECT", " ", null)))
+                .getStatus(), "a rejection needs a reason");
+
+        PurchaseExceptionView rejected = service.act(APPROVER_A, id,
+                new PurchaseExceptionActionRequest("REJECT", "空运成本太高", null));
+        assertEquals(PurchaseExceptionStatus.IN_PROGRESS, rejected.status());
+        assertEquals(null, rejected.resolution());
+        assertEquals("REJECTED", rejected.approvals().get(0).status().name());
+        assertEquals("空运成本太高", rejected.approvals().get(0).decisionComment());
+        assertEquals("PMC 审批", rejected.approvals().get(0).decidedByName());
+
+        service.act(PMC_A, id, new PurchaseExceptionActionRequest("RESOLVE", "海运 + 部分先发", null));
+        PurchaseExceptionView approved = service.act(APPROVER_A, id,
+                new PurchaseExceptionActionRequest("APPROVE", null, null));
+        assertEquals(PurchaseExceptionStatus.RESOLVED, approved.status());
+        assertEquals("海运 + 部分先发", approved.resolution());
+        assertTrue(approved.resolvedAt() != null);
+        assertEquals(List.of("REJECTED", "APPROVED"),
+                approved.approvals().stream().map(a -> a.status().name()).toList());
+        assertEquals(0, service.approvalCount(APPROVER_A));
     }
 }

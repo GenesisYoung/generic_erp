@@ -98,6 +98,11 @@ erp:
       notify-roles: ${ERP_EXCEPTION_NOTIFY_ROLES:purchaser,pmc}
       # Planning and Operations department ids (department_tb.id), comma separated.
       notify-dept-ids: ${ERP_EXCEPTION_NOTIFY_DEPT_IDS:}
+      # PMC approval: a resolution only counts once a member of the PMC department approves it.
+      # The department is found by name (any department whose name contains one of these,
+      # ignoring case; sub-departments included) and/or by id (department_tb.id), comma separated.
+      approver-dept-names: ${ERP_EXCEPTION_APPROVER_DEPT_NAMES:PMC}
+      approver-dept-ids: ${ERP_EXCEPTION_APPROVER_DEPT_IDS:}
   legacy:
     # Read-only sync of purchase orders and customer orders from the old ERP (SQL Server).
     # Off by default. Set LEGACY_ERP_ENABLED=true and the LEGACY_ERP_DB_* variables

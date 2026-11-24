@@ -28,15 +28,18 @@ import com.gsgd.generic_erp.dto.purchase.PurchaseExceptionReportRequest;
 import com.gsgd.generic_erp.dto.purchase.PurchaseExceptionView;
 import com.gsgd.generic_erp.entity.auth.User;
 import com.gsgd.generic_erp.entity.purchase.PurchaseException;
+import com.gsgd.generic_erp.entity.purchase.PurchaseExceptionApproval;
 import com.gsgd.generic_erp.entity.purchase.PurchaseExceptionLog;
 import com.gsgd.generic_erp.entity.purchase.PurchaseOrder;
 import com.gsgd.generic_erp.enums.NotifactionPriority;
 import com.gsgd.generic_erp.enums.NotificationType;
 import com.gsgd.generic_erp.enums.PurchaseExceptionAction;
+import com.gsgd.generic_erp.enums.PurchaseExceptionApprovalStatus;
 import com.gsgd.generic_erp.enums.PurchaseExceptionCategory;
 import com.gsgd.generic_erp.enums.PurchaseExceptionSeverity;
 import com.gsgd.generic_erp.enums.PurchaseExceptionStatus;
 import com.gsgd.generic_erp.repository.auth.UserRepository;
+import com.gsgd.generic_erp.repository.purchase.PurchaseExceptionApprovalRepository;
 import com.gsgd.generic_erp.repository.purchase.PurchaseExceptionLogRepository;
 import com.gsgd.generic_erp.repository.purchase.PurchaseExceptionRepository;
 import com.gsgd.generic_erp.repository.purchase.PurchaseOrderRepository;
@@ -47,15 +50,22 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * Purchasing exceptions: a purchaser reports a supplier problem on a purchase
- * order, PMC / Planning / Operations handle it, and the reporter or the
- * purchasing manager closes it.
+ * order, PMC / Planning / Operations handle it, the PMC department approves
+ * the resolution, and the reporter or the purchasing manager closes it.
  *
  * <pre>
- * REPORTED --ACKNOWLEDGE--> ACKNOWLEDGED --START--> IN_PROGRESS --RESOLVE--> RESOLVED --CLOSE--> CLOSED
- *     \______________________ RESOLVE _____________________/        ^          |
- *                                                                   +-REOPEN---+ (back to IN_PROGRESS)
+ * REPORTED --ACKNOWLEDGE--> ACKNOWLEDGED --START--> IN_PROGRESS --RESOLVE--> PENDING_APPROVAL --APPROVE--> RESOLVED --CLOSE--> CLOSED
+ *     \______________________ RESOLVE ____________________/   ^                 |                           |
+ *                                                            +-----REJECT------+                           |
+ *                                                            +-----------------REOPEN----------------------+
  * </pre>
  *
+ * RESOLVE only proposes a resolution: it creates a PMC approval task
+ * ({@link PurchaseExceptionApproval}) and alerts the PMC department
+ * ({@link ExceptionApprovers}). The exception counts as resolved only when a
+ * PMC member approves; a rejection (with a reason) sends it back to
+ * IN_PROGRESS so the handler can propose again, which creates a new task.
+ * <p>
  * Every step writes a log row. Reporting and every status change alert the
  * reporter, the purchaser of the order, the {@code notify-roles} and the users
  * of the {@code notify-dept-ids} departments (Planning, Operations), except
@@ -69,11 +79,15 @@ public class PurchaseExceptionService {
     static final int TEXT_MAX = 2000;
     private static final DateTimeFormatter NO_DATE = DateTimeFormatter.ofPattern("yyMMdd", Locale.ROOT);
     private static final Set<PurchaseExceptionStatus> OPEN = EnumSet.of(PurchaseExceptionStatus.REPORTED,
-            PurchaseExceptionStatus.ACKNOWLEDGED, PurchaseExceptionStatus.IN_PROGRESS);
+            PurchaseExceptionStatus.ACKNOWLEDGED, PurchaseExceptionStatus.IN_PROGRESS,
+            PurchaseExceptionStatus.PENDING_APPROVAL);
+    private static final Set<PurchaseExceptionStatus> AWAITING = EnumSet.of(PurchaseExceptionStatus.PENDING_APPROVAL);
     private static final Set<PurchaseExceptionStatus> ALL = EnumSet.allOf(PurchaseExceptionStatus.class);
 
     private final PurchaseExceptionRepository exceptionRepository;
     private final PurchaseExceptionLogRepository logRepository;
+    private final PurchaseExceptionApprovalRepository approvalRepository;
+    private final ExceptionApprovers approvers;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final UserRepository userRepository;
     private final NotificationRecipientResolver recipientResolver;
@@ -95,8 +109,26 @@ public class PurchaseExceptionService {
      * @param reports  menu.purchaseException.create
      * @param poAll    data.purchaseOrder.all (purchasing manager): reports on any
      *                 order, closes and reopens any exception
+     * @param approves member of the PMC department: sees every exception and
+     *                 approves or rejects proposed resolutions
      */
-    public record Actor(Long userId, boolean seesAll, boolean handles, boolean reports, boolean poAll) {
+    public record Actor(Long userId, boolean seesAll, boolean handles, boolean reports, boolean poAll,
+            boolean approves) {
+
+        /** Sees every exception: data.purchaseException.all or a PMC approver. */
+        public boolean seesEverything() {
+            return seesAll || approves;
+        }
+    }
+
+    /** Which exceptions a list shows. */
+    public enum ListView {
+        /** Not yet resolved (includes those waiting for PMC approval). */
+        OPEN,
+        /** Every status. */
+        ALL,
+        /** Waiting for PMC approval. */
+        APPROVAL
     }
 
     /** A request the user may not make, or that does not fit the exception's state. */
@@ -179,10 +211,11 @@ public class PurchaseExceptionService {
             throw error(409, "exception.error.notAllowed");
         }
         boolean needsText = action == PurchaseExceptionAction.COMMENT || action == PurchaseExceptionAction.RESOLVE
-                || action == PurchaseExceptionAction.REOPEN;
+                || action == PurchaseExceptionAction.REOPEN || action == PurchaseExceptionAction.REJECT;
         String comment = text(req.comment(), needsText, switch (action) {
         case RESOLVE -> "exception.error.resolutionRequired";
         case REOPEN -> "exception.error.reasonRequired";
+        case REJECT -> "exception.error.rejectReasonRequired";
         default -> "exception.error.commentRequired";
         });
 
@@ -200,12 +233,31 @@ public class PurchaseExceptionService {
             }
         }
         case RESOLVE -> {
-            e.setStatus(PurchaseExceptionStatus.RESOLVED);
+            // Only a proposal: resolved once the PMC department approves.
+            e.setStatus(PurchaseExceptionStatus.PENDING_APPROVAL);
             e.setResolution(comment);
-            e.setResolvedAt(now);
+            e.setResolvedAt(null);
             if (e.getHandlerId() == null) {
                 e.setHandlerId(actor.userId());
             }
+            approvalRepository.save(PurchaseExceptionApproval.builder()
+                    .exceptionId(e.getId())
+                    .status(PurchaseExceptionApprovalStatus.PENDING)
+                    .proposedResolution(comment)
+                    .requestedBy(actor.userId())
+                    .requestedAt(now)
+                    .build());
+        }
+        case APPROVE -> {
+            decide(e, actor, PurchaseExceptionApprovalStatus.APPROVED, comment, now);
+            e.setStatus(PurchaseExceptionStatus.RESOLVED);
+            e.setResolvedAt(now);
+        }
+        case REJECT -> {
+            decide(e, actor, PurchaseExceptionApprovalStatus.REJECTED, comment, now);
+            e.setStatus(PurchaseExceptionStatus.IN_PROGRESS);
+            e.setResolution(null);
+            e.setResolvedAt(null);
         }
         case CLOSE -> {
             e.setStatus(PurchaseExceptionStatus.CLOSED);
@@ -234,6 +286,18 @@ public class PurchaseExceptionService {
             to = everyone(e, purchaseOrderRepository.findById(e.getPurchaseOrderId()).orElse(null));
         }
         to.remove(actor.userId());
+        if (action == PurchaseExceptionAction.RESOLVE) {
+            // The PMC department gets an approval task instead of a status update.
+            Set<Long> pmc = approvers.users();
+            pmc.remove(actor.userId());
+            to.removeAll(pmc);
+            publish(NotificationType.EXCEPTION_APPROVAL,
+                    e.getSeverity() == PurchaseExceptionSeverity.URGENT ? NotifactionPriority.ERGENT
+                            : NotifactionPriority.HIGH,
+                    LocalizedText.of("exception.notify.approvalTitle", e.getExceptionNo(), e.getPoNo()),
+                    LocalizedText.of("exception.notify.approvalContent", name(actor.userId()), clip(comment)),
+                    e.getId(), pmc);
+        }
         publish(NotificationType.EXCEPTION_UPDATED,
                 action == PurchaseExceptionAction.COMMENT ? NotifactionPriority.NORMAL : e.getSeverity().priority(),
                 LocalizedText.of("exception.notify.updatedTitle", e.getExceptionNo(), e.getPoNo(),
@@ -249,12 +313,22 @@ public class PurchaseExceptionService {
 
     @Transactional(readOnly = true)
     public Page<PurchaseExceptionView> list(Actor actor, boolean openOnly, Pageable pageable) {
-        Set<PurchaseExceptionStatus> statuses = openOnly ? OPEN : ALL;
-        Page<PurchaseException> page = actor.seesAll() ? exceptionRepository.findByStatusIn(statuses, pageable)
+        return list(actor, openOnly ? ListView.OPEN : ListView.ALL, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PurchaseExceptionView> list(Actor actor, ListView listView, Pageable pageable) {
+        Set<PurchaseExceptionStatus> statuses = switch (listView) {
+        case OPEN -> OPEN;
+        case ALL -> ALL;
+        case APPROVAL -> AWAITING;
+        };
+        Page<PurchaseException> page = actor.seesEverything()
+                ? exceptionRepository.findByStatusIn(statuses, pageable)
                 : exceptionRepository.findVisibleTo(actor.userId(), statuses, pageable);
         Map<Long, String> names = names(page.getContent().stream()
                 .flatMap(e -> java.util.stream.Stream.of(e.getReporterId(), e.getHandlerId())).toList());
-        return page.map(e -> view(e, actor, names, List.of()));
+        return page.map(e -> view(e, actor, names, List.of(), List.of()));
     }
 
     @Transactional(readOnly = true)
@@ -262,11 +336,17 @@ public class PurchaseExceptionService {
         return view(visible(actor, id), actor, true);
     }
 
-    /** Open exceptions (REPORTED, ACKNOWLEDGED, IN_PROGRESS) the user can see, for the menu badge. */
+    /** Open exceptions (not yet resolved) the user can see, for the menu badge. */
     @Transactional(readOnly = true)
     public long openCount(Actor actor) {
-        return actor.seesAll() ? exceptionRepository.countByStatusIn(OPEN)
+        return actor.seesEverything() ? exceptionRepository.countByStatusIn(OPEN)
                 : exceptionRepository.findVisibleTo(actor.userId(), OPEN, Pageable.ofSize(1)).getTotalElements();
+    }
+
+    /** PMC approval tasks waiting for an answer; 0 for users outside the PMC department. */
+    @Transactional(readOnly = true)
+    public long approvalCount(Actor actor) {
+        return actor.approves() ? exceptionRepository.countByStatusIn(AWAITING) : 0;
     }
 
     /** The actions the user may take on the exception now. */
@@ -289,6 +369,12 @@ public class PurchaseExceptionService {
         case IN_PROGRESS -> {
             if (actor.handles()) {
                 out.add(PurchaseExceptionAction.RESOLVE);
+            }
+        }
+        case PENDING_APPROVAL -> {
+            if (actor.approves()) {
+                out.add(PurchaseExceptionAction.APPROVE);
+                out.add(PurchaseExceptionAction.REJECT);
             }
         }
         case RESOLVED -> {
@@ -328,7 +414,7 @@ public class PurchaseExceptionService {
     private PurchaseException visible(Actor actor, Long id) {
         PurchaseException e = exceptionRepository.findById(id)
                 .orElseThrow(() -> error(404, "exception.error.notFound"));
-        if (actor.seesAll() || Objects.equals(e.getReporterId(), actor.userId())) {
+        if (actor.seesEverything() || Objects.equals(e.getReporterId(), actor.userId())) {
             return e;
         }
         boolean purchaser = purchaseOrderRepository.findById(e.getPurchaseOrderId())
@@ -353,6 +439,19 @@ public class PurchaseExceptionService {
         return to;
     }
 
+    /** Answers the exception's pending approval task. */
+    private void decide(PurchaseException e, Actor actor, PurchaseExceptionApprovalStatus answer, String comment,
+            LocalDateTime now) {
+        PurchaseExceptionApproval task = approvalRepository
+                .findFirstByExceptionIdAndStatusOrderByIdDesc(e.getId(), PurchaseExceptionApprovalStatus.PENDING)
+                .orElseThrow(() -> error(409, "exception.error.notAllowed"));
+        task.setStatus(answer);
+        task.setDecidedBy(actor.userId());
+        task.setDecidedAt(now);
+        task.setDecisionComment(comment);
+        approvalRepository.save(task);
+    }
+
     private void log(PurchaseException e, PurchaseExceptionAction action, PurchaseExceptionStatus from, Long userId,
             String comment, LocalDateTime now) {
         logRepository.save(PurchaseExceptionLog.builder()
@@ -370,15 +469,27 @@ public class PurchaseExceptionService {
         List<PurchaseExceptionLog> logs = withHistory
                 ? logRepository.findByExceptionIdOrderByCreatedAtAscIdAsc(e.getId())
                 : List.of();
+        List<PurchaseExceptionApproval> approvals = withHistory
+                ? approvalRepository.findByExceptionIdOrderByIdAsc(e.getId())
+                : List.of();
         List<Long> ids = new ArrayList<>();
         ids.add(e.getReporterId());
         ids.add(e.getHandlerId());
         logs.forEach(l -> ids.add(l.getOperatorId()));
-        return view(e, actor, names(ids), logs);
+        approvals.forEach(a -> {
+            ids.add(a.getRequestedBy());
+            ids.add(a.getDecidedBy());
+        });
+        return view(e, actor, names(ids), logs, approvals);
     }
 
     private PurchaseExceptionView view(PurchaseException e, Actor actor, Map<Long, String> names,
-            List<PurchaseExceptionLog> logs) {
+            List<PurchaseExceptionLog> logs, List<PurchaseExceptionApproval> approvals) {
+        List<PurchaseExceptionView.Approval> tasks = approvals.stream()
+                .map(a -> new PurchaseExceptionView.Approval(a.getId(), a.getStatus(), a.getProposedResolution(),
+                        a.getRequestedBy(), names.get(a.getRequestedBy()), a.getRequestedAt(), a.getDecidedBy(),
+                        names.get(a.getDecidedBy()), a.getDecidedAt(), a.getDecisionComment()))
+                .toList();
         List<PurchaseExceptionView.Log> history = logs.stream()
                 .map(l -> new PurchaseExceptionView.Log(l.getAction(), l.getFromStatus(), l.getToStatus(),
                         l.getOperatorId(), names.get(l.getOperatorId()), l.getComment(), l.getCreatedAt()))
@@ -388,7 +499,7 @@ public class PurchaseExceptionService {
                 e.getSeverity(), e.getDescription(), e.getImpactDate(), e.getStatus(), e.getReporterId(),
                 names.get(e.getReporterId()), e.getHandlerId(), names.get(e.getHandlerId()), e.getResolution(),
                 e.getReportedAt(), e.getResolvedAt(), e.getClosedAt(), e.getUpdatedAt(), e.getLockVersion(),
-                allowed(e, actor), history);
+                allowed(e, actor), history, tasks);
     }
 
     private Map<Long, String> names(Collection<Long> ids) {
