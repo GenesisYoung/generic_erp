@@ -1,6 +1,7 @@
 -- =============================================================================
 --  One role per department (每个部门一个角色).
---  Runs after V9__followup_templates.sql. Re-runnable.
+--  Runs after V10 (exception approval). It does not depend on V10, so it can
+--  also run right after V9__followup_templates.sql. Re-runnable.
 --
 --  Before: each department had a manager role and a clerk role
 --          (pmc_manager + pmc_clerk, purchaser_manager + purchaser).
