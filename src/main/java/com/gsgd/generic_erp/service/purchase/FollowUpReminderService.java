@@ -19,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.gsgd.generic_erp.configuration.i18n.LocalizedText;
 import com.gsgd.generic_erp.entity.purchase.FollowUpCheckpoint;
-import com.gsgd.generic_erp.entity.purchase.FollowUpRule;
 import com.gsgd.generic_erp.entity.purchase.PurchaseOrder;
 import com.gsgd.generic_erp.enums.CheckpointStatus;
 import com.gsgd.generic_erp.enums.FollowUpStage;
@@ -113,7 +112,7 @@ public class FollowUpReminderService {
                     LocalizedText.of("followup.notify.missedTitle", rows.size()),
                     LocalizedText.of("followup.notify.missedManagerContent", summary(rows, groups),
                             unassignedNote(rows)),
-                    BIZ_TYPE, singleOrderId(rows), managers));
+                    BIZ_TYPE, singleOrderId(rows), department));
         }
         return rows.size();
     }
@@ -192,7 +191,8 @@ public class FollowUpReminderService {
 
         long unassigned = rows.stream().filter(r -> r.order().getPurchaserId() == null).count();
         if (unassigned > 0) {
-            log.warn("{} due follow-ups belong to orders with no purchaser; map their buyer codes in legacy_user_map_tb",
+            log.warn(
+                    "{} due follow-ups belong to orders with no purchaser; map their buyer codes in legacy_user_map_tb",
                     unassigned);
         }
         return rows.size();
@@ -213,7 +213,10 @@ public class FollowUpReminderService {
                 .orElse(1);
     }
 
-    /** Rows grouped by purchaser in query order; orders with no purchaser are left out. */
+    /**
+     * Rows grouped by purchaser in query order; orders with no purchaser are left
+     * out.
+     */
     private static Map<Long, List<CheckpointAndOrder>> byPurchaser(List<CheckpointAndOrder> rows) {
         return rows.stream()
                 .filter(r -> r.order().getPurchaserId() != null)
@@ -229,7 +232,10 @@ public class FollowUpReminderService {
         return summary(rows, Map.of());
     }
 
-    /** Same, with the plan group's name after the order number of a plan group's own task. */
+    /**
+     * Same, with the plan group's name after the order number of a plan group's own
+     * task.
+     */
     static LocalizedText summary(List<CheckpointAndOrder> rows, Map<Long, String> groupNames) {
         LocalizedText shown = LocalizedText.join(rows.stream().limit(LIST_LIMIT)
                 .map(r -> {
@@ -261,7 +267,10 @@ public class FollowUpReminderService {
         return n == 0 ? "" : LocalizedText.of("followup.notify.unassignedNote", n);
     }
 
-    /** The order id when every row is the same order, so a click can open it; otherwise null. */
+    /**
+     * The order id when every row is the same order, so a click can open it;
+     * otherwise null.
+     */
     private static Long singleOrderId(List<CheckpointAndOrder> rows) {
         Set<Long> ids = rows.stream().map(r -> r.order().getId()).collect(Collectors.toSet());
         return ids.size() == 1 ? ids.iterator().next() : null;
