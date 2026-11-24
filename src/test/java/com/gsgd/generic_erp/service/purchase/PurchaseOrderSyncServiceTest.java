@@ -95,8 +95,10 @@ class PurchaseOrderSyncServiceTest {
         when(stateRepo.findById(anyString())).thenReturn(Optional.empty());
         when(mapRepo.findBySourceSystemAndLegacyCode(anyString(), anyString())).thenReturn(Optional.empty());
         when(userRepo.findByUsername(anyString())).thenReturn(Optional.empty());
-        service = new PurchaseOrderSyncService(provider, props, poRepo, cpRepo, stateRepo, mapRepo, userRepo,
-                ruleService, CLOCK);
+        ObjectProvider<com.gsgd.generic_erp.service.purchase.legacy.LegacyPurchaseOrderLineReader> noLines = mock(
+                ObjectProvider.class);
+        service = new PurchaseOrderSyncService(provider, noLines, mock(FollowUpTrackService.class), props, poRepo,
+                cpRepo, stateRepo, mapRepo, userRepo, ruleService, CLOCK);
     }
 
     private static LegacyPurchaseOrderRow row(String no, LocalDate orderDate, String status) {

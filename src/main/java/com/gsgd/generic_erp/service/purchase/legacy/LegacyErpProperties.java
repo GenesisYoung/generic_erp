@@ -59,6 +59,16 @@ public class LegacyErpProperties {
          */
         private String query;
 
+        /**
+         * SELECT that returns the lines of the orders whose numbers are in the
+         * named list parameter {@code :poNos}. Required column aliases: po_no,
+         * line_no, material_code, material_name, plan_type, plan_type_name,
+         * qty, received_qty. {@code plan_type} decides which follow-up task a
+         * line belongs to (see the plan groups page). Empty = lines are not
+         * synced and every order keeps one follow-up task.
+         */
+        private String lineQuery;
+
         /** Cron for the sync job, in the business zone. Default: every 15 minutes. */
         private String syncCron = "0 */15 * * * *";
 

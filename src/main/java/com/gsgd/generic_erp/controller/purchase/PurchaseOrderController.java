@@ -105,8 +105,9 @@ public class PurchaseOrderController {
     }
 
     /**
-     * Switches the order to a follow-up template and re-plans its open tasks.
-     * Answers the number of open tasks it now has. 404 when the order is not
+     * Switches one follow-up task series of the order (the main one, or a plan
+     * group's own when {@code planGroupId} is given) to a template and
+     * re-plans its open tasks. Answers the number of open tasks it now has. 404 when the order is not
      * visible, 409 when it no longer needs follow-up.
      */
     @PreAuthorize("@perm.has('menu.purchaseOrder.update')")
@@ -114,7 +115,8 @@ public class PurchaseOrderController {
     public BasicResponse applyTemplate(@AuthenticationPrincipal UserDetail me, @PathVariable Long id,
             @RequestBody ApplyTemplateRequest body) {
         try {
-            return ruleService.applyToOrder(me.getUser().getId(), id, body == null ? null : body.templateId())
+            return ruleService.applyToOrder(me.getUser().getId(), id, body == null ? null : body.templateId(),
+                    body == null ? null : body.planGroupId())
                     .map(n -> new BasicResponse(200, I18n.t("common.ok"), java.util.Map.of("openTasks", n)))
                     .orElseGet(() -> new BasicResponse(404, I18n.t("purchase.error.orderNotFound"), null));
         } catch (InvalidFollowUpException e) {

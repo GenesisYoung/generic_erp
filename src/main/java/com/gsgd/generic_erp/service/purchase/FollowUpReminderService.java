@@ -39,10 +39,10 @@ import lombok.RequiredArgsConstructor;
  * The three passes the hourly follow-up job runs, in this order:
  * <ol>
  * <li><b>Missed.</b> OPEN checkpoints whose window ended before today become
- * MISSED. Each purchaser gets one summary, and every member of the purchasing
- * department (role {@code purchaser}, one role per department) gets one summary
- * of all missed follow-ups.</li>
- * <li><b>Overdue.</b> An active order that has run past the last day of its
+ * MISSED. Each purchaser gets one summary, and every {@code purchaser_manager}
+ * gets one summary of all missed follow-ups.</li>
+ * <li><b>Overdue.</b> Each follow-up series of an active order (the main one
+ * and each plan group's own) that has run past the last day of its
  * rule, and has no window reaching today, gets a new OVERDUE checkpoint
  * covering today ({@code overdue_period_days} long, 1 day in the default rule;
  * none when the rule leaves it empty).</li>
@@ -72,6 +72,8 @@ public class FollowUpReminderService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final FollowUpRuleRepository ruleRepository;
     private final FollowUpRuleService ruleService;
+    private final com.gsgd.generic_erp.repository.purchase.FollowUpTrackRepository trackRepository;
+    private final com.gsgd.generic_erp.repository.purchase.FollowUpPlanGroupRepository groupRepository;
     private final NotificationRecipientResolver recipientResolver;
     private final ApplicationEventPublisher events;
     private final Clock clock;
@@ -95,12 +97,13 @@ public class FollowUpReminderService {
             return 0;
         }
         rows.forEach(r -> r.checkpoint().setStatus(CheckpointStatus.MISSED));
+        Map<Long, String> groups = groupNames(rows);
         checkpointRepository.saveAll(rows.stream().map(CheckpointAndOrder::checkpoint).toList());
 
         byPurchaser(rows).forEach((purchaserId, list) -> events.publishEvent(NotificationRequestedEvent.localized(
                 NotificationType.FOLLOWUP_MISSED, NotifactionPriority.HIGH,
                 LocalizedText.of("followup.notify.missedTitle", list.size()),
-                LocalizedText.of("followup.notify.missedContent", summary(list)),
+                LocalizedText.of("followup.notify.missedContent", summary(list, groups)),
                 BIZ_TYPE, singleOrderId(list), Set.of(purchaserId))));
 
         Set<Long> department = recipientResolver.usersWithRoles(List.of(DEPARTMENT_ROLE));
@@ -108,8 +111,9 @@ public class FollowUpReminderService {
             events.publishEvent(NotificationRequestedEvent.localized(
                     NotificationType.FOLLOWUP_MISSED, NotifactionPriority.HIGH,
                     LocalizedText.of("followup.notify.missedTitle", rows.size()),
-                    LocalizedText.of("followup.notify.missedManagerContent", summary(rows), unassignedNote(rows)),
-                    BIZ_TYPE, singleOrderId(rows), department));
+                    LocalizedText.of("followup.notify.missedManagerContent", summary(rows, groups),
+                            unassignedNote(rows)),
+                    BIZ_TYPE, singleOrderId(rows), managers));
         }
         return rows.size();
     }
@@ -138,6 +142,34 @@ public class FollowUpReminderService {
                     .createdAt(now)
                     .build());
         }
+        // Separate plan-group series: same rule, with the series' own template.
+        Map<Long, PurchaseOrder> orderById = new LinkedHashMap<>();
+        for (var t : trackRepository.findWithoutWindowReaching(ACTIVE, today)) {
+            PurchaseOrder po = orderById.computeIfAbsent(t.getPurchaseOrderId(),
+                    id -> purchaseOrderRepository.findById(id).orElse(null));
+            if (po == null) {
+                continue;
+            }
+            int lastDay = ruleService.lastDay(t.getFollowupRuleId());
+            if (ChronoUnit.DAYS.between(po.getOrderDate(), today) <= lastDay) {
+                continue;
+            }
+            int period = periodByRule.computeIfAbsent(t.getFollowupRuleId(), this::overduePeriodDays);
+            if (period == 0) {
+                continue;
+            }
+            created.add(FollowUpCheckpoint.builder()
+                    .purchaseOrderId(po.getId())
+                    .planGroupId(t.getPlanGroupId())
+                    .stage(FollowUpStage.OVERDUE)
+                    .seq(checkpointRepository.maxSeq(po.getId()) + 1 + (int) created.stream()
+                            .filter(c -> c.getPurchaseOrderId().equals(po.getId())).count())
+                    .windowStart(today)
+                    .windowEnd(today.plusDays(period - 1L))
+                    .status(CheckpointStatus.OPEN)
+                    .createdAt(now)
+                    .build());
+        }
         checkpointRepository.saveAll(created);
         return created.size();
     }
@@ -148,13 +180,14 @@ public class FollowUpReminderService {
             return 0;
         }
         rows.forEach(r -> r.checkpoint().setRemindedAt(now));
+        Map<Long, String> groups = groupNames(rows);
         checkpointRepository.saveAll(rows.stream().map(CheckpointAndOrder::checkpoint).toList());
 
         Map<Long, List<CheckpointAndOrder>> byPurchaser = byPurchaser(rows);
         byPurchaser.forEach((purchaserId, list) -> events.publishEvent(NotificationRequestedEvent.localized(
                 NotificationType.FOLLOWUP_DUE, NotifactionPriority.NORMAL,
                 LocalizedText.of("followup.notify.dueTitle", list.size()),
-                LocalizedText.of("followup.notify.dueContent", summary(list)),
+                LocalizedText.of("followup.notify.dueContent", summary(list, groups)),
                 BIZ_TYPE, singleOrderId(list), Set.of(purchaserId))));
 
         long unassigned = rows.stream().filter(r -> r.order().getPurchaserId() == null).count();
@@ -193,12 +226,34 @@ public class FollowUpReminderService {
      * reader sees it in their own language.
      */
     static LocalizedText summary(List<CheckpointAndOrder> rows) {
+        return summary(rows, Map.of());
+    }
+
+    /** Same, with the plan group's name after the order number of a plan group's own task. */
+    static LocalizedText summary(List<CheckpointAndOrder> rows, Map<Long, String> groupNames) {
         LocalizedText shown = LocalizedText.join(rows.stream().limit(LIST_LIMIT)
-                .map(r -> LocalizedText.of("followup.notify.item", r.order().getExternalPoNo(),
-                        String.valueOf(r.checkpoint().getWindowEnd())))
+                .map(r -> {
+                    Long g = r.checkpoint().getPlanGroupId();
+                    String group = g == null ? null : groupNames.get(g);
+                    return group == null
+                            ? LocalizedText.of("followup.notify.item", r.order().getExternalPoNo(),
+                                    String.valueOf(r.checkpoint().getWindowEnd()))
+                            : LocalizedText.of("followup.notify.itemGroup", r.order().getExternalPoNo(), group,
+                                    String.valueOf(r.checkpoint().getWindowEnd()));
+                })
                 .toList());
         int more = rows.size() - LIST_LIMIT;
         return more > 0 ? LocalizedText.of("followup.notify.more", shown, more) : shown;
+    }
+
+    private Map<Long, String> groupNames(List<CheckpointAndOrder> rows) {
+        List<Long> ids = rows.stream().map(r -> r.checkpoint().getPlanGroupId()).filter(java.util.Objects::nonNull)
+                .distinct().toList();
+        Map<Long, String> names = new java.util.HashMap<>();
+        if (!ids.isEmpty()) {
+            groupRepository.findAllById(ids).forEach(g -> names.put(g.getId(), g.getGroupName()));
+        }
+        return names;
     }
 
     private static Object unassignedNote(List<CheckpointAndOrder> rows) {
