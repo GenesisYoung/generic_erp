@@ -51,6 +51,10 @@ public class FollowUpRecord {
     @Column(name = "checkpoint_id")
     private Long checkpointId;
 
+    /** Plan group of the follow-up task this record belongs to; null = the main task. */
+    @Column(name = "plan_group_id")
+    private Long planGroupId;
+
     /** user_tb.id of the user who saved the record. */
     @Column(name = "recorded_by", nullable = false)
     private Long recordedBy;

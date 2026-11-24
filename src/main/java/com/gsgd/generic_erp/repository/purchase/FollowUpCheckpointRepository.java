@@ -30,6 +30,35 @@ public interface FollowUpCheckpointRepository extends JpaRepository<FollowUpChec
     int changeStatus(@Param("poId") Long purchaseOrderId, @Param("from") Collection<CheckpointStatus> from,
             @Param("to") CheckpointStatus to);
 
+    List<FollowUpCheckpoint> findByPurchaseOrderIdAndPlanGroupIdAndStatus(Long purchaseOrderId, Long planGroupId,
+            CheckpointStatus status);
+
+    /** Removes the OPEN checkpoints of one follow-up task series (null group = main task) before it is re-planned. */
+    @Modifying
+    @Query("""
+            DELETE FROM FollowUpCheckpoint c WHERE c.purchaseOrderId = :poId AND c.status = :status
+              AND ((:groupId IS NULL AND c.planGroupId IS NULL) OR c.planGroupId = :groupId)""")
+    int deleteOpenOfGroup(@Param("poId") Long purchaseOrderId, @Param("groupId") Long planGroupId,
+            @Param("status") CheckpointStatus status);
+
+    /** Changes the status of one task series' checkpoints (null group = main task). */
+    @Modifying
+    @Query("""
+            UPDATE FollowUpCheckpoint c SET c.status = :to WHERE c.purchaseOrderId = :poId AND c.status IN :from
+              AND ((:groupId IS NULL AND c.planGroupId IS NULL) OR c.planGroupId = :groupId)""")
+    int changeStatusOfGroup(@Param("poId") Long purchaseOrderId, @Param("groupId") Long planGroupId,
+            @Param("from") Collection<CheckpointStatus> from, @Param("to") CheckpointStatus to);
+
+    /** The OPEN checkpoint of one task series whose window contains the day (null group = main task). */
+    @Query("""
+            SELECT c FROM FollowUpCheckpoint c
+            WHERE c.purchaseOrderId = :poId AND c.status = com.gsgd.generic_erp.enums.CheckpointStatus.OPEN
+              AND c.windowStart <= :day AND c.windowEnd >= :day
+              AND ((:groupId IS NULL AND c.planGroupId IS NULL) OR c.planGroupId = :groupId)
+            ORDER BY c.seq ASC LIMIT 1""")
+    Optional<FollowUpCheckpoint> findOpenCoveringInGroup(@Param("poId") Long purchaseOrderId,
+            @Param("groupId") Long planGroupId, @Param("day") LocalDate day);
+
     /** The OPEN checkpoint of an order whose window contains the given day. */
     @Query("""
             SELECT c FROM FollowUpCheckpoint c

@@ -51,6 +51,16 @@ public class LegacyErpDataSourceConfig {
         return new JdbcLegacyPurchaseOrderReader(template, props.getPurchaseOrder().getQuery());
     }
 
+    /** Only when a line query is configured; without it every order keeps one follow-up task. */
+    @Bean
+    @org.springframework.context.annotation.Conditional(LineQuerySet.class)
+    public LegacyPurchaseOrderLineReader legacyPurchaseOrderLineReader(HikariDataSourceHolder pool,
+            LegacyErpProperties props) {
+        JdbcTemplate template = new JdbcTemplate(pool.dataSource());
+        template.setQueryTimeout(props.getDatasource().getQueryTimeoutSeconds());
+        return new JdbcLegacyPurchaseOrderLineReader(template, props.getPurchaseOrder().getLineQuery());
+    }
+
     @Bean
     public LegacyCustomerOrderReader legacyCustomerOrderReader(HikariDataSourceHolder pool,
             LegacyErpProperties props) {
@@ -58,6 +68,16 @@ public class LegacyErpDataSourceConfig {
         template.setQueryTimeout(props.getDatasource().getQueryTimeoutSeconds());
         return new JdbcLegacyCustomerOrderReader(template, props.getCustomerOrder().getQuery(),
                 props.getCustomerOrder().getPoLinkQuery());
+    }
+
+    /** True when erp.legacy.purchase-order.line-query has text (a SpEL check would break on quotes in the SQL). */
+    static class LineQuerySet implements org.springframework.context.annotation.Condition {
+        @Override
+        public boolean matches(org.springframework.context.annotation.ConditionContext context,
+                org.springframework.core.type.AnnotatedTypeMetadata metadata) {
+            String q = context.getEnvironment().getProperty("erp.legacy.purchase-order.line-query");
+            return q != null && !q.isBlank();
+        }
     }
 
     /** Wraps the pool so it is not a DataSource bean (see class comment). */
