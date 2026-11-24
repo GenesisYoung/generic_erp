@@ -31,6 +31,7 @@ import lombok.ToString;
 @Entity
 @Table(name = "po_followup_checkpoint_tb", indexes = {
         @Index(name = "idx_checkpoint_po", columnList = "purchase_order_id, seq"),
+        @Index(name = "idx_checkpoint_po_group", columnList = "purchase_order_id, plan_group_id"),
         @Index(name = "idx_checkpoint_status_end", columnList = "status, window_end") })
 @Getter
 @Setter
@@ -51,6 +52,13 @@ public class FollowUpCheckpoint {
     @Enumerated(EnumType.STRING)
     @Column(name = "stage", length = 16, nullable = false)
     private FollowUpStage stage;
+
+    /**
+     * The plan group whose separate follow-up task this is (see
+     * {@link FollowUpTrack}); null = the order's main follow-up task.
+     */
+    @Column(name = "plan_group_id")
+    private Long planGroupId;
 
     @Column(name = "seq", nullable = false)
     private Integer seq;

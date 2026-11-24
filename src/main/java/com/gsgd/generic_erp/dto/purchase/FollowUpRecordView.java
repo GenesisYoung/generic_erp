@@ -17,11 +17,12 @@ public record FollowUpRecordView(
         LocalDate supplierPromisedDate,
         boolean missingOrderFound,
         String note,
-        LocalDateTime followedUpAt) {
+        LocalDateTime followedUpAt,
+        Long planGroupId) {
 
     public static FollowUpRecordView of(FollowUpRecord r, String recordedByName) {
         return new FollowUpRecordView(r.getId(), r.getPurchaseOrderId(), r.getCheckpointId(), r.getRecordedBy(),
                 recordedByName, r.getMaterialStatus(), r.getSupplierPromisedDate(), r.isMissingOrderFound(),
-                r.getNote(), r.getFollowedUpAt());
+                r.getNote(), r.getFollowedUpAt(), r.getPlanGroupId());
     }
 }

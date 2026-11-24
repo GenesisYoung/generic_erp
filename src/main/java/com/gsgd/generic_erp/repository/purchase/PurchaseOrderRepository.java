@@ -22,15 +22,22 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
 
     List<PurchaseOrder> findByExternalPoNo(String externalPoNo);
 
+    List<PurchaseOrder> findBySourceSystemAndExternalPoNoIn(String sourceSystem, Collection<String> externalPoNos);
+
+    List<PurchaseOrder> findByStatusIn(Collection<PurchaseOrderStatus> statuses);
+
     /**
-     * Orders in one of the statuses, placed before the day, with no checkpoint
-     * window that reaches the day: they have run past their planned stages.
+     * Orders in one of the statuses, placed before the day, whose main
+     * follow-up task is still needed and has no checkpoint window that reaches
+     * the day: they have run past their planned stages. Separate plan-group
+     * tasks are checked by {@code FollowUpTrackRepository}.
      */
     @Query("""
             SELECT po FROM PurchaseOrder po
             WHERE po.status IN :statuses AND po.orderDate < :day
+              AND (po.mainFollowupActive IS NULL OR po.mainFollowupActive = true)
               AND NOT EXISTS (SELECT 1 FROM FollowUpCheckpoint c
-                              WHERE c.purchaseOrderId = po.id AND c.windowEnd >= :day)""")
+                              WHERE c.purchaseOrderId = po.id AND c.planGroupId IS NULL AND c.windowEnd >= :day)""")
     List<PurchaseOrder> findWithoutWindowReaching(@Param("statuses") Collection<PurchaseOrderStatus> statuses,
             @Param("day") LocalDate day);
 }

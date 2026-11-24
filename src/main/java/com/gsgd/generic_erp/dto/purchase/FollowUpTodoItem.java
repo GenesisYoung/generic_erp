@@ -9,7 +9,9 @@ import com.gsgd.generic_erp.repository.purchase.CheckpointAndOrder;
 /**
  * One line of the purchaser's to-do list: a checkpoint whose window is open now.
  *
- * @param daysLeft days from today to the window's last day; 0 means "due today"
+ * @param daysLeft      days from today to the window's last day; 0 means "due today"
+ * @param planGroupId   the plan group whose separate task this is; null = the order's main task
+ * @param planGroupName that group's name
  */
 public record FollowUpTodoItem(
         Long checkpointId,
@@ -25,14 +27,22 @@ public record FollowUpTodoItem(
         LocalDate orderDate,
         LocalDate expectedDeliveryDate,
         Long templateId,
-        String templateName) {
+        String templateName,
+        Long planGroupId,
+        String planGroupName) {
 
     public static FollowUpTodoItem of(CheckpointAndOrder row, LocalDate today, String templateName) {
+        return of(row, today, row.order().getFollowupRuleId(), templateName, null);
+    }
+
+    /** A task of one series: the main one ({@code planGroupName} null) or a plan group's own. */
+    public static FollowUpTodoItem of(CheckpointAndOrder row, LocalDate today, Long templateId, String templateName,
+            String planGroupName) {
         var c = row.checkpoint();
         var po = row.order();
         return new FollowUpTodoItem(c.getId(), c.getStage(), c.getSeq(), c.getWindowStart(), c.getWindowEnd(),
                 ChronoUnit.DAYS.between(today, c.getWindowEnd()), po.getId(), po.getExternalPoNo(),
                 po.getSupplierCode(), po.getSupplierName(), po.getOrderDate(), po.getExpectedDeliveryDate(),
-                po.getFollowupRuleId(), templateName);
+                templateId, templateName, c.getPlanGroupId(), planGroupName);
     }
 }

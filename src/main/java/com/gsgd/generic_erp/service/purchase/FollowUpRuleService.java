@@ -65,6 +65,7 @@ public class FollowUpRuleService {
     private final FollowUpCheckpointRepository checkpointRepository;
     private final PurchaseOrderQueryService queryService;
     private final com.gsgd.generic_erp.repository.purchase.PurchaseOrderRepository purchaseOrderRepository;
+    private final com.gsgd.generic_erp.repository.purchase.FollowUpTrackRepository trackRepository;
     private final Clock clock;
 
     // ----- planning -----------------------------------------------------------
@@ -126,6 +127,9 @@ public class FollowUpRuleService {
         Map<Long, Long> used = new HashMap<>();
         for (Object[] r : ruleRepository.countOrdersByRule(ACTIVE)) {
             used.put((Long) r[0], (Long) r[1]);
+        }
+        for (Object[] r : trackRepository.countActiveByRule(ACTIVE)) {
+            used.merge((Long) r[0], (Long) r[1], Long::sum);
         }
         return rules.stream().map(r -> view(r, days.getOrDefault(r.getId(), List.of()), used)).toList();
     }
@@ -193,15 +197,23 @@ public class FollowUpRuleService {
         ruleRepository.save(rule);
     }
 
-    /**
-     * Switches an order to a template and re-plans it: its OPEN tasks are
-     * removed and the template's tasks that have not ended yet are added.
-     * DONE and MISSED tasks stay as history.
-     *
-     * @return the number of tasks the order now has open; empty when the order is not visible
-     */
+    /** Switches the order's main follow-up task series to a template; see the four-argument method. */
     @Transactional
     public java.util.Optional<Integer> applyToOrder(Long userId, Long purchaseOrderId, Long templateId) {
+        return applyToOrder(userId, purchaseOrderId, templateId, null);
+    }
+
+    /**
+     * Switches one follow-up task series of an order to a template and
+     * re-plans it: its OPEN tasks are removed and the template's tasks that
+     * have not ended yet are added. DONE and MISSED tasks stay as history.
+     *
+     * @param planGroupId the plan group whose separate series to change; null = the order's main series
+     * @return the number of tasks the series now has open; empty when the order is not visible
+     */
+    @Transactional
+    public java.util.Optional<Integer> applyToOrder(Long userId, Long purchaseOrderId, Long templateId,
+            Long planGroupId) {
         java.util.Optional<PurchaseOrder> found = queryService.find(userId, purchaseOrderId);
         if (found.isEmpty()) {
             return java.util.Optional.empty();
@@ -214,10 +226,23 @@ public class FollowUpRuleService {
         FollowUpRule rule = activeRule(templateId);
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDate today = now.toLocalDate();
-        po.setFollowupRuleId(rule.getId());
-        po.setUpdatedAt(now);
-        purchaseOrderRepository.save(po);
-        checkpointRepository.deleteByPurchaseOrderIdAndStatus(po.getId(), CheckpointStatus.OPEN);
+        if (planGroupId == null) {
+            if (!po.isMainFollowupNeeded()) {
+                throw new InvalidFollowUpException(409, I18n.t("followup.group.error.mainEnded"));
+            }
+            po.setFollowupRuleId(rule.getId());
+            po.setUpdatedAt(now);
+            purchaseOrderRepository.save(po);
+        } else {
+            var track = trackRepository.findByPurchaseOrderIdAndPlanGroupId(po.getId(), planGroupId)
+                    .filter(com.gsgd.generic_erp.entity.purchase.FollowUpTrack::isActive)
+                    .orElseThrow(() -> new InvalidFollowUpException(404,
+                            I18n.t("followup.group.error.seriesNotFound")));
+            track.setFollowupRuleId(rule.getId());
+            track.setUpdatedAt(now);
+            trackRepository.save(track);
+        }
+        checkpointRepository.deleteOpenOfGroup(po.getId(), planGroupId, CheckpointStatus.OPEN);
         int seq = checkpointRepository.maxSeq(po.getId());
         List<FollowUpCheckpoint> rows = new ArrayList<>();
         for (PlannedCheckpoint p : plan(rule.getId(), po.getOrderDate())) {
@@ -226,6 +251,7 @@ public class FollowUpRuleService {
             }
             rows.add(FollowUpCheckpoint.builder()
                     .purchaseOrderId(po.getId())
+                    .planGroupId(planGroupId)
                     .stage(p.stage())
                     .seq(++seq)
                     .windowStart(p.windowStart().isBefore(today) ? today : p.windowStart())

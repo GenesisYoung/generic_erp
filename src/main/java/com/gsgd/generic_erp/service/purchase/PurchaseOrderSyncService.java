@@ -5,6 +5,10 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,6 +32,8 @@ import com.gsgd.generic_erp.repository.purchase.LegacyUserMapRepository;
 import com.gsgd.generic_erp.repository.purchase.PurchaseOrderRepository;
 import com.gsgd.generic_erp.service.purchase.FollowUpPlanBuilder.PlannedCheckpoint;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyErpProperties;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyPurchaseOrderLineReader;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyPurchaseOrderLineRow;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyPurchaseOrderReader;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyPurchaseOrderRow;
 
@@ -56,6 +62,8 @@ public class PurchaseOrderSyncService {
     private static final Logger log = LoggerFactory.getLogger(PurchaseOrderSyncService.class);
 
     private final ObjectProvider<LegacyPurchaseOrderReader> readerProvider;
+    private final ObjectProvider<LegacyPurchaseOrderLineReader> lineReaderProvider;
+    private final FollowUpTrackService trackService;
     private final LegacyErpProperties props;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final FollowUpCheckpointRepository checkpointRepository;
@@ -93,19 +101,37 @@ public class PurchaseOrderSyncService {
         int closed = 0;
         LocalDateTime maxSeen = state.getLastSourceUpdatedAt();
         List<String> skipped = new ArrayList<>();
+        LegacyPurchaseOrderLineReader lineReader = lineReaderProvider.getIfAvailable();
+        boolean withLines = lineReader != null;
+        Map<String, PurchaseOrder> touched = new LinkedHashMap<>();
+        Set<Long> needSplit = new HashSet<>();
         for (LegacyPurchaseOrderRow row : rows) {
             if (row.poNo() == null || row.poNo().isBlank() || row.orderDate() == null) {
                 skipped.add(String.valueOf(row.poNo()));
                 continue;
             }
-            switch (apply(row, now)) {
+            Outcome outcome = apply(row, now, withLines);
+            if (withLines) {
+                purchaseOrderRepository.findBySourceSystemAndExternalPoNo(props.getSourceSystem(), row.poNo())
+                        .ifPresent(po -> {
+                            touched.put(po.getExternalPoNo(), po);
+                            if (outcome == Outcome.CREATED || outcome == Outcome.REOPENED) {
+                                needSplit.add(po.getId());
+                            }
+                        });
+            }
+            switch (outcome) {
                 case CREATED -> created++;
-                case UPDATED -> updated++;
+                case UPDATED, REOPENED -> updated++;
                 case CLOSED -> closed++;
             }
             if (row.updatedAt() != null && (maxSeen == null || row.updatedAt().isAfter(maxSeen))) {
                 maxSeen = row.updatedAt();
             }
+        }
+
+        if (withLines && !touched.isEmpty()) {
+            splitByPlanType(lineReader, touched, needSplit, now);
         }
 
         String message = skipped.isEmpty() ? null
@@ -134,11 +160,35 @@ public class PurchaseOrderSyncService {
         return syncStateRepository.findById(SYNC_KEY);
     }
 
+    /**
+     * Reads the lines of the orders this run touched, stores them, and splits
+     * the follow-up of every active order that is new, reopened or whose lines
+     * changed into one task series per separate plan group.
+     */
+    private void splitByPlanType(LegacyPurchaseOrderLineReader lineReader, Map<String, PurchaseOrder> touched,
+            Set<Long> needSplit, LocalDateTime now) {
+        List<LegacyPurchaseOrderLineRow> lines = lineReader.fetchLines(touched.keySet());
+        List<PurchaseOrder> changed = trackService.storeLines(touched.values(), lines, now);
+        changed.forEach(po -> needSplit.add(po.getId()));
+        List<PurchaseOrder> refresh = touched.values().stream()
+                .filter(po -> needSplit.contains(po.getId()) && po.getStatus().isActive()).toList();
+        trackService.refresh(refresh, now);
+    }
+
     enum Outcome {
-        CREATED, UPDATED, CLOSED
+        CREATED, UPDATED, REOPENED, CLOSED
     }
 
     Outcome apply(LegacyPurchaseOrderRow row, LocalDateTime now) {
+        return apply(row, now, false);
+    }
+
+    /**
+     * @param withLines true when lines are synced too: the follow-up tasks of
+     *                  a new or reopened order are then planned per plan group
+     *                  after its lines are read, not here
+     */
+    Outcome apply(LegacyPurchaseOrderRow row, LocalDateTime now, boolean withLines) {
         PurchaseOrderStatus status = mapStatus(row.status());
         Optional<PurchaseOrder> existing = purchaseOrderRepository
                 .findBySourceSystemAndExternalPoNo(props.getSourceSystem(), row.poNo());
@@ -161,7 +211,7 @@ public class PurchaseOrderSyncService {
                     .createdAt(now)
                     .updatedAt(now)
                     .build());
-            if (status.isActive()) {
+            if (status.isActive() && !withLines) {
                 createCheckpoints(po, now);
             }
             return Outcome.CREATED;
@@ -188,8 +238,13 @@ public class PurchaseOrderSyncService {
             checkpointRepository.changeStatus(po.getId(), List.of(CheckpointStatus.OPEN), CheckpointStatus.CANCELLED);
             return Outcome.CLOSED;
         }
-        if (!wasActive && status.isActive() && !checkpointRepository.existsByPurchaseOrderId(po.getId())) {
-            createCheckpoints(po, now);
+        if (!wasActive && status.isActive()) {
+            if (withLines) {
+                return Outcome.REOPENED;
+            }
+            if (!checkpointRepository.existsByPurchaseOrderId(po.getId())) {
+                createCheckpoints(po, now);
+            }
         }
         return Outcome.UPDATED;
     }
