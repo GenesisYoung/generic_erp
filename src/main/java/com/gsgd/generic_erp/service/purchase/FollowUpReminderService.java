@@ -39,8 +39,9 @@ import lombok.RequiredArgsConstructor;
  * The three passes the hourly follow-up job runs, in this order:
  * <ol>
  * <li><b>Missed.</b> OPEN checkpoints whose window ended before today become
- * MISSED. Each purchaser gets one summary, and every {@code purchaser_manager}
- * gets one summary of all missed follow-ups.</li>
+ * MISSED. Each purchaser gets one summary, and every member of the purchasing
+ * department (role {@code purchaser}, one role per department) gets one summary
+ * of all missed follow-ups.</li>
  * <li><b>Overdue.</b> An active order that has run past the last day of its
  * rule, and has no window reaching today, gets a new OVERDUE checkpoint
  * covering today ({@code overdue_period_days} long, 1 day in the default rule;
@@ -59,7 +60,8 @@ public class FollowUpReminderService {
 
     private static final Logger log = LoggerFactory.getLogger(FollowUpReminderService.class);
 
-    static final String MANAGER_ROLE = "purchaser_manager";
+    /** The one role of the purchasing department. */
+    static final String DEPARTMENT_ROLE = "purchaser";
     static final String BIZ_TYPE = "PURCHASE_ORDER";
     /** How many order numbers a summary lists before "and N more". */
     static final int LIST_LIMIT = 10;
@@ -101,13 +103,13 @@ public class FollowUpReminderService {
                 LocalizedText.of("followup.notify.missedContent", summary(list)),
                 BIZ_TYPE, singleOrderId(list), Set.of(purchaserId))));
 
-        Set<Long> managers = recipientResolver.usersWithRoles(List.of(MANAGER_ROLE));
-        if (!managers.isEmpty()) {
+        Set<Long> department = recipientResolver.usersWithRoles(List.of(DEPARTMENT_ROLE));
+        if (!department.isEmpty()) {
             events.publishEvent(NotificationRequestedEvent.localized(
                     NotificationType.FOLLOWUP_MISSED, NotifactionPriority.HIGH,
                     LocalizedText.of("followup.notify.missedTitle", rows.size()),
                     LocalizedText.of("followup.notify.missedManagerContent", summary(rows), unassignedNote(rows)),
-                    BIZ_TYPE, singleOrderId(rows), managers));
+                    BIZ_TYPE, singleOrderId(rows), department));
         }
         return rows.size();
     }

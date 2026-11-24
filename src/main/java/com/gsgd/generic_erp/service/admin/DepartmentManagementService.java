@@ -35,9 +35,10 @@ import jakarta.transaction.Transactional;
  * user is still assigned to it ({@code user_departments_tb}); deleting an
  * unused
  * department first clears its role links so no orphaned join rows remain.</li>
- * <li>Associated roles: for a selected department, every role is listed
+ * <li>Department role: for a selected department, every role is listed
  * (paginated) flagged with whether a {@code role_department_tb} link already
- * exists ("Processed" vs "Not granted"), and that link can be toggled.</li>
+ * exists. A department has at most one role; choosing another one replaces
+ * it. Members get that role's permissions as their defaults.</li>
  * </ul>
  */
 @Service
@@ -118,11 +119,18 @@ public class DepartmentManagementService {
         return new BasicPageResponse<>(dto, page);
     }
 
-    /** Links or unlinks a single role to a department (idempotent). */
+    /**
+     * Sets or clears the role of a department (idempotent). A department has one
+     * role: its permissions are the default permissions of every member. Linking
+     * a role therefore replaces the role the department had before.
+     */
     @Transactional
     public SimpleResponse setDepartmentRole(Long deptId, Long roleId, boolean granted) {
         boolean exists = roleDepartmentRepository.existsByRoleIdAndDepartmentId(roleId, deptId).size() > 0;
         if (granted) {
+            roleDepartmentRepository.findByDepartmentId(deptId).stream()
+                    .filter(link -> !link.getRoleId().equals(roleId))
+                    .forEach(roleDepartmentRepository::delete);
             if (!exists) {
                 roleDepartmentRepository.save(RoleDepartment.builder()
                         .roleId(roleId)

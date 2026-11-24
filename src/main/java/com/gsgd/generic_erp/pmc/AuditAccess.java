@@ -87,10 +87,15 @@ public class AuditAccess {
         return manages(t, a) || a.id().equals(t.ownerUserId) || a.id().equals(t.nextOwnerUserId);
     }
 
+    /**
+     * People a task can be assigned to: the caller and every active member of the
+     * caller's departments (one role per department, no manager / clerk split).
+     * Holders of {@code pmc.order-audit.scope.all} can pick anyone.
+     */
     public List<Person> people(Actor a) {
         return jdbc.query(
-                "select u.id, coalesce(u.display_name,u.username) as name from user_tb u where u.status=true and u.is_enabled=1 and (u.id=? or ?=true or (?=true and exists (select 1 from user_departments_tb target join user_departments_tb caller on target.dept_id=caller.dept_id where target.user_id=u.id and caller.user_id=?))) order by u.id",
-                (rs, row) -> new Person(rs.getString("id"), rs.getString("name")), a.id(), a.all(), a.team(), a.id());
+                "select u.id, coalesce(u.display_name,u.username) as name from user_tb u where u.status=true and u.is_enabled=1 and (u.id=? or ?=true or exists (select 1 from user_departments_tb target join user_departments_tb caller on target.dept_id=caller.dept_id where target.user_id=u.id and caller.user_id=?)) order by u.id",
+                (rs, row) -> new Person(rs.getString("id"), rs.getString("name")), a.id(), a.all(), a.id());
     }
 
     public Person person(String id, Actor a) {

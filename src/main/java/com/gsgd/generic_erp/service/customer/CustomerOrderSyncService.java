@@ -49,7 +49,7 @@ import lombok.RequiredArgsConstructor;
  * new order; a known id is updated (order number, customer, dates, closed
  * flag).</li>
  * <li>New orders that are still open produce ONE notification per run to the
- * users with {@code notify-roles} (default pmc_manager, pmc_clerk), listing the
+ * users with {@code notify-roles} (default pmc, the PMC department role), listing the
  * order numbers. The very first run only imports: the backlog of the last 60
  * days shows on the list page without a notification storm.</li>
  * <li>Purchase orders of the last {@code po-link-lookback-days} days are

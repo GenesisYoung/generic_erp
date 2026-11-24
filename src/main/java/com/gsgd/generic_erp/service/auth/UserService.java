@@ -10,8 +10,10 @@ import org.springframework.stereotype.Service;
 import com.gsgd.generic_erp.dto.UserNavMenuDTO;
 import com.gsgd.generic_erp.entity.auth.NavigationMenu;
 import com.gsgd.generic_erp.entity.auth.PagePermissionApprovalsRecord;
+import com.gsgd.generic_erp.repository.admin.MenuRegisteredPermissionRecordRepository;
 import com.gsgd.generic_erp.repository.admin.NavigationMenuRepository;
 import com.gsgd.generic_erp.repository.admin.PagePermissinApprovalRecordRepository;
+import com.gsgd.generic_erp.repository.admin.PermissionRepository;
 import com.gsgd.generic_erp.repository.admin.UserNavMenuRepository;
 import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.util.BasicResponse;
@@ -27,20 +29,26 @@ public class UserService {
         private final NavigationMenuRepository navigationMenuRepository;
         private final PagePermissinApprovalRecordRepository approvalRepository;
         private final UserDepartmentRepository departmentRepository;
+        private final PermissionRepository permissionRepository;
+        private final MenuRegisteredPermissionRecordRepository registrationRepository;
 
         UserService(UserNavMenuRepository userNavMenuRepository, NavigationMenuRepository navigationMenuRepository,
                         PagePermissinApprovalRecordRepository approvalRepository,
-                        UserDepartmentRepository departmentRepository) {
+                        UserDepartmentRepository departmentRepository, PermissionRepository permissionRepository,
+                        MenuRegisteredPermissionRecordRepository registrationRepository) {
                 this.userNavMenuRepository = userNavMenuRepository;
                 this.navigationMenuRepository = navigationMenuRepository;
                 this.approvalRepository = approvalRepository;
                 this.departmentRepository = departmentRepository;
+                this.permissionRepository = permissionRepository;
+                this.registrationRepository = registrationRepository;
         }
 
         /**
-         * Fetches the sidebar menu for a user. A menu is visible either through a
-         * direct {@code user_nav_menu} grant, or because the user holds at least one
-         * permission approved for that menu; the two sources are merged and
+         * Fetches the sidebar menu for a user. A menu is visible through a direct
+         * {@code user_nav_menu} grant, through a page grant on the "By Permission"
+         * screen, or because the user holds (for example from their department role)
+         * a permission registered on that menu. The sources are merged and
          * de-duplicated before mapping to DTOs.
          */
         public BasicResponse fetchNavMenu(Long id) {
@@ -49,8 +57,13 @@ public class UserService {
                                 .map(ele -> ele.getNavId());
                 Stream<Long> viaPermissionNavIds = approvalRepository.findByUserId(id)
                                 .stream()
+                                .filter(a -> Byte.valueOf((byte) 1).equals(a.getPermissionEnabled()))
                                 .map(PagePermissionApprovalsRecord::getMenuId);
-                List<Long> navIds = Stream.concat(directNavIds, viaPermissionNavIds).distinct()
+                List<String> codes = permissionRepository.findGrantedCodesByUserId(id);
+                Stream<Long> viaHeldCodeNavIds = codes.isEmpty() ? Stream.empty()
+                                : registrationRepository.findMenuIdsByPermissionCodes(codes).stream();
+                List<Long> navIds = Stream.concat(Stream.concat(directNavIds, viaPermissionNavIds), viaHeldCodeNavIds)
+                                .distinct()
                                 .collect(Collectors.toList());
                 List<NavigationMenu> nav = navigationMenuRepository.findAllById(navIds);
                 List<UserNavMenuDTO> menu = nav.stream().map(ele -> new UserNavMenuDTO(ele.getId(), ele.getParentId(),

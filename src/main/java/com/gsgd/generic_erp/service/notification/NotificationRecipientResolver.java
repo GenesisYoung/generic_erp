@@ -6,8 +6,10 @@ import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
+import com.gsgd.generic_erp.entity.auth.RoleDepartment;
 import com.gsgd.generic_erp.entity.auth.UserDepartment;
 import com.gsgd.generic_erp.entity.auth.UserRole;
+import com.gsgd.generic_erp.repository.auth.RoleDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
 import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.UserRoleRepository;
@@ -30,15 +32,23 @@ public class NotificationRecipientResolver {
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
     private final UserDepartmentRepository userDepartmentRepository;
+    private final RoleDepartmentRepository roleDepartmentRepository;
 
-    /** Ids of users holding any of the given role names. Unknown names are ignored. */
+    /**
+     * Ids of users holding any of the given role names, either bound directly or
+     * as the role of a department they belong to. Unknown names are ignored.
+     */
     public Set<Long> usersWithRoles(Collection<String> roleNames) {
         Set<Long> ids = new LinkedHashSet<>();
         for (String name : roleNames) {
-            roleRepository.findByRoleName(name).ifPresent(role -> userRoleRepository.findByRoleId(role.getId())
-                    .stream()
-                    .map(UserRole::getUserId)
-                    .forEach(ids::add));
+            roleRepository.findByRoleName(name).ifPresent(role -> {
+                userRoleRepository.findByRoleId(role.getId()).stream()
+                        .map(UserRole::getUserId)
+                        .forEach(ids::add);
+                ids.addAll(usersInDepartments(roleDepartmentRepository.findByRoleId(role.getId()).stream()
+                        .map(RoleDepartment::getDepartmentId)
+                        .toList()));
+            });
         }
         return ids;
     }

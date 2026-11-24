@@ -13,8 +13,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.gsgd.generic_erp.entity.auth.Role;
+import com.gsgd.generic_erp.entity.auth.RoleDepartment;
 import com.gsgd.generic_erp.entity.auth.UserDepartment;
 import com.gsgd.generic_erp.entity.auth.UserRole;
+import com.gsgd.generic_erp.repository.auth.RoleDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.RoleRepository;
 import com.gsgd.generic_erp.repository.auth.UserDepartmentRepository;
 import com.gsgd.generic_erp.repository.auth.UserRoleRepository;
@@ -24,6 +26,7 @@ class NotificationRecipientResolverTest {
     private RoleRepository roleRepository;
     private UserRoleRepository userRoleRepository;
     private UserDepartmentRepository userDepartmentRepository;
+    private RoleDepartmentRepository roleDepartmentRepository;
     private NotificationRecipientResolver resolver;
 
     @BeforeEach
@@ -31,13 +34,15 @@ class NotificationRecipientResolverTest {
         roleRepository = mock(RoleRepository.class);
         userRoleRepository = mock(UserRoleRepository.class);
         userDepartmentRepository = mock(UserDepartmentRepository.class);
-        resolver = new NotificationRecipientResolver(roleRepository, userRoleRepository, userDepartmentRepository);
+        roleDepartmentRepository = mock(RoleDepartmentRepository.class);
+        resolver = new NotificationRecipientResolver(roleRepository, userRoleRepository, userDepartmentRepository,
+                roleDepartmentRepository);
     }
 
     @Test
     void collectsUsersOfEveryNamedRoleWithoutDuplicates() {
-        when(roleRepository.findByRoleName("pmc_manager")).thenReturn(Optional.of(Role.builder().id(10L).build()));
-        when(roleRepository.findByRoleName("purchaser_manager")).thenReturn(Optional.of(Role.builder().id(12L).build()));
+        when(roleRepository.findByRoleName("pmc")).thenReturn(Optional.of(Role.builder().id(10L).build()));
+        when(roleRepository.findByRoleName("purchaser")).thenReturn(Optional.of(Role.builder().id(12L).build()));
         when(userRoleRepository.findByRoleId(10L)).thenReturn(List.of(
                 UserRole.builder().userId(1L).roleId(10L).build(),
                 UserRole.builder().userId(2L).roleId(10L).build()));
@@ -45,7 +50,21 @@ class NotificationRecipientResolverTest {
                 UserRole.builder().userId(2L).roleId(12L).build(),
                 UserRole.builder().userId(3L).roleId(12L).build()));
 
-        assertEquals(Set.of(1L, 2L, 3L), resolver.usersWithRoles(List.of("pmc_manager", "purchaser_manager")));
+        assertEquals(Set.of(1L, 2L, 3L), resolver.usersWithRoles(List.of("pmc", "purchaser")));
+    }
+
+    @Test
+    void includesMembersOfTheDepartmentsLinkedToTheRole() {
+        when(roleRepository.findByRoleName("pmc")).thenReturn(Optional.of(Role.builder().id(10L).build()));
+        when(userRoleRepository.findByRoleId(10L)).thenReturn(List.of(
+                UserRole.builder().userId(1L).roleId(10L).build()));
+        when(roleDepartmentRepository.findByRoleId(10L)).thenReturn(List.of(
+                RoleDepartment.builder().roleId(10L).departmentId(5L).build()));
+        when(userDepartmentRepository.findByDeptId(5L)).thenReturn(List.of(
+                UserDepartment.builder().userId(1L).deptId(5L).build(),
+                UserDepartment.builder().userId(4L).deptId(5L).build()));
+
+        assertEquals(Set.of(1L, 4L), resolver.usersWithRoles(List.of("pmc")));
     }
 
     @Test

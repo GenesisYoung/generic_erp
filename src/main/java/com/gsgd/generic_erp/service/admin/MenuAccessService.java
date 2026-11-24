@@ -3,6 +3,9 @@ package com.gsgd.generic_erp.service.admin;
 import com.gsgd.generic_erp.configuration.i18n.I18n;
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -33,13 +36,13 @@ import jakarta.transaction.Transactional;
  * (or every permission held by one user) alongside whether they currently have
  * access, and grant/revoke that access.
  *
- * Two independent access paths, either sufficient on its own (see
- * UserService#fetchNavMenu): - Direct: a row in user_nav_menu grants a user
- * baseline access to a menu. - Via permission: a permission must first be
- * registered against a menu (menu_registered_permissions_record) before it can
- * grant anything there; a user then holds it for that menu via a row in
- * page_permission_approvals_record. Only registered permissions are ever
- * offered for approval.
+ * Access paths (see UserService#fetchNavMenu): - Direct: a row in
+ * user_nav_menu grants a user baseline access to a menu. - Via permission: a
+ * permission must first be registered against a menu
+ * (menu_registered_permissions_record). A user holds it by default when their
+ * department role has it; a row in page_permission_approvals_record overrides
+ * that default for the user on this page (1 = grant, 0 = remove). Only
+ * registered permissions are ever offered.
  *
  * Revoking a user's direct access also clears their permission approvals for
  * that menu — otherwise they'd keep seeing the menu through the other path,
@@ -86,7 +89,9 @@ public class MenuAccessService {
 
     /**
      * Permissions registered against this menu, each flagged with whether the given
-     * user currently holds it. Unregistered permissions are never offered.
+     * user holds it now, whether their department gives it by default, and
+     * whether this page overrides the default. Unregistered permissions are never
+     * offered.
      */
     public List<PermissionAccessDTO> listPermissionsForMenu(Long navId, Long userId) {
         Set<Long> registeredPermissionIds = registeredPermissionRepository.findByMenuId(navId).stream()
@@ -94,21 +99,25 @@ public class MenuAccessService {
         if (registeredPermissionIds.isEmpty()) {
             return List.of();
         }
-        Set<Long> grantedPermissionIds = approvalRepository
-                .findByUserIdAndMenuIdAndPermissionIdIn(userId, navId, registeredPermissionIds).stream()
-                .filter(a -> Byte.valueOf((byte) 1).equals(a.getPermissionEnabled()))
-                .map(PagePermissionApprovalsRecord::getPermissionId).collect(Collectors.toSet());
+        Map<Long, Boolean> overrides = new HashMap<>();
+        approvalRepository.findByUserIdAndMenuIdAndPermissionIdIn(userId, navId, registeredPermissionIds)
+                .forEach(a -> overrides.put(a.getPermissionId(), isGrant(a)));
+        Set<Long> defaults = new HashSet<>(permissionRepository.findDefaultPermissionIdsByUserId(userId));
         return permissionRepository.findAllById(registeredPermissionIds).stream()
                 .filter(p -> Integer.valueOf(1).equals(p.getIsEnabled()))
                 .sorted(Comparator.comparing(Permission::getPermissionCode, String.CASE_INSENSITIVE_ORDER))
-                .map(p -> new PermissionAccessDTO(p.getId(), p.getPermissionCode(),
-                        grantedPermissionIds.contains(p.getId())))
+                .map(p -> {
+                    boolean byDefault = defaults.contains(p.getId());
+                    Boolean override = overrides.get(p.getId());
+                    return new PermissionAccessDTO(p.getId(), p.getPermissionCode(),
+                            override != null ? override : byDefault, byDefault, override != null);
+                })
                 .toList();
     }
 
     /**
      * Grants or revokes a user's direct (baseline) access to a menu. Revoking also
-     * clears the user's permission approvals for the menu so access does not
+     * clears the user's permission overrides for the menu so access does not
      * survive through the other path (see class doc).
      */
     @Transactional
@@ -145,33 +154,49 @@ public class MenuAccessService {
     }
 
     /**
-     * Grants or revokes a single permission approval for a user on a menu
-     * (idempotent).
+     * Sets one permission for a user on a menu (idempotent). The department
+     * default stays the source of truth: when the requested state equals the
+     * default, the page override is removed; otherwise an override row is kept
+     * ({@code permission_enabled} 1 = grant, 0 = take the default away).
      */
     @Transactional
     public SimpleResponse setPermissionAccess(Long navId, Long userId, Long permissionId, boolean granted) {
+        // Overrides become API authorities, so the permission must be registered on
+        // this menu and held by the caller (no granting what you do not have).
+        boolean registered = registeredPermissionRepository.findByMenuIdAndPermissionId(navId, permissionId)
+                .stream().anyMatch(r -> Byte.valueOf((byte) 1).equals(r.getPermissionEnabled()));
+        Permission permission = permissionRepository.findById(permissionId).orElse(null);
+        if (!registered || permission == null || !Integer.valueOf(1).equals(permission.getIsEnabled())) {
+            return new SimpleResponse(404, I18n.t("access.error.permissionNotOnMenu"));
+        }
+        if (granted && !permissionChecker.has(permission.getPermissionCode())) {
+            return new SimpleResponse(403, I18n.t("access.error.cannotGrantPermission"));
+        }
         List<PagePermissionApprovalsRecord> rows = approvalRepository.findByUserIdAndMenuIdAndPermissionId(userId,
                 navId, permissionId);
-        if (granted) {
-            // Approvals become API authorities, so the permission must be registered on
-            // this menu and held by the caller (no granting what you do not have).
-            boolean registered = registeredPermissionRepository.findByMenuIdAndPermissionId(navId, permissionId)
-                    .stream().anyMatch(r -> Byte.valueOf((byte) 1).equals(r.getPermissionEnabled()));
-            Permission permission = permissionRepository.findById(permissionId).orElse(null);
-            if (!registered || permission == null || !Integer.valueOf(1).equals(permission.getIsEnabled())) {
-                return new SimpleResponse(404, I18n.t("access.error.permissionNotOnMenu"));
+        boolean byDefault = permissionRepository.findDefaultPermissionIdsByUserId(userId).contains(permissionId);
+        if (granted == byDefault) {
+            if (!rows.isEmpty()) {
+                approvalRepository.deleteAll(rows);
             }
-            if (!permissionChecker.has(permission.getPermissionCode())) {
-                return new SimpleResponse(403, I18n.t("access.error.cannotGrantPermission"));
+            return new SimpleResponse(200, "");
+        }
+        byte flag = (byte) (granted ? 1 : 0);
+        if (rows.isEmpty()) {
+            approvalRepository.save(new PagePermissionApprovalsRecord(null, userId, permissionId, navId, flag, null));
+        } else {
+            PagePermissionApprovalsRecord keep = rows.get(0);
+            keep.setPermissionEnabled(flag);
+            approvalRepository.save(keep);
+            if (rows.size() > 1) {
+                approvalRepository.deleteAll(rows.subList(1, rows.size()));
             }
-            if (rows.isEmpty()) {
-                approvalRepository
-                        .save(new PagePermissionApprovalsRecord(null, userId, permissionId, navId, (byte) 1, null));
-            }
-        } else if (!rows.isEmpty()) {
-            approvalRepository.deleteAll(rows);
         }
         return new SimpleResponse(200, "");
+    }
+
+    private static boolean isGrant(PagePermissionApprovalsRecord a) {
+        return Byte.valueOf((byte) 1).equals(a.getPermissionEnabled());
     }
 
     /**

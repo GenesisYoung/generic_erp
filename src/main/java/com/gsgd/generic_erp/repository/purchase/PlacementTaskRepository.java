@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.gsgd.generic_erp.entity.purchase.PlacementTask;
 import com.gsgd.generic_erp.enums.PlacementTaskStatus;
@@ -44,6 +45,14 @@ public interface PlacementTaskRepository extends JpaRepository<PlacementTask, Lo
     List<PlacementTask> findOverdueNotNotified(LocalDateTime now);
 
     Page<PlacementTask> findByStatusIn(Collection<PlacementTaskStatus> statuses, Pageable pageable);
+
+    /** Tasks assigned to one of the given users, or to nobody yet. */
+    @Query("""
+            select t from PlacementTask t
+            where t.status in :statuses and (t.assigneeId is null or t.assigneeId in :userIds)
+            """)
+    Page<PlacementTask> findForDepartment(@Param("userIds") Collection<Long> userIds,
+            @Param("statuses") Collection<PlacementTaskStatus> statuses, Pageable pageable);
 
     Page<PlacementTask> findByAssigneeIdAndStatusIn(Long assigneeId, Collection<PlacementTaskStatus> statuses,
             Pageable pageable);
