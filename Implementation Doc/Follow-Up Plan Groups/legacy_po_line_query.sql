@@ -23,7 +23,7 @@
        306, 305 说明书 under 3). Top levels seen: 1xx electronics, 2xx structure /
        hardware, 3xx packaging, 4 extra fees.
      - 2,410 orders buy for more than one customer order.
-   OPEN QUESTION: the user has not chosen the field yet. The default below
+   DECIDED 2026-11-24 (user): plan type = material class. The query below
    uses the material class one level up (PRODCLAS.UPPERCLAS, e.g. 306 for
    306-1), or the class itself when it has no upper class.
    To switch, change only the two plan_type columns (and the joins they need).
