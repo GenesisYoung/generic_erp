@@ -4,7 +4,7 @@
 --  one group count as the same plan. A group marked "own task" (is_separate)
 --  gets its own follow-up task series in each order that has open lines of
 --  it; every other line stays in the order's main follow-up task.
---  Runs after V9__followup_templates.sql. Re-runnable.
+--  Runs after V11 (V10 = exception PMC approval, V11 = one role per department). Re-runnable.
 --
 --  Hibernate (ddl-auto: update) also creates these tables and columns from the
 --  entities (PurchaseOrderLine, FollowUpPlanType, FollowUpPlanGroup,
