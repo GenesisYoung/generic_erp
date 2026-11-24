@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.gsgd.generic_erp.enums.PurchaseExceptionAction;
+import com.gsgd.generic_erp.enums.PurchaseExceptionApprovalStatus;
 import com.gsgd.generic_erp.enums.PurchaseExceptionCategory;
 import com.gsgd.generic_erp.enums.PurchaseExceptionSeverity;
 import com.gsgd.generic_erp.enums.PurchaseExceptionStatus;
@@ -15,6 +16,9 @@ import com.gsgd.generic_erp.enums.PurchaseExceptionStatus;
  * @param allowedActions what the current user may do now
  * @param history        status changes and comments, oldest first; only in
  *                       the detail answer, empty in lists
+ * @param approvals      PMC approval tasks, oldest first; only in the detail
+ *                       answer, empty in lists. The last one is PENDING while
+ *                       the status is PENDING_APPROVAL.
  */
 public record PurchaseExceptionView(
         Long id,
@@ -38,10 +42,16 @@ public record PurchaseExceptionView(
         LocalDateTime updatedAt,
         long lockVersion,
         List<PurchaseExceptionAction> allowedActions,
-        List<Log> history) {
+        List<Log> history,
+        List<Approval> approvals) {
 
     public record Log(PurchaseExceptionAction action, PurchaseExceptionStatus fromStatus,
             PurchaseExceptionStatus toStatus, Long operatorId, String operatorName, String comment,
             LocalDateTime createdAt) {
+    }
+
+    public record Approval(Long id, PurchaseExceptionApprovalStatus status, String proposedResolution,
+            Long requestedBy, String requestedByName, LocalDateTime requestedAt, Long decidedBy,
+            String decidedByName, LocalDateTime decidedAt, String decisionComment) {
     }
 }
