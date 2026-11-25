@@ -11,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.gsgd.generic_erp.entity.purchase.PlacementTask;
+import com.gsgd.generic_erp.enums.PlacementOrderType;
+import com.gsgd.generic_erp.enums.PlacementSource;
 import com.gsgd.generic_erp.enums.PlacementTaskStatus;
 
 public interface PlacementTaskRepository extends JpaRepository<PlacementTask, Long> {
@@ -26,6 +28,18 @@ public interface PlacementTaskRepository extends JpaRepository<PlacementTask, Lo
     boolean existsByOrderNoAndStatusIn(String orderNo, Collection<PlacementTaskStatus> statuses);
 
     List<PlacementTask> findByStatus(PlacementTaskStatus status);
+
+    /** Tasks already made from these old-ERP documents (any status). */
+    List<PlacementTask> findBySourceAndSourceNoIn(PlacementSource source, Collection<String> sourceNos);
+
+    /** True when an order-audit task for the order is still open (made before the switch to confirmations). */
+    @Query("""
+            select count(p) > 0 from PlacementTask p
+            where p.orderNo = :orderNo
+              and p.status = com.gsgd.generic_erp.enums.PlacementTaskStatus.OPEN
+              and (p.source is null or p.source = com.gsgd.generic_erp.enums.PlacementSource.ORDER_AUDIT)
+            """)
+    boolean existsOpenAuditTask(@Param("orderNo") String orderNo);
 
     List<PlacementTask> findByStatusAndOrderNoIn(PlacementTaskStatus status, Collection<String> orderNos);
 
@@ -44,15 +58,27 @@ public interface PlacementTaskRepository extends JpaRepository<PlacementTask, Lo
             """)
     List<PlacementTask> findOverdueNotNotified(LocalDateTime now);
 
-    Page<PlacementTask> findByStatusIn(Collection<PlacementTaskStatus> statuses, Pageable pageable);
+    Page<PlacementTask> findByStatusInAndOrderTypeIn(Collection<PlacementTaskStatus> statuses,
+            Collection<PlacementOrderType> orderTypes, Pageable pageable);
 
-    /** Tasks assigned to one of the given users, or to nobody yet. */
+    /** Tasks of the given order types assigned to one of the given users, or to nobody yet. */
     @Query("""
             select t from PlacementTask t
-            where t.status in :statuses and (t.assigneeId is null or t.assigneeId in :userIds)
+            where t.status in :statuses and t.orderType in :orderTypes
+              and (t.assigneeId is null or t.assigneeId in :userIds)
             """)
     Page<PlacementTask> findForDepartment(@Param("userIds") Collection<Long> userIds,
-            @Param("statuses") Collection<PlacementTaskStatus> statuses, Pageable pageable);
+            @Param("statuses") Collection<PlacementTaskStatus> statuses,
+            @Param("orderTypes") Collection<PlacementOrderType> orderTypes, Pageable pageable);
+
+    /** Open tasks per order type (for the section badges). */
+    @Query("""
+            select t.orderType, count(t) from PlacementTask t
+            where t.status = com.gsgd.generic_erp.enums.PlacementTaskStatus.OPEN
+              and (:all = true or t.assigneeId is null or t.assigneeId in :userIds)
+            group by t.orderType
+            """)
+    List<Object[]> countOpenByOrderType(@Param("all") boolean all, @Param("userIds") Collection<Long> userIds);
 
     Page<PlacementTask> findByAssigneeIdAndStatusIn(Long assigneeId, Collection<PlacementTaskStatus> statuses,
             Pageable pageable);

@@ -10,9 +10,10 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * Runs {@link PlacementTaskService#runOnce()} on a schedule (default every 15
- * minutes). It does not need the old ERP connection: tasks come from order
- * audits in this system, and links come from the customer order sync. Turn it
- * off with {@code erp.purchase.placement.enabled=false}.
+ * minutes). With the default trigger (CONFIRMATION) new tasks come from the
+ * old ERP's purchase applications and purchase plans, so they appear only when
+ * {@code erp.legacy.enabled=true}; reminders and PO-link closing run either
+ * way. Turn it off with {@code erp.purchase.placement.enabled=false}.
  */
 @Component
 @RequiredArgsConstructor
@@ -27,9 +28,10 @@ public class PlacementTaskJob {
     public void run() {
         try {
             PlacementTaskService.RunResult r = service.runOnce();
-            if (r.created() + r.skipped() + r.closed() + r.reminded() + r.overdue() > 0) {
-                log.info("Placement tasks: created {}, skipped {}, closed {}, reminded {}, overdue {}", r.created(),
-                        r.skipped(), r.closed(), r.reminded(), r.overdue());
+            if (r.created() + r.skipped() + r.closed() + r.confirmed() + r.reminded() + r.overdue() > 0) {
+                log.info("Placement tasks: created {}, skipped {}, closed by PO {}, closed by confirmation {},"
+                        + " reminded {}, overdue {}", r.created(), r.skipped(), r.closed(), r.confirmed(),
+                        r.reminded(), r.overdue());
             }
         } catch (Exception e) {
             log.error("Placement task run failed", e);

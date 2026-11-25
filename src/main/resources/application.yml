@@ -85,13 +85,19 @@ erp:
       enabled: ${ERP_FOLLOWUP_JOB_ENABLED:true}
       cron: "0 0 * * * *"
     placement:
-      # 采购下单任务: purchase orders must be placed within deadline-days of the order audit passing.
-      # Runs every 15 minutes: creates tasks from VERIFIED audits, closes tasks with a linked PO,
-      # and sends one reminder remind-hours before the deadline and one overdue alert.
+      # 采购下单任务: purchase orders must be placed within deadline-days.
+      # Runs every 15 minutes: creates tasks, closes tasks with a linked PO (or, with trigger
+      # CONFIRMATION, when the old ERP confirms the document), and sends one reminder
+      # remind-hours before the deadline and one overdue alert.
       enabled: ${ERP_PLACEMENT_JOB_ENABLED:true}
       cron: ${ERP_PLACEMENT_CRON:0 */15 * * * *}
       deadline-days: 2
       remind-hours: 12
+      # CONFIRMATION: one task per purchase application (sample orders) or purchase plan
+      # (production orders) that has no purchase order yet, from erp.legacy.placement-source.
+      # Falls back to ORDER_AUDIT while neither query is set or the old ERP is off.
+      # ORDER_AUDIT: one task per PMC order review PASS (the behaviour before 2026-11-25).
+      trigger: ${ERP_PLACEMENT_TRIGGER:CONFIRMATION}
     exception:
       # 采购异常: who is alerted when an exception is reported or changes status
       # (besides the reporter, the order's purchaser and the handler).
@@ -180,6 +186,58 @@ erp:
       # The default query already returns these names, so no mapping is needed.
       # A status that is neither mapped nor one of these names counts as PLACED.
       status-map: {}
+    placement-source:
+      # Documents that decide purchase placement tasks (trigger CONFIRMATION). Each query returns
+      # documents dated on or after :since with the aliases order_no, source_no, source_date,
+      # confirmed (0/1), note, first_po_no. Rows are merged per (source_no, order_no); the document
+      # counts as confirmed only when all its rows are. Blank = that section is off.
+      # The old ERP has no "confirmed" flag (checked 2026-11-25: 审核/SCRUTINY is empty on documents
+      # that already have POs). "Confirmed" = the document has its first PO, or it was closed.
+      # Source and checks: Implementation Doc/Placement Sources/legacy_placement_source_query.sql
+      # Sample orders: purchase applications (ORDREQ1/2). PO line ORDSPHS2.SRCERI = ORDREQ2.ERI;
+      # those POs are numbered YP... ORDREQ2.PHSQTY > 0 exactly when a line has a PO (135/135).
+      sample-query: |
+        SELECT
+            RTRIM(h.CODE)                                         AS order_no,
+            RTRIM(h.CODE)                                         AS source_no,
+            h.SDATE                                               AS source_date,
+            LEFT(RTRIM(h.MEMO), 200)                              AS note,
+            po.first_po_no                                        AS first_po_no,
+            CASE WHEN po.first_po_no IS NOT NULL OR h.CLOSETYPE <> 0 THEN 1 ELSE 0 END AS confirmed
+        FROM ORDREQ1 h WITH (NOLOCK)
+        OUTER APPLY (
+            SELECT TOP 1 RTRIM(p1.CODE) AS first_po_no
+            FROM ORDREQ2 l WITH (NOLOCK)
+            JOIN ORDSPHS2 p  WITH (NOLOCK) ON p.SRCERI = l.ERI
+            JOIN ORDSPHS1 p1 WITH (NOLOCK) ON p1.ERI = p.MASTERI
+            WHERE l.MASTERI = h.ERI
+            ORDER BY p1.SDATE, p1.CODE
+        ) po
+        WHERE h.SDATE >= :since
+          AND h.CODE IS NOT NULL
+      # Production orders: purchase plans (PLANORDER1/2). PLANORDER1.CODE is the customer order no.
+      # (26394-W53); PO line ORDSPHS2.PLANERI = PLANORDER2.ERI; those POs are numbered P...
+      production-query: |
+        SELECT
+            RTRIM(h.CODE)                                         AS order_no,
+            RTRIM(h.CODE)                                         AS source_no,
+            h.SDATE                                               AS source_date,
+            LEFT(RTRIM(h.MEMO), 200)                              AS note,
+            po.first_po_no                                        AS first_po_no,
+            CASE WHEN po.first_po_no IS NOT NULL OR h.CLOSETYPE <> 0 THEN 1 ELSE 0 END AS confirmed
+        FROM PLANORDER1 h WITH (NOLOCK)
+        OUTER APPLY (
+            SELECT TOP 1 RTRIM(p1.CODE) AS first_po_no
+            FROM PLANORDER2 l WITH (NOLOCK)
+            JOIN ORDSPHS2 p  WITH (NOLOCK) ON p.PLANERI = l.ERI
+            JOIN ORDSPHS1 p1 WITH (NOLOCK) ON p1.ERI = p.MASTERI
+            WHERE l.MASTERI = h.ERI
+            ORDER BY p1.SDATE, p1.CODE
+        ) po
+        WHERE h.SDATE >= :since
+          AND h.CODE IS NOT NULL
+      lookback-days: 30
+      batch-limit: 20000
     customer-order:
       # New customer orders (ORDCORD1) -> PMC notification + 待评审客户订单 page.
       # Source and assumptions: Implementation Doc/Customer Order Sync/legacy_customer_order_query.sql

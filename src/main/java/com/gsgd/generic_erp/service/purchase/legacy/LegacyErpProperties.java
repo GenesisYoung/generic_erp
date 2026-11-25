@@ -36,6 +36,8 @@ public class LegacyErpProperties {
 
     private CustomerOrder customerOrder = new CustomerOrder();
 
+    private PlacementSourceQueries placementSource = new PlacementSourceQueries();
+
     @Getter
     @Setter
     public static class Datasource {
@@ -124,5 +126,28 @@ public class LegacyErpProperties {
 
         /** Users with these roles are told about new orders. */
         private List<String> notifyRoles = List.of("pmc");
+    }
+
+    /**
+     * Documents that decide purchase placement tasks (采购下单任务). Each query
+     * returns document lines dated on or after the named parameter
+     * {@code :since} (a date). Required column aliases: order_no, source_no,
+     * source_date, confirmed (0/1), note, first_po_no. A blank query
+     * switches that order type off.
+     */
+    @Getter
+    @Setter
+    public static class PlacementSourceQueries {
+        /** Purchase applications (采购申请) of sample orders (YP...). */
+        private String sampleQuery;
+
+        /** Purchase plans (采购计划) of production orders (P...). */
+        private String productionQuery;
+
+        /** Documents dated in the last N days are re-read on every run. */
+        private int lookbackDays = 30;
+
+        /** Maximum rows per order type per run. */
+        private int batchLimit = 20000;
     }
 }

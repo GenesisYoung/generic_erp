@@ -22,6 +22,7 @@ import com.gsgd.generic_erp.configuration.security.UserDetail;
 import com.gsgd.generic_erp.dto.purchase.PlacementAssignRequest;
 import com.gsgd.generic_erp.dto.purchase.PlacementCompleteRequest;
 import com.gsgd.generic_erp.dto.purchase.PlacementTaskView;
+import com.gsgd.generic_erp.enums.PlacementOrderType;
 import com.gsgd.generic_erp.service.purchase.PlacementTaskService;
 import com.gsgd.generic_erp.service.purchase.PlacementTaskService.PlacementException;
 import com.gsgd.generic_erp.service.purchase.PurchaseOrderQueryService;
@@ -31,7 +32,8 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * Purchase placement tasks (采购下单任务, {@code /api/placement-tasks}): place
- * the purchase orders of a customer order within 2 days of its audit passing.
+ * the purchase orders of an order within 2 days. Production orders (P...) and
+ * sample orders (YP...) are listed separately ({@code type}).
  * Anyone with {@code menu.purchaseOrder.update} can take a task or give it to
  * a department colleague. Holders of {@code data.purchaseOrder.all} see every
  * task; everyone else sees their department's tasks and unassigned ones.
@@ -50,23 +52,35 @@ public class PlacementTaskController {
      * A page of tasks, nearest deadline first.
      *
      * @param openOnly true (default): open tasks only; false: open and done
+     * @param type     PRODUCTION or SAMPLE; empty = both. The response also
+     *                 carries the open count of each section.
      */
     @PreAuthorize("@perm.has('menu.purchaseOrder.read')")
     @GetMapping
     public BasicResponse list(@AuthenticationPrincipal UserDetail me,
             @RequestParam(defaultValue = "true") boolean openOnly,
+            @RequestParam(required = false) String type,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        PlacementOrderType orderType;
+        try {
+            orderType = type == null || type.isBlank() ? null
+                    : PlacementOrderType.valueOf(type.strip().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return new BasicResponse(400, I18n.t("placement.error.badType"), null);
+        }
         boolean all = perm.has(PurchaseOrderQueryService.SCOPE_ALL);
         Sort sort = openOnly ? Sort.by("deadlineAt").ascending().and(Sort.by("id").ascending())
-                : Sort.by("auditVerifiedAt").descending().and(Sort.by("id").descending());
+                : Sort.by("createdAt").descending().and(Sort.by("id").descending());
         PageRequest p = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE), sort);
-        Page<PlacementTaskView> result = service.list(me.getUser().getId(), all, openOnly, p);
+        Long userId = me.getUser().getId();
+        Page<PlacementTaskView> result = service.list(userId, all, openOnly, orderType, p);
         return new BasicResponse(200, I18n.t("common.ok"), Map.of(
                 "content", result.getContent(),
                 "totalElements", result.getTotalElements(),
                 "totalPages", result.getTotalPages(),
                 "page", result.getNumber(),
+                "openCounts", service.openCounts(userId, all),
                 "canAssign", perm.has("menu.purchaseOrder.update")));
     }
 

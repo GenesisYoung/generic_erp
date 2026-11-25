@@ -50,6 +50,8 @@ import com.gsgd.generic_erp.entity.customer.PoCustomerLink;
 import com.gsgd.generic_erp.entity.purchase.PlacementTask;
 import com.gsgd.generic_erp.enums.NotifactionPriority;
 import com.gsgd.generic_erp.enums.NotificationType;
+import com.gsgd.generic_erp.enums.PlacementOrderType;
+import com.gsgd.generic_erp.enums.PlacementSource;
 import com.gsgd.generic_erp.enums.PlacementTaskStatus;
 import com.gsgd.generic_erp.pmc.AuditJson;
 import com.gsgd.generic_erp.pmc.AuditTaskEntity;
@@ -62,10 +64,14 @@ import com.gsgd.generic_erp.service.auth.DepartmentPeers;
 import com.gsgd.generic_erp.service.notification.NotificationRecipientResolver;
 import com.gsgd.generic_erp.service.notification.NotificationRequestedEvent;
 import com.gsgd.generic_erp.service.purchase.PlacementTaskService.PlacementException;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyPlacementSourceReader;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyPlacementSourceRow;
 
 /**
- * Placement tasks against a real (H2) database: created from VERIFIED audits,
- * assigned, closed by a linked PO or by hand, reminded and escalated.
+ * Placement tasks against a real (H2) database: created from VERIFIED audits
+ * (no old-ERP queries) or from unconfirmed purchase applications / plans,
+ * assigned, closed by a linked PO, a confirmation or by hand, reminded and
+ * escalated.
  */
 @SpringJUnitConfig(PlacementTaskIntegrationTest.Config.class)
 class PlacementTaskIntegrationTest {
@@ -113,6 +119,22 @@ class PlacementTaskIntegrationTest {
         }
     }
 
+    /** Stands in for the old ERP; a section is "configured" once rows are set for it. */
+    static class FakeSourceReader implements LegacyPlacementSourceReader {
+        final Map<PlacementOrderType, List<LegacyPlacementSourceRow>> rows = new java.util.EnumMap<>(
+                PlacementOrderType.class);
+
+        @Override
+        public List<LegacyPlacementSourceRow> fetch(PlacementOrderType type, LocalDate since, int limit) {
+            return rows.getOrDefault(type, List.of());
+        }
+
+        @Override
+        public boolean supports(PlacementOrderType type) {
+            return rows.containsKey(type);
+        }
+    }
+
     @Configuration
     @EnableTransactionManagement
     @EnableJpaRepositories(basePackageClasses = { CustomerOrderRepository.class, PlacementTaskRepository.class,
@@ -143,6 +165,11 @@ class PlacementTaskIntegrationTest {
         @Bean
         MovableClock clock() {
             return new MovableClock(LocalDateTime.of(2026, 11, 20, 9, 0));
+        }
+
+        @Bean
+        FakeSourceReader sourceReader() {
+            return new FakeSourceReader();
         }
 
         @Bean
@@ -199,6 +226,8 @@ class PlacementTaskIntegrationTest {
     MovableClock clock;
     @Autowired
     EventSink sink;
+    @Autowired
+    FakeSourceReader legacy;
 
     @BeforeEach
     void setUp() {
@@ -207,7 +236,96 @@ class PlacementTaskIntegrationTest {
         links.deleteAll();
         orders.deleteAll();
         sink.events.clear();
+        legacy.rows.clear();
         clock.set(LocalDateTime.of(2026, 11, 20, 9, 0));
+    }
+
+    // ----- trigger CONFIRMATION: old-ERP purchase applications / plans ----------
+
+    @Test
+    void applicationsAndPlansWithoutAPoMakeTasksInTheirOwnSection() {
+        LocalDateTime d = LocalDateTime.of(2026, 11, 19, 10, 0);
+        legacy.rows.put(PlacementOrderType.SAMPLE, List.of(
+                row("R261113001", d, false, "26256样品单 FL36-400W 驱动", null),
+                row("R261105004", d, true, "26252样品单", "YP261106001"))); // has a PO: no task
+        legacy.rows.put(PlacementOrderType.PRODUCTION, List.of(
+                row("26394-W53", d, false, null, null),
+                row("26382-A", d, false, null, null)));
+        audit("SO-1", 1, "VERIFIED", "PASS", LocalDateTime.of(2026, 11, 20, 8, 30)); // audits no longer count
+
+        var r = service.runOnce();
+        assertEquals(3, r.created());
+        assertEquals(3, tasks.count());
+
+        PlacementTask sample = tasks.findAll().stream().filter(t -> t.getOrderNo().equals("R261113001"))
+                .findFirst().orElseThrow();
+        assertEquals(PlacementOrderType.SAMPLE, sample.getOrderType());
+        assertEquals(PlacementSource.PURCHASE_APPLICATION, sample.getSource());
+        assertEquals("R261113001", sample.getSourceNo());
+        assertEquals("26256样品单 FL36-400W 驱动", sample.getSourceNote());
+        assertEquals(d, sample.getStartedAt());
+        assertEquals(d.plusDays(2), sample.getDeadlineAt(), "the 2 days start at the document date");
+        assertNull(sample.getAuditTaskId());
+
+        var samples = service.list(COLLEAGUE, true, true, PlacementOrderType.SAMPLE, PageRequest.of(0, 20,
+                Sort.by("id")));
+        assertEquals(List.of("R261113001"), samples.getContent().stream().map(PlacementTaskView::orderNo).toList());
+        assertEquals("26256样品单 FL36-400W 驱动", samples.getContent().get(0).sourceNote());
+        var production = service.list(COLLEAGUE, true, true, PlacementOrderType.PRODUCTION, PageRequest.of(0, 20,
+                Sort.by("id")));
+        assertEquals(List.of("26394-W53", "26382-A"), production.getContent().stream()
+                .map(PlacementTaskView::orderNo).toList());
+        assertEquals(Map.of(PlacementOrderType.PRODUCTION, 2L, PlacementOrderType.SAMPLE, 1L),
+                service.openCounts(COLLEAGUE, true));
+
+        NotificationRequestedEvent e = sink.events.stream()
+                .filter(x -> x.titleText().render(Locale.US).contains("R261113001")).findFirst().orElseThrow();
+        assertEquals("Sample order R261113001: purchase placement needs an owner", e.titleText().render(Locale.US));
+        assertEquals("样品单 R261113001（26256样品单 FL36-400W 驱动）尚未下采购单。请认领或指派给本部门同事，并在 2026-11-21 10:00 前下采购单",
+                e.contentText().render(Locale.SIMPLIFIED_CHINESE));
+
+        assertEquals(0, service.runOnce().created(), "each document is turned into a task once");
+    }
+
+    @Test
+    void theFirstPoClosesTheTaskAndAClosedTaskIsNotMadeAgain() {
+        LocalDateTime d = LocalDateTime.of(2026, 11, 20, 8, 0);
+        legacy.rows.put(PlacementOrderType.PRODUCTION, List.of(row("26391-W53", d, false, null, null),
+                row("26392-W48", d, false, null, null)));
+        service.runOnce();
+        Long byHand = tasks.findAll().stream().filter(t -> t.getOrderNo().equals("26392-W48")).findFirst()
+                .orElseThrow().getId();
+        service.completeManually(byHand, "P261120001", WANG, false);
+
+        legacy.rows.put(PlacementOrderType.PRODUCTION, List.of(row("26391-W53", d, true, null, "P261121004"),
+                row("26392-W48", d, false, null, null)));
+        var r = service.runOnce();
+        assertEquals(1, r.confirmed());
+        assertEquals(0, r.created(), "the task closed by hand is not made again");
+        PlacementTask done = tasks.findAll().stream().filter(t -> t.getOrderNo().equals("26391-W53")).findFirst()
+                .orElseThrow();
+        assertEquals(PlacementTaskStatus.DONE, done.getStatus());
+        assertEquals(PlacementTask.SOURCE_CONFIRMED, done.getDoneSource());
+        assertEquals("P261121004", done.getDonePoNo());
+        assertEquals(0, service.runOnce().confirmed());
+    }
+
+    @Test
+    void anOrderWithAnOpenAuditTaskGetsNoSecondTask() {
+        audit("26393-W52", 1, "VERIFIED", "PASS", LocalDateTime.of(2026, 11, 20, 8, 30));
+        assertEquals(1, service.runOnce().created(), "no queries yet: order audits still make tasks");
+        assertEquals(PlacementOrderType.PRODUCTION, tasks.findAll().get(0).getOrderType());
+
+        legacy.rows.put(PlacementOrderType.PRODUCTION, List.of(row("26393-W52", null, false, null, null)));
+        var r = service.runOnce();
+        assertEquals(0, r.created());
+        assertEquals(1, r.skipped());
+        assertEquals(1, tasks.count());
+    }
+
+    private static LegacyPlacementSourceRow row(String docNo, LocalDateTime date, boolean confirmed, String note,
+            String firstPoNo) {
+        return new LegacyPlacementSourceRow(docNo, docNo, date, confirmed, note, firstPoNo);
     }
 
     @Test
@@ -270,11 +388,11 @@ class PlacementTaskIntegrationTest {
         assertEquals(409, assertThrows(PlacementException.class,
                 () -> service.completeManually(id, "PO-2", WANG, true)).getStatus());
 
-        var mine = service.list(WANG, false, false, PageRequest.of(0, 20, Sort.by("id")));
+        var mine = service.list(WANG, false, false, null, PageRequest.of(0, 20, Sort.by("id")));
         assertEquals(1, mine.getTotalElements());
-        assertEquals(1, service.list(COLLEAGUE, false, false, PageRequest.of(0, 20, Sort.by("id"))).getTotalElements(),
+        assertEquals(1, service.list(COLLEAGUE, false, false, null, PageRequest.of(0, 20, Sort.by("id"))).getTotalElements(),
                 "colleagues see the department's tasks");
-        assertEquals(0, service.list(OTHER, false, false, PageRequest.of(0, 20, Sort.by("id"))).getTotalElements());
+        assertEquals(0, service.list(OTHER, false, false, null, PageRequest.of(0, 20, Sort.by("id"))).getTotalElements());
     }
 
     @Test
@@ -285,7 +403,7 @@ class PlacementTaskIntegrationTest {
         audit("SO-1", 1, "VERIFIED", "PASS", LocalDateTime.of(2026, 11, 20, 8, 30));
         service.runOnce();
 
-        PlacementTaskView open = service.list(COLLEAGUE, true, true, PageRequest.of(0, 20, Sort.by("id")))
+        PlacementTaskView open = service.list(COLLEAGUE, true, true, null, PageRequest.of(0, 20, Sort.by("id")))
                 .getContent().get(0);
         assertEquals("Acme", open.customerName());
         assertEquals(0, open.linesWithPo());
@@ -298,14 +416,14 @@ class PlacementTaskIntegrationTest {
         clock.set(LocalDateTime.of(2026, 11, 21, 10, 0));
         assertEquals(1, service.runOnce().closed());
 
-        PlacementTaskView done = service.list(COLLEAGUE, true, false, PageRequest.of(0, 20, Sort.by("id")))
+        PlacementTaskView done = service.list(COLLEAGUE, true, false, null, PageRequest.of(0, 20, Sort.by("id")))
                 .getContent().get(0);
         assertEquals(PlacementTaskStatus.DONE, done.status());
         assertEquals("LINKED_PO", done.doneSource());
         assertEquals("PO-A", done.donePoNo(), "the earliest PO closes the task");
         assertEquals(List.of("PO-A", "PO-B"), done.linkedPoNos());
         assertEquals(2, done.linesWithPo());
-        assertTrue(service.list(COLLEAGUE, true, true, PageRequest.of(0, 20, Sort.by("id"))).isEmpty());
+        assertTrue(service.list(COLLEAGUE, true, true, null, PageRequest.of(0, 20, Sort.by("id"))).isEmpty());
     }
 
     @Test
@@ -327,7 +445,7 @@ class PlacementTaskIntegrationTest {
         assertEquals(0, service.runOnce().overdue(), "only one overdue alert");
         NotificationRequestedEvent e = sink.events.get(1);
         assertEquals(NotifactionPriority.ERGENT, e.priority());
-        assertEquals("The purchase orders for customer order SO-1 were due by 2026-11-22 08:30 and are still not "
+        assertEquals("The purchase orders for order SO-1 were due by 2026-11-22 08:30 and are still not "
                 + "placed (nobody has taken it yet)", e.contentText().render(Locale.US));
         assertNull(tasks.findAll().get(0).getDoneAt());
     }
