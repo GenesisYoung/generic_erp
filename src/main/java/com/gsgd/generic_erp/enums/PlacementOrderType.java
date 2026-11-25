@@ -1,16 +1,15 @@
 package com.gsgd.generic_erp.enums;
 
 /**
- * Kind of order a placement task is for, told apart by the order number
- * prefix ({@code erp.purchase.placement.sample-prefix} /
- * {@code production-prefix}). Sample orders and production orders are shown in
- * separate sections and come from different old-ERP documents.
+ * Section of the placement task page. Sample orders and production orders come
+ * from different old-ERP documents and are shown separately; the purchase
+ * orders placed for them are numbered YP... and P... in the old ERP.
  */
 public enum PlacementOrderType {
-    /** Order number starts with "P"; source: purchase plan (采购计划, PLANORDER1/2). */
+    /** Purchase plan (采购计划, PLANORDER1/2); its POs are numbered P... */
     PRODUCTION,
-    /** Order number starts with "YP"; source: purchase application (采购申请, ORDREQ1/2). */
+    /** Purchase application (采购申请, ORDREQ1/2); its POs are numbered YP... */
     SAMPLE,
-    /** Neither prefix (only possible for tasks made from order audits). */
+    /** Not used for new tasks; listed with PRODUCTION. */
     OTHER
 }

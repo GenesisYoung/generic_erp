@@ -109,12 +109,6 @@ public class PlacementTaskService {
     @Value("${erp.purchase.placement.trigger:CONFIRMATION}")
     private String trigger = "CONFIRMATION";
 
-    @Value("${erp.purchase.placement.sample-prefix:YP}")
-    private String samplePrefix = "YP";
-
-    @Value("${erp.purchase.placement.production-prefix:P}")
-    private String productionPrefix = "P";
-
     @Value("${erp.purchase.placement.deadline-days:2}")
     private int deadlineDays = 2;
 
@@ -167,19 +161,6 @@ public class PlacementTaskService {
                 || reader.supports(PlacementOrderType.PRODUCTION));
     }
 
-    /** The section an order belongs to, from its number. */
-    public PlacementOrderType orderType(String orderNo) {
-        String no = orderNo == null ? "" : orderNo.strip().toUpperCase(java.util.Locale.ROOT);
-        // YP first: "YP" does not start with "P", but a configured prefix might overlap.
-        if (!samplePrefix.isBlank() && no.startsWith(samplePrefix.toUpperCase(java.util.Locale.ROOT))) {
-            return PlacementOrderType.SAMPLE;
-        }
-        if (!productionPrefix.isBlank() && no.startsWith(productionPrefix.toUpperCase(java.util.Locale.ROOT))) {
-            return PlacementOrderType.PRODUCTION;
-        }
-        return PlacementOrderType.OTHER;
-    }
-
     /** One old-ERP document for one order, after its lines are merged. */
     private record DocKey(String sourceNo, String orderNo) {
     }
@@ -187,14 +168,18 @@ public class PlacementTaskService {
     private static final class DocState {
         boolean confirmed = true;
         LocalDateTime date;
+        String note;
+        String firstPoNo;
     }
 
     /**
      * Creates tasks for unconfirmed purchase applications (sample orders) and
      * purchase plans (production orders), and closes tasks whose document is
      * now confirmed. A document counts as confirmed only when every line read
-     * for that order is confirmed. Rows whose order number does not fit the
-     * section's prefix are ignored. Returns {created, skipped, confirmed}.
+     * for that order is confirmed. The section comes from the source: purchase
+     * applications are sample orders (their POs are numbered YP...), purchase
+     * plans are production orders (POs numbered P...). Returns {created,
+     * skipped, confirmed}.
      */
     int[] syncFromConfirmations() {
         LegacyPlacementSourceReader reader = sourceReader.getIfAvailable();
@@ -218,13 +203,8 @@ public class PlacementTaskService {
                 continue;
             }
             Map<DocKey, DocState> docs = new LinkedHashMap<>();
-            int wrongPrefix = 0;
             for (LegacyPlacementSourceRow r : reader.fetch(type, since, cfg.getBatchLimit())) {
                 if (r.orderNo() == null || r.orderNo().isBlank() || r.sourceNo() == null || r.sourceNo().isBlank()) {
-                    continue;
-                }
-                if (orderType(r.orderNo()) != type) {
-                    wrongPrefix++;
                     continue;
                 }
                 DocState d = docs.computeIfAbsent(new DocKey(r.sourceNo(), r.orderNo()), k -> new DocState());
@@ -232,9 +212,12 @@ public class PlacementTaskService {
                 if (r.sourceDate() != null && (d.date == null || r.sourceDate().isBefore(d.date))) {
                     d.date = r.sourceDate();
                 }
-            }
-            if (wrongPrefix > 0) {
-                log.debug("Placement source {}: {} rows ignored (order number is not {})", source, wrongPrefix, type);
+                if (d.note == null && r.note() != null && !r.note().isBlank()) {
+                    d.note = r.note().length() > 200 ? r.note().substring(0, 200) : r.note();
+                }
+                if (d.firstPoNo == null && r.firstPoNo() != null && !r.firstPoNo().isBlank()) {
+                    d.firstPoNo = r.firstPoNo();
+                }
             }
             if (docs.isEmpty()) {
                 continue;
@@ -256,6 +239,7 @@ public class PlacementTaskService {
                         t.setStatus(PlacementTaskStatus.DONE);
                         t.setDoneAt(now);
                         t.setDoneSource(PlacementTask.SOURCE_CONFIRMED);
+                        t.setDonePoNo(d.firstPoNo);
                         taskRepository.save(t);
                         confirmed++;
                     }
@@ -274,6 +258,7 @@ public class PlacementTaskService {
                         .orderType(type)
                         .source(source)
                         .sourceNo(key.sourceNo())
+                        .sourceNote(d.note)
                         .startedAt(start)
                         .deadlineAt(start.plusDays(deadlineDays))
                         .status(PlacementTaskStatus.OPEN)
@@ -283,7 +268,7 @@ public class PlacementTaskService {
                 notifyDepartment(NotificationType.PO_PLACEMENT_DUE, NotifactionPriority.NORMAL,
                         LocalizedText.of("placement.notify.unconfirmedTitle", typeText(type), t.getOrderNo()),
                         LocalizedText.of("placement.notify.unconfirmedContent", typeText(type), t.getOrderNo(),
-                                LocalizedText.of("placement.source." + source.name()), t.getSourceNo(),
+                                d.note != null ? d.note : LocalizedText.of("placement.source." + source.name()),
                                 stamp(t.getDeadlineAt())),
                         t.getId());
             }
@@ -321,7 +306,7 @@ public class PlacementTaskService {
                     .auditTaskId(e.id)
                     .auditRound(e.round)
                     .orderNo(e.orderNumber)
-                    .orderType(orderType(e.orderNumber))
+                    .orderType(PlacementOrderType.PRODUCTION)
                     .source(PlacementSource.ORDER_AUDIT)
                     .sourceNo(e.id)
                     .startedAt(verifiedAt)
@@ -521,9 +506,10 @@ public class PlacementTaskService {
             List<PoCustomerLink> l = links.getOrDefault(t.getOrderNo(), List.of());
             CustomerOrder o = orders.get(t.getOrderNo());
             out.add(new PlacementTaskView(t.getId(), t.getOrderNo(),
-                    t.getOrderType() == null ? orderType(t.getOrderNo()) : t.getOrderType(),
+                    t.getOrderType() == null ? PlacementOrderType.PRODUCTION : t.getOrderType(),
                     t.getSource() == null ? PlacementSource.ORDER_AUDIT : t.getSource(),
                     t.getSource() == null || t.getSource() == PlacementSource.ORDER_AUDIT ? null : t.getSourceNo(),
+                    t.getSourceNote(),
                     o == null ? null : o.getCustomerName(),
                     t.getAuditRound(), t.getAuditVerifiedAt(),
                     t.getStartedAt() == null ? t.getAuditVerifiedAt() : t.getStartedAt(), t.getDeadlineAt(),

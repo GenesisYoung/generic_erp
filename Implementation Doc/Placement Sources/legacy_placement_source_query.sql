@@ -1,42 +1,68 @@
 /* =============================================================================
-   DRAFT old-ERP queries for purchase placement tasks (采购下单任务).
-   Not active yet: application.yml leaves both queries blank until the
-   confirmation column is known, and the job keeps using order audits until then.
+   Old-ERP queries for purchase placement tasks (采购下单任务).
+   The live copies are erp.legacy.placement-source.sample-query / production-query
+   in application.yml (override with ERP_LEGACY_PLACEMENT_SAMPLE_QUERY /
+   ERP_LEGACY_PLACEMENT_PRODUCTION_QUERY).
 
-   Checked by: ERP Design/outputs/old-erp-discovery/legacy_placement_source_check.sql
-   (R1-R5, sent 2026-11-24). Every line marked "TO CONFIRM" is an assumption.
+   What the checks found (ERP Design/outputs/old-erp-discovery/
+   legacy_placement_source_check.sql + _round2.sql, 2026-11-24/25):
+   - Purchase order numbers (ORDSPHS1.CODE) start with P (production) or YP (sample).
+   - Purchase applications 采购申请 = ORDREQ1 (header, CODE like R261113001) /
+     ORDREQ2 (lines). They are not linked to customer orders; the sample order is
+     only written in the memo ("26256样品单 FL36-400W 驱动"). PO lines point to them
+     with ORDSPHS2.SRCERI = ORDREQ2.ERI.
+   - Purchase plans 采购计划 = PLANORDER1 / PLANORDER2. PLANORDER1.CODE is the
+     customer order no. (26394-W53, 26382-A, YTSC-26027). PO lines point to them
+     with ORDSPHS2.PLANERI = PLANORDER2.ERI.
+   - There is NO "purchase confirmed" column. 审核 (SCRUTINY) is empty on 74 of 80
+     applications and 124 of 420 plans that already have POs (last 180 days), so it
+     is not the confirmation. ORDCREATED is 1 even on plans without a PO.
+     ORDREQ2.PHSQTY > 0 on exactly the lines that have a PO (135 vs 248, Q4).
+   => "Confirmed" = the document has its first purchase order (or was closed,
+      CLOSETYPE <> 0). This is the same rule as before: a task closes at the
+      first PO.
 
-   Contract (both queries): document lines dated on or after :since (a date)
-     order_no     the order the document buys for (YP... sample, P... production)
-     source_no    the purchase application / purchase plan number
-     source_date  the document date; the 2-day deadline starts here
-     confirmed    1 = confirmed for purchase (采购确认), 0 = not yet
-   Set them with ERP_LEGACY_PLACEMENT_SAMPLE_QUERY / ERP_LEGACY_PLACEMENT_PRODUCTION_QUERY
-   or in erp.legacy.placement-source.* of application.yml.
+   Contract: order_no, source_no, source_date, confirmed (0/1), note, first_po_no.
    ============================================================================= */
 
-/* Sample orders <- purchase applications (采购申请). */
+/* Sample orders <- purchase applications. */
 SELECT
-    RTRIM(r1.ORDCODE)                                   AS order_no,     -- TO CONFIRM: column holding YP... (R3)
-    RTRIM(r1.CODE)                                      AS source_no,    -- TO CONFIRM (R2)
-    r1.SDATE                                            AS source_date,  -- TO CONFIRM (R2)
-    CASE WHEN r2.CONFIRMFLAG = 1 THEN 1 ELSE 0 END      AS confirmed     -- TO CONFIRM: 采购确认 column + value (R4)
-FROM ORDREQ1 r1 WITH (NOLOCK)                                            -- TO CONFIRM: 采购申请 header (R1)
-JOIN ORDREQ2 r2 WITH (NOLOCK) ON r2.MASTERI = r1.ERI                     -- line -> header join used by earlier checks
-WHERE r1.SDATE >= :since
-  AND RTRIM(r1.ORDCODE) LIKE 'YP%';
+    RTRIM(h.CODE)                                         AS order_no,
+    RTRIM(h.CODE)                                         AS source_no,
+    h.SDATE                                               AS source_date,
+    LEFT(RTRIM(h.MEMO), 200)                              AS note,
+    po.first_po_no                                        AS first_po_no,
+    CASE WHEN po.first_po_no IS NOT NULL OR h.CLOSETYPE <> 0 THEN 1 ELSE 0 END AS confirmed
+FROM ORDREQ1 h WITH (NOLOCK)
+OUTER APPLY (
+    SELECT TOP 1 RTRIM(p1.CODE) AS first_po_no
+    FROM ORDREQ2 l WITH (NOLOCK)
+    JOIN ORDSPHS2 p  WITH (NOLOCK) ON p.SRCERI = l.ERI
+    JOIN ORDSPHS1 p1 WITH (NOLOCK) ON p1.ERI = p.MASTERI
+    WHERE l.MASTERI = h.ERI
+    ORDER BY p1.SDATE, p1.CODE
+) po
+WHERE h.SDATE >= DATEADD(day, -30, GETDATE())   -- the application uses :since
+  AND h.CODE IS NOT NULL
+ORDER BY h.SDATE DESC;
 
-/* Production orders <- purchase plans (采购计划). The plan line -> customer order
-   chain PLANORDER2.FROMORDERI = ORDCORD2.ERI, ORDCORD2.MASTERI = ORDCORD1.ERI was
-   confirmed on 2,682 of 2,735 plan lines (round 2/3 checks, 2026-11-20). */
+/* Production orders <- purchase plans. */
 SELECT
-    RTRIM(co.CODE)                                      AS order_no,
-    RTRIM(p1.CODE)                                      AS source_no,    -- TO CONFIRM (R2)
-    p1.SDATE                                            AS source_date,  -- TO CONFIRM (R2)
-    CASE WHEN p2.CONFIRMFLAG = 1 THEN 1 ELSE 0 END      AS confirmed     -- TO CONFIRM: 采购确认 column + value (R4)
-FROM PLANORDER1 p1 WITH (NOLOCK)
-JOIN PLANORDER2 p2 WITH (NOLOCK) ON p2.MASTERI = p1.ERI
-JOIN ORDCORD2   cl WITH (NOLOCK) ON cl.ERI = p2.FROMORDERI
-JOIN ORDCORD1   co WITH (NOLOCK) ON co.ERI = cl.MASTERI
-WHERE p1.SDATE >= :since
-  AND RTRIM(co.CODE) LIKE 'P%';
+    RTRIM(h.CODE)                                         AS order_no,
+    RTRIM(h.CODE)                                         AS source_no,
+    h.SDATE                                               AS source_date,
+    LEFT(RTRIM(h.MEMO), 200)                              AS note,
+    po.first_po_no                                        AS first_po_no,
+    CASE WHEN po.first_po_no IS NOT NULL OR h.CLOSETYPE <> 0 THEN 1 ELSE 0 END AS confirmed
+FROM PLANORDER1 h WITH (NOLOCK)
+OUTER APPLY (
+    SELECT TOP 1 RTRIM(p1.CODE) AS first_po_no
+    FROM PLANORDER2 l WITH (NOLOCK)
+    JOIN ORDSPHS2 p  WITH (NOLOCK) ON p.PLANERI = l.ERI
+    JOIN ORDSPHS1 p1 WITH (NOLOCK) ON p1.ERI = p.MASTERI
+    WHERE l.MASTERI = h.ERI
+    ORDER BY p1.SDATE, p1.CODE
+) po
+WHERE h.SDATE >= DATEADD(day, -30, GETDATE())   -- the application uses :since
+  AND h.CODE IS NOT NULL
+ORDER BY h.SDATE DESC;

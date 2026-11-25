@@ -26,10 +26,10 @@ import lombok.ToString;
  * "Place the purchase orders for order X within 2 calendar days." Maps to
  * table: po_placement_task_tb.
  * <p>
- * Since 2026-11-24 a task is made for each old-ERP document that is not yet
- * confirmed for purchase: a purchase application (采购申请) for a sample order
- * (YP...) or a purchase plan (采购计划) for a production order (P...). One row
- * per (source, source document, order). Older rows came from order audits
+ * Since 2026-11-25 a task is made for each old-ERP document that has no
+ * purchase order yet: a purchase application (采购申请, sample orders, POs
+ * numbered YP...) or a purchase plan (采购计划, production orders, POs numbered
+ * P...). One row per (source, source document, order). Older rows came from order audits
  * ({@code source = ORDER_AUDIT}, one row per verified audit round).
  * <p>
  * The purchasing manager assigns a purchaser. The task closes by itself when
@@ -87,6 +87,10 @@ public class PlacementTask {
     /** Old-ERP document number of the plan / application; the audit task id for ORDER_AUDIT. */
     @Column(name = "source_no", length = 50)
     private String sourceNo;
+
+    /** Memo of the plan / application (for applications it names the sample order). */
+    @Column(name = "source_note", length = 200)
+    private String sourceNote;
 
     /** When the 2-day clock started: the document date, or the audit verification time. */
     @Column(name = "started_at")

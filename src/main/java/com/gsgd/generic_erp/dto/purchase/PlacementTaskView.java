@@ -13,6 +13,7 @@ import com.gsgd.generic_erp.enums.PlacementTaskStatus;
  * @param orderType      PRODUCTION (P...), SAMPLE (YP...) or OTHER
  * @param source         what created the task
  * @param sourceNo       old-ERP purchase plan / application number; null for ORDER_AUDIT
+ * @param sourceNote     memo of the plan / application (names the sample order)
  * @param auditRound     order audit round; null unless source is ORDER_AUDIT
  * @param startedAt      when the deadline clock started (document date or audit time)
  * @param hoursLeft      whole hours until the deadline; negative when overdue
@@ -26,6 +27,7 @@ public record PlacementTaskView(
         PlacementOrderType orderType,
         PlacementSource source,
         String sourceNo,
+        String sourceNote,
         String customerName,
         Integer auditRound,
         LocalDateTime auditVerifiedAt,

@@ -1,10 +1,10 @@
 -- =============================================================================
 --  Placement sources (采购下单任务数据来源). Purchase placement tasks are now
---  made from the old ERP's confirmation status instead of the PMC order review:
---    - sample orders (order no. YP...)     <- purchase applications (采购申请)
---    - production orders (order no. P...)  <- purchase plans (采购计划)
---  A document that is not confirmed for purchase gets one task per order it
---  buys for; the task closes when the old ERP confirms it.
+--  made from the old ERP instead of the PMC order review:
+--    - sample orders (POs numbered YP...)     <- purchase applications (采购申请)
+--    - production orders (POs numbered P...)  <- purchase plans (采购计划)
+--  A document without a purchase order gets a task; the task closes at its
+--  first purchase order.
 --  Runs after V12 (V11 = one role per department, V12 = follow-up plan groups).
 --  Re-runnable.
 --
@@ -40,6 +40,11 @@ SET @sql := IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHE
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 SET @sql := IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db
+                AND TABLE_NAME = 'po_placement_task_tb' AND COLUMN_NAME = 'source_note') = 0,
+    'ALTER TABLE po_placement_task_tb ADD COLUMN source_note VARCHAR(200) NULL AFTER source_no', 'SELECT 1');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+SET @sql := IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db
                 AND TABLE_NAME = 'po_placement_task_tb' AND COLUMN_NAME = 'started_at') = 0,
     'ALTER TABLE po_placement_task_tb ADD COLUMN started_at DATETIME(6) NULL AFTER source_no', 'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
@@ -49,10 +54,7 @@ UPDATE po_placement_task_tb
 SET source     = COALESCE(source, 'ORDER_AUDIT'),
     source_no  = COALESCE(source_no, audit_task_id),
     started_at = COALESCE(started_at, audit_verified_at),
-    order_type = COALESCE(order_type,
-                     CASE WHEN UPPER(TRIM(order_no)) LIKE 'YP%' THEN 'SAMPLE'
-                          WHEN UPPER(TRIM(order_no)) LIKE 'P%'  THEN 'PRODUCTION'
-                          ELSE 'OTHER' END);
+    order_type = COALESCE(order_type, 'PRODUCTION');   -- order-audit tasks were customer orders
 
 -- 4. Indexes (added only when missing). -------------------------------------------
 SET @sql := IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = @db

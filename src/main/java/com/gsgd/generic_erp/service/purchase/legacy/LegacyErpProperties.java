@@ -132,8 +132,8 @@ public class LegacyErpProperties {
      * Documents that decide purchase placement tasks (采购下单任务). Each query
      * returns document lines dated on or after the named parameter
      * {@code :since} (a date). Required column aliases: order_no, source_no,
-     * source_date, confirmed (0/1). A blank query switches that order type
-     * off.
+     * source_date, confirmed (0/1), note, first_po_no. A blank query
+     * switches that order type off.
      */
     @Getter
     @Setter

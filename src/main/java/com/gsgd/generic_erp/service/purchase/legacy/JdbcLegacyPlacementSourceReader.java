@@ -53,7 +53,9 @@ public class JdbcLegacyPlacementSourceReader implements LegacyPlacementSourceRea
                     trim(rs.getString("order_no")),
                     trim(rs.getString("source_no")),
                     d == null ? null : d.toLocalDateTime(),
-                    rs.getInt("confirmed") != 0);
+                    rs.getInt("confirmed") != 0,
+                    trim(rs.getString("note")),
+                    trim(rs.getString("first_po_no")));
         });
     }
 
