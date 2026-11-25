@@ -79,6 +79,14 @@ public class LegacyErpDataSourceConfig {
                 props.getPlacementSource().getProductionQuery());
     }
 
+    @Bean
+    public LegacyQuotationReader legacyQuotationReader(HikariDataSourceHolder pool, LegacyErpProperties props) {
+        JdbcTemplate template = new JdbcTemplate(pool.dataSource());
+        template.setQueryTimeout(props.getDatasource().getQueryTimeoutSeconds());
+        LegacyErpProperties.QuotationQueries q = props.getQuotation();
+        return new JdbcLegacyQuotationReader(template, q.getOrderQuery(), q.getBomLineQuery(), q.getPriceQuery());
+    }
+
     /** True when erp.legacy.purchase-order.line-query has text (a SpEL check would break on quotes in the SQL). */
     static class LineQuerySet implements org.springframework.context.annotation.Condition {
         @Override
