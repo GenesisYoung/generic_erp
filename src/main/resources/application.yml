@@ -196,6 +196,8 @@ erp:
       # Source and checks: Implementation Doc/Placement Sources/legacy_placement_source_query.sql
       # Sample orders: purchase applications (ORDREQ1/2). PO line ORDSPHS2.SRCERI = ORDREQ2.ERI;
       # those POs are numbered YP... ORDREQ2.PHSQTY > 0 exactly when a line has a PO (135/135).
+      # Only applications whose memo contains 样品 (e.g. "26256样品单 …") count as sample orders;
+      # others ("调试用", "订单26338 …") are skipped (decided 2026-11-25).
       sample-query: |
         SELECT
             RTRIM(h.CODE)                                         AS order_no,
@@ -215,6 +217,7 @@ erp:
         ) po
         WHERE h.SDATE >= :since
           AND h.CODE IS NOT NULL
+          AND h.MEMO LIKE N'%样品%'
       # Production orders: purchase plans (PLANORDER1/2). PLANORDER1.CODE is the customer order no.
       # (26394-W53); PO line ORDSPHS2.PLANERI = PLANORDER2.ERI; those POs are numbered P...
       production-query: |

@@ -44,6 +44,7 @@ OUTER APPLY (
 ) po
 WHERE h.SDATE >= DATEADD(day, -30, GETDATE())   -- the application uses :since
   AND h.CODE IS NOT NULL
+  AND h.MEMO LIKE N'%样品%'                       -- only sample applications (decided 2026-11-25)
 ORDER BY h.SDATE DESC;
 
 /* Production orders <- purchase plans. */
