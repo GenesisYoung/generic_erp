@@ -175,7 +175,8 @@ public class LegacyErpProperties {
          * bom_kind (PRODUCT / PACKAGING, or empty = decide by material class),
          * bom_code, line_id, product_code, order_qty, line_no, bom_level,
          * material_code, material_name, spec, unit, material_class,
-         * qty_per_unit, leaf (0/1), base_price.
+         * qty_per_unit (per parent), leaf (0/1), base_price,
+         * line_key, parent_key (the BOM tree).
          */
         private String bomLineQuery;
 

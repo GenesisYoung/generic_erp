@@ -71,7 +71,8 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
                 blankToNull(str(rs, "bom_kind")), str(rs, "bom_code"), str(rs, "line_id"), str(rs, "product_code"),
                 num(rs, "order_qty"), integer(rs, "line_no"), integer(rs, "bom_level"), str(rs, "material_code"),
                 str(rs, "material_name"), str(rs, "spec"), str(rs, "unit"), str(rs, "material_class"),
-                num(rs, "qty_per_unit"), rs.getInt("leaf") != 0, num(rs, "base_price")));
+                num(rs, "qty_per_unit"), rs.getInt("leaf") != 0, num(rs, "base_price"),
+                blankToNull(str(rs, "line_key")), blankToNull(str(rs, "parent_key"))));
     }
 
     @Override

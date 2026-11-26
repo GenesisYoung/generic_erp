@@ -77,7 +77,7 @@ class QuotationServiceTest {
         when(reader.orderLines(any(), anyInt())).thenReturn(List.of(
                 line("A-1", "L1", "P1", "B1", null, LocalDate.of(2026, 11, 20))));
         when(reader.bomLines("A-1")).thenReturn(List.of(new BomLineRow(null, "B1", "L1", "P1", BigDecimal.TEN, 1, 1,
-                "M1", "Material", null, "PCS", "202", BigDecimal.ONE, true, null)));
+                "M1", "Material", null, "PCS", "202", BigDecimal.ONE, true, null, null, null)));
         when(reader.prices(any())).thenReturn(List.of(new PriceRow("M1", "S1", "Supplier", new BigDecimal("100"),
                 null, "RMB", null, null)));
         Plan p = service(reader).plan(" A-1 ", null);

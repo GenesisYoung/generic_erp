@@ -45,7 +45,7 @@ class QuotationCalculatorTest {
 
     static BomLineRow bom(String kind, String material, String clas, String perUnit, boolean leaf, String base) {
         return new BomLineRow(kind, "BOM-1", "L1", "P-1", null, 1, 1, material, material + " name", "spec", "PCS",
-                clas, new BigDecimal(perUnit), leaf, base == null ? null : new BigDecimal(base));
+                clas, new BigDecimal(perUnit), leaf, base == null ? null : new BigDecimal(base), null, null);
     }
 
     static PriceRow price(String material, String supplier, String price) {
@@ -169,5 +169,26 @@ class QuotationCalculatorTest {
         assertEquals("LOW", QuotationCalculator.priceCheck(bd("0.8"), bd("1"), low, high));
         assertEquals("NO_BASE", QuotationCalculator.priceCheck(bd("1"), BigDecimal.ZERO, low, high));
         assertEquals("NO_PRICE", QuotationCalculator.priceCheck(null, bd("1"), low, high));
+    }
+
+    @Test
+    void qtyPerProductMultipliesUpTheTreeAndStopsOnLoops() {
+        BomLineRow top = new BomLineRow(null, "B", "L1", "P", null, 1, 1, "S1", "n", null, "PCS", "202",
+                new BigDecimal("2"), false, null, "E1", null);
+        BomLineRow mid = new BomLineRow(null, "B", "L1", "P", null, 2, 2, "S2", "n", null, "PCS", "202",
+                new BigDecimal("3"), false, null, "E2", "E1");
+        BomLineRow leaf = new BomLineRow(null, "B", "L1", "P", null, 3, 3, "M1", "n", null, "PCS", "202",
+                new BigDecimal("0.5"), true, null, "E3", "E2");
+        BomLineRow orphan = new BomLineRow(null, "B", "L1", "P", null, 4, 2, "M2", "n", null, "PCS", "202",
+                new BigDecimal("4"), true, null, "E4", "MISSING");
+        BomLineRow loopA = new BomLineRow(null, "B", "L1", "P", null, 5, 2, "M3", "n", null, "PCS", "202",
+                new BigDecimal("2"), true, null, "E5", "E6");
+        BomLineRow loopB = new BomLineRow(null, "B", "L1", "P", null, 6, 2, "M4", "n", null, "PCS", "202",
+                new BigDecimal("5"), true, null, "E6", "E5");
+        var q = QuotationCalculator.qtyPerProduct(List.of(top, mid, leaf, orphan, loopA, loopB));
+        assertEquals(0, new BigDecimal("3").compareTo(q.get("E3")));
+        assertEquals(0, new BigDecimal("6").compareTo(q.get("E2")));
+        assertEquals(0, new BigDecimal("4").compareTo(q.get("E4")));
+        assertEquals(0, new BigDecimal("10").compareTo(q.get("E5")));
     }
 }

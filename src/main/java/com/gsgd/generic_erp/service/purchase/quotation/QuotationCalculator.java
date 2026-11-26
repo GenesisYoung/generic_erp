@@ -80,6 +80,7 @@ public final class QuotationCalculator {
         BigDecimal low = in.settings().priceCheckLow();
         BigDecimal high = in.settings().priceCheckHigh();
 
+        Map<String, BigDecimal> perProduct = qtyPerProduct(in.bomLines());
         List<Item> product = new ArrayList<>();
         List<Item> packaging = new ArrayList<>();
         Set<String> currencies = new LinkedHashSet<>();
@@ -92,7 +93,8 @@ public final class QuotationCalculator {
             }
             String kind = kindOf(row, in.packagingClassPrefixes());
             BigDecimal orderQty = row.orderQty() != null ? row.orderQty() : lineQty.get(row.lineId());
-            BigDecimal perUnit = nz(row.qtyPerUnit());
+            BigDecimal perUnit = row.lineKey() != null && perProduct.containsKey(row.lineKey())
+                    ? perProduct.get(row.lineKey()) : nz(row.qtyPerUnit());
             BigDecimal totalQty = perUnit.multiply(nz(orderQty));
             List<SupplierPrice> offers = suppliers.getOrDefault(row.materialCode(), List.of());
             SupplierPrice chosen = offers.isEmpty() ? null : offers.get(0);
@@ -195,6 +197,33 @@ public final class QuotationCalculator {
                 feeAmounts, costBeforeProfit, marginRate, overridden || tier == null ? null : tier.minAmount(),
                 overridden, profit, total, unitPrice, currencies.size() == 1 ? currencies.iterator().next() : null,
                 missing, priceWarnings, warnings, in.now());
+    }
+
+    /**
+     * Quantity per finished product of every BOM line with a key: its own
+     * quantity per parent times that of every parent up the tree (a parent
+     * that is not in the list counts as 1; a loop stops the walk).
+     */
+    static Map<String, BigDecimal> qtyPerProduct(List<BomLineRow> rows) {
+        Map<String, BomLineRow> byKey = new HashMap<>();
+        for (BomLineRow r : rows) {
+            if (r.lineKey() != null) {
+                byKey.put(r.lineKey(), r);
+            }
+        }
+        Map<String, BigDecimal> out = new HashMap<>();
+        for (BomLineRow r : byKey.values()) {
+            BigDecimal q = nz(r.qtyPerUnit());
+            Set<String> seen = new java.util.HashSet<>();
+            seen.add(r.lineKey());
+            BomLineRow p = r.parentKey() == null ? null : byKey.get(r.parentKey());
+            while (p != null && seen.add(p.lineKey())) {
+                q = q.multiply(nz(p.qtyPerUnit()));
+                p = p.parentKey() == null ? null : byKey.get(p.parentKey());
+            }
+            out.put(r.lineKey(), q);
+        }
+        return out;
     }
 
     /** PRODUCT or PACKAGING for one BOM line. */

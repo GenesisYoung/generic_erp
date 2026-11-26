@@ -34,12 +34,15 @@ public interface LegacyQuotationReader {
 
     /**
      * One BOM line. {@code bomKind} is PRODUCT, PACKAGING or null (then the
-     * material class decides). {@code qtyPerUnit} is the quantity for ONE
-     * finished product; {@code orderQty} the order line quantity.
+     * material class decides). {@code qtyPerUnit} is the quantity per ONE
+     * parent ({@code parentKey}); the calculator multiplies it up the tree
+     * ({@code lineKey} / {@code parentKey}) to get the quantity per finished
+     * product. {@code orderQty} is the order line quantity.
      */
     record BomLineRow(String bomKind, String bomCode, String lineId, String productCode, BigDecimal orderQty,
             Integer lineNo, Integer level, String materialCode, String materialName, String spec, String unit,
-            String materialClass, BigDecimal qtyPerUnit, boolean leaf, BigDecimal basePrice) {
+            String materialClass, BigDecimal qtyPerUnit, boolean leaf, BigDecimal basePrice, String lineKey,
+            String parentKey) {
     }
 
     /** One supplier's price for one material. */
