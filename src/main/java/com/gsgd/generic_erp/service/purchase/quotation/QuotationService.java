@@ -124,11 +124,12 @@ public class QuotationService {
         List<PriceRow> prices;
         try {
             bomLines = reader.bomLines(orderNo.strip());
-            if (bomLines.isEmpty()) {
-                log.warn("Quotation: the BOM line query returned no rows for order {} ({} order lines,"
-                        + " BOM codes {})", orderNo.strip(), rows.size(),
-                        rows.stream().map(r -> r.productBomCode() + "/" + r.packagingBomCode()).toList());
-            }
+            long leaves = bomLines.stream().filter(BomLineRow::leaf).count();
+            long withMaterial = bomLines.stream().filter(b -> b.leaf() && b.materialCode() != null).count();
+            log.info("Quotation: order {} -> {} BOM rows from the old ERP, {} leaf rows, {} leaf rows with a"
+                    + " material code (order lines {}, BOM codes {})", orderNo.strip(), bomLines.size(), leaves,
+                    withMaterial, rows.size(),
+                    rows.stream().map(r -> r.productBomCode() + "/" + r.packagingBomCode()).toList());
             Set<String> materials = new LinkedHashSet<>();
             for (BomLineRow b : bomLines) {
                 if (b.leaf() && b.materialCode() != null) {
