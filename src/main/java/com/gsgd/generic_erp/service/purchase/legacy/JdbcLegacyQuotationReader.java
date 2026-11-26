@@ -1,9 +1,11 @@
 package com.gsgd.generic_erp.service.purchase.legacy;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -11,9 +13,14 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
 /**
  * Runs the configured quotation SELECTs ({@code erp.legacy.quotation.*})
@@ -63,35 +70,177 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
     }
 
     @Override
-    public List<BomLineRow> bomLines(String orderNo) {
-        if (bomLineQuery == null || orderNo == null) {
+    public List<BomLineRow> bomLines(String orderNo, Collection<String> lineIds) {
+        if (bomLineQuery == null || lineIds == null || lineIds.isEmpty()) {
             return List.of();
         }
-        jdbc.getJdbcTemplate().setMaxRows(0);
-        return jdbc.query(bomLineQuery, Map.of("orderNo", orderNo), (rs, i) -> new BomLineRow(
+        Map<String, Object> params = bomParams(orderNo, lineIds);
+        return onCleanSession(t -> t.getJdbcTemplate().query(inline(bomLineQuery, params), (rs, i) -> new BomLineRow(
                 blankToNull(str(rs, "bom_kind")), str(rs, "bom_code"), str(rs, "line_id"), str(rs, "product_code"),
                 num(rs, "order_qty"), integer(rs, "line_no"), integer(rs, "bom_level"), str(rs, "material_code"),
                 str(rs, "material_name"), str(rs, "spec"), str(rs, "unit"), str(rs, "material_class"),
                 num(rs, "qty_per_unit"), rs.getInt("leaf") != 0, num(rs, "base_price"),
-                blankToNull(str(rs, "line_key")), blankToNull(str(rs, "parent_key"))));
+                blankToNull(str(rs, "line_key")), blankToNull(str(rs, "parent_key")))));
     }
+
+    private static Map<String, Object> bomParams(String orderNo, Collection<String> lineIds) {
+        return Map.of("orderNo", orderNo == null ? "" : orderNo, "lineIds", List.copyOf(new LinkedHashSet<>(lineIds)));
+    }
+
+    /**
+     * Runs {@code work} on ONE pooled connection after switching off the two
+     * session options that make SQL Server send result sets without rows:
+     * FMTONLY (column information only) and ROWCOUNT (row limit, which the
+     * driver uses for maxRows). Neither changes data. The driver is told the
+     * limit is 0 again, so it stays in step with the session.
+     */
+    private <T> T onCleanSession(Function<NamedParameterJdbcTemplate, T> work) {
+        return jdbc.getJdbcTemplate().execute((ConnectionCallback<T>) con -> {
+            resetSession(con);
+            JdbcTemplate single = new JdbcTemplate(new SingleConnectionDataSource(con, true));
+            single.setQueryTimeout(jdbc.getJdbcTemplate().getQueryTimeout());
+            single.setMaxRows(0);
+            return work.apply(new NamedParameterJdbcTemplate(single));
+        });
+    }
+
+    private static void resetSession(Connection con) throws SQLException {
+        try (Statement st = con.createStatement()) {
+            st.setMaxRows(0);
+            st.execute("SET FMTONLY OFF; SET ROWCOUNT 0;");
+        }
+    }
+
+    private static final Pattern PARAM = Pattern.compile("(?<![:\\w]):(\\w+)");
+
+    /**
+     * Puts the values into the SQL as quoted literals and runs it as a plain
+     * statement. Through JDBC, parameterised statements on this old ERP came
+     * back without rows (2026-11-26) while plain ones worked. Values are
+     * codes read from the old ERP; quotes are doubled and control characters
+     * refused, so a value can never end the literal.
+     */
+    static String inline(String sql, Map<String, Object> params) {
+        Matcher m = PARAM.matcher(sql);
+        StringBuilder out = new StringBuilder();
+        while (m.find()) {
+            String name = m.group(1);
+            if (!params.containsKey(name)) {
+                throw new IllegalArgumentException("No value for :" + name);
+            }
+            Object v = params.get(name);
+            String lit;
+            if (v instanceof Collection<?> c) {
+                if (c.isEmpty()) {
+                    throw new IllegalArgumentException("Empty list for :" + name);
+                }
+                List<String> parts = new ArrayList<>();
+                for (Object o : c) {
+                    parts.add(literal(String.valueOf(o)));
+                }
+                lit = String.join(", ", parts);
+            } else {
+                lit = literal(String.valueOf(v));
+            }
+            m.appendReplacement(out, Matcher.quoteReplacement(lit));
+        }
+        m.appendTail(out);
+        return out.toString();
+    }
+
+    static String literal(String v) {
+        for (int i = 0; i < v.length(); i++) {
+            if (Character.isISOControl(v.charAt(i))) {
+                throw new IllegalArgumentException("Control character in a value");
+            }
+        }
+        boolean ascii = v.chars().allMatch(ch -> ch < 128);
+        return (ascii ? "'" : "N'") + v.replace("'", "''") + "'";
+    }
+
+    private static int rowsOf(Connection con, String sql) throws SQLException {
+        try (Statement st = con.createStatement(); ResultSet rs = st.executeQuery(sql)) {
+            int n = 0;
+            while (rs.next()) {
+                n++;
+            }
+            return n;
+        }
+    }
+
+    @Override
+    public String diagnose(String orderNo, Collection<String> lineIds) {
+        if (lineIds == null || lineIds.isEmpty()) {
+            return "no order line ids";
+        }
+        Map<String, Object> params = bomParams(orderNo, lineIds);
+        return jdbc.getJdbcTemplate().execute((ConnectionCallback<String>) con -> {
+            StringBuilder sb = new StringBuilder();
+            sb.append("'SELECT 1' before reset returned ").append(rowsOf(con, "SELECT 1 AS one")).append(" row(s)");
+            try (Statement st = con.createStatement(); ResultSet rs = st.executeQuery(
+                    "SELECT @@SPID AS spid, @@SERVERNAME AS server_name, DB_NAME() AS db_name,"
+                            + " SUSER_SNAME() AS login_name, @@OPTIONS AS options,"
+                            + " CAST(SERVERPROPERTY('ProductVersion') AS varchar(30)) AS version")) {
+                if (rs.next()) {
+                    sb.append("; spid=").append(rs.getInt("spid")).append(", server=")
+                            .append(rs.getString("server_name")).append(", database=").append(rs.getString("db_name"))
+                            .append(", login=").append(rs.getString("login_name")).append(", options=")
+                            .append(rs.getInt("options")).append(", version=").append(rs.getString("version"));
+                } else {
+                    sb.append("; the session query returned no row");
+                }
+            }
+            resetSession(con);
+            sb.append("; 'SELECT 1' after SET FMTONLY OFF / ROWCOUNT 0 returned ")
+                    .append(rowsOf(con, "SELECT 1 AS one")).append(" row(s)");
+            JdbcTemplate single = new JdbcTemplate(new SingleConnectionDataSource(con, true));
+            single.setMaxRows(0);
+            org.springframework.jdbc.core.RowMapper<String> countMapper = (rs, i) -> "orders with this no.=" + rs.getInt("orders") + ", order lines found="
+                            + rs.getInt("lines") + ", lines with BOMCODE=" + rs.getInt("lines_with_bomcode")
+                            + ", product BOM headers=" + rs.getInt("product_headers") + ", packaging BOM rows="
+                            + rs.getInt("packaging_rows");
+            List<String> prepared = new NamedParameterJdbcTemplate(single).query(DIAGNOSE_QUERY, params, countMapper);
+            sb.append("; counts with parameters: ").append(prepared.isEmpty() ? "no row" : prepared.get(0));
+            List<String> literal = single.query(inline(DIAGNOSE_QUERY, params), countMapper);
+            sb.append("; counts with literal values: ").append(literal.isEmpty() ? "no row" : literal.get(0));
+            return sb.toString();
+        });
+    }
+
+    /** Counts each step of the BOM lookup; scalar subqueries only, nothing inside an aggregate. */
+    static final String DIAGNOSE_QUERY = """
+            SELECT
+                (SELECT COUNT(*) FROM ORDCORD1 WITH (NOLOCK) WHERE CODE = :orderNo) AS orders,
+                (SELECT COUNT(*) FROM ORDCORD2 WITH (NOLOCK) WHERE ERI IN (:lineIds)) AS lines,
+                (SELECT COUNT(*) FROM ORDCORD2 WITH (NOLOCK)
+                  WHERE ERI IN (:lineIds) AND ISNULL(BOMCODE, '') <> '') AS lines_with_bomcode,
+                (SELECT COUNT(*) FROM ORDCORD2 cl WITH (NOLOCK)
+                   JOIN ORDBOM1 b WITH (NOLOCK)
+                     ON b.SRCERI = cl.ERI OR (ISNULL(cl.BOMCODE, '') <> '' AND b.CODE = cl.BOMCODE)
+                  WHERE cl.ERI IN (:lineIds)) AS product_headers,
+                (SELECT COUNT(*) FROM ORDCORD2 cl WITH (NOLOCK)
+                   JOIN ORDBOM3 o3 WITH (NOLOCK) ON o3.CODE = cl.BOMCODE
+                  WHERE cl.ERI IN (:lineIds)) AS packaging_rows
+            """;
 
     @Override
     public List<PriceRow> prices(Collection<String> materialCodes) {
         if (priceQuery == null || materialCodes == null || materialCodes.isEmpty()) {
             return List.of();
         }
-        jdbc.getJdbcTemplate().setMaxRows(0);
         List<String> codes = new ArrayList<>(new LinkedHashSet<>(materialCodes));
-        List<PriceRow> out = new ArrayList<>();
-        for (int from = 0; from < codes.size(); from += IN_CHUNK) {
-            List<String> chunk = codes.subList(from, Math.min(codes.size(), from + IN_CHUNK));
-            out.addAll(jdbc.query(priceQuery, Map.of("materialCodes", chunk), (rs, i) -> new PriceRow(
-                    str(rs, "material_code"), str(rs, "supplier_code"), str(rs, "supplier_name"),
-                    num(rs, "price"), num(rs, "tax_rate"), blankToNull(str(rs, "currency")),
-                    date(rs, "valid_from"), date(rs, "valid_to"))));
-        }
-        return out;
+        return onCleanSession(t -> {
+            List<PriceRow> out = new ArrayList<>();
+            for (int from = 0; from < codes.size(); from += IN_CHUNK) {
+                List<String> chunk = codes.subList(from, Math.min(codes.size(), from + IN_CHUNK));
+                out.addAll(t.getJdbcTemplate().query(inline(priceQuery, Map.of("materialCodes", chunk)),
+                        (rs, i) -> new PriceRow(
+                        str(rs, "material_code"), str(rs, "supplier_code"), str(rs, "supplier_name"),
+                        num(rs, "price"), num(rs, "tax_rate"), blankToNull(str(rs, "currency")),
+                        date(rs, "valid_from"), date(rs, "valid_to"))));
+            }
+            return out;
+        });
     }
 
     private static String str(ResultSet rs, String col) throws SQLException {

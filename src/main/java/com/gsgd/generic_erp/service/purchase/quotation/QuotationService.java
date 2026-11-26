@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -123,7 +124,18 @@ public class QuotationService {
         List<BomLineRow> bomLines;
         List<PriceRow> prices;
         try {
-            bomLines = reader.bomLines(orderNo.strip());
+            List<String> lineIds = rows.stream().map(OrderLineRow::lineId).filter(Objects::nonNull).toList();
+            bomLines = reader.bomLines(orderNo.strip(), lineIds);
+            long leaves = bomLines.stream().filter(BomLineRow::leaf).count();
+            long withMaterial = bomLines.stream().filter(b -> b.leaf() && b.materialCode() != null).count();
+            log.info("Quotation: order {} -> {} BOM rows from the old ERP, {} leaf rows, {} leaf rows with a"
+                    + " material code (order lines {}, BOM codes {})", orderNo.strip(), bomLines.size(), leaves,
+                    withMaterial, rows.size(),
+                    rows.stream().map(r -> r.productBomCode() + "/" + r.packagingBomCode()).toList());
+            if (bomLines.isEmpty()) {
+                log.warn("Quotation: no BOM rows for order {} (line ids {}). Check: {}", orderNo.strip(), lineIds,
+                        diagnose(reader, orderNo.strip(), lineIds));
+            }
             Set<String> materials = new LinkedHashSet<>();
             for (BomLineRow b : bomLines) {
                 if (b.leaf() && b.materialCode() != null) {
@@ -145,6 +157,14 @@ public class QuotationService {
         return QuotationCalculator.calculate(new QuotationCalculator.Input(summary(rows), lines(rows), bomLines,
                 prices, effective, req.selections(), req.marginRate(), packagingClassPrefixes,
                 LocalDateTime.now(clock.withZone(ZoneId.of(zone))), I18n.currentLocale()));
+    }
+
+    private static String diagnose(LegacyQuotationReader reader, String orderNo, List<String> lineIds) {
+        try {
+            return reader.diagnose(orderNo, lineIds);
+        } catch (RuntimeException e) {
+            return "the check query failed: " + e.getMessage();
+        }
     }
 
     private LegacyQuotationReader reader() {

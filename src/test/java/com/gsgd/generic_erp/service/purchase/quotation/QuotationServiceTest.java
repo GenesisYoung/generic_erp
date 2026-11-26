@@ -3,7 +3,9 @@ package com.gsgd.generic_erp.service.purchase.quotation;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -76,7 +78,7 @@ class QuotationServiceTest {
         when(reader.supported()).thenReturn(true);
         when(reader.orderLines(any(), anyInt())).thenReturn(List.of(
                 line("A-1", "L1", "P1", "B1", null, LocalDate.of(2026, 11, 20))));
-        when(reader.bomLines("A-1")).thenReturn(List.of(new BomLineRow(null, "B1", "L1", "P1", BigDecimal.TEN, 1, 1,
+        when(reader.bomLines(eq("A-1"), anyCollection())).thenReturn(List.of(new BomLineRow(null, "B1", "L1", "P1", BigDecimal.TEN, 1, 1,
                 "M1", "Material", null, "PCS", "202", BigDecimal.ONE, true, null, null, null)));
         when(reader.prices(any())).thenReturn(List.of(new PriceRow("M1", "S1", "Supplier", new BigDecimal("100"),
                 null, "RMB", null, null)));
