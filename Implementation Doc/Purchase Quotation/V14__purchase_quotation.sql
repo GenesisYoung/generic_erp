@@ -8,7 +8,7 @@
 --  Hibernate (ddl-auto: update) also creates the table from the entity
 --  QuotationRate; section 1 is for environments where ddl-auto is off. The
 --  table may stay empty: the default rates then apply (shipping 0.5%,
---  loading 2.5%, management 15%, material loss 1%, development 2%, tax 6%;
+--  loading 2.5%, management 15%, material loss 1%, development 2%, tax 6% (default 0 since 2026-11-26: prices include tax);
 --  margin 15% below 3,000 and 10% from 3,000).
 -- =============================================================================
 
