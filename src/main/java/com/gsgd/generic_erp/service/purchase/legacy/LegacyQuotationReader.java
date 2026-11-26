@@ -19,8 +19,21 @@ public interface LegacyQuotationReader {
     /** Order lines of plans dated on or after {@code since}, at most {@code limit}. */
     List<OrderLineRow> orderLines(LocalDate since, int limit);
 
-    /** BOM lines of one customer order. */
-    List<BomLineRow> bomLines(String orderNo);
+    /**
+     * BOM lines of one customer order. {@code lineIds} are the ERIs of its
+     * order lines (ORDCORD2.ERI) as {@link #orderLines} read them; the query
+     * selects by them, so it finds exactly the lines the order list showed.
+     */
+    List<BomLineRow> bomLines(String orderNo, Collection<String> lineIds);
+
+    /**
+     * One log line that says which server and database the application reads
+     * and how many rows each step of the BOM lookup finds. Only called when
+     * {@link #bomLines} returned nothing.
+     */
+    default String diagnose(String orderNo, Collection<String> lineIds) {
+        return "";
+    }
 
     /** Valid supplier prices of the given materials (any order). */
     List<PriceRow> prices(Collection<String> materialCodes);

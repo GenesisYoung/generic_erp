@@ -63,18 +63,54 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
     }
 
     @Override
-    public List<BomLineRow> bomLines(String orderNo) {
-        if (bomLineQuery == null || orderNo == null) {
+    public List<BomLineRow> bomLines(String orderNo, Collection<String> lineIds) {
+        if (bomLineQuery == null || lineIds == null || lineIds.isEmpty()) {
             return List.of();
         }
         jdbc.getJdbcTemplate().setMaxRows(0);
-        return jdbc.query(bomLineQuery, Map.of("orderNo", orderNo), (rs, i) -> new BomLineRow(
+        Map<String, Object> params = Map.of("orderNo", orderNo == null ? "" : orderNo, "lineIds",
+                List.copyOf(new LinkedHashSet<>(lineIds)));
+        return jdbc.query(bomLineQuery, params, (rs, i) -> new BomLineRow(
                 blankToNull(str(rs, "bom_kind")), str(rs, "bom_code"), str(rs, "line_id"), str(rs, "product_code"),
                 num(rs, "order_qty"), integer(rs, "line_no"), integer(rs, "bom_level"), str(rs, "material_code"),
                 str(rs, "material_name"), str(rs, "spec"), str(rs, "unit"), str(rs, "material_class"),
                 num(rs, "qty_per_unit"), rs.getInt("leaf") != 0, num(rs, "base_price"),
                 blankToNull(str(rs, "line_key")), blankToNull(str(rs, "parent_key"))));
     }
+
+    @Override
+    public String diagnose(String orderNo, Collection<String> lineIds) {
+        if (lineIds == null || lineIds.isEmpty()) {
+            return "no order line ids";
+        }
+        jdbc.getJdbcTemplate().setMaxRows(0);
+        Map<String, Object> params = Map.of("orderNo", orderNo == null ? "" : orderNo, "lineIds",
+                List.copyOf(new LinkedHashSet<>(lineIds)));
+        return jdbc.queryForObject(DIAGNOSE_QUERY, params, (rs, i) -> "server=" + rs.getString("server_name")
+                + ", database=" + rs.getString("db_name") + ", login=" + rs.getString("login_name")
+                + ", orders with this no.=" + rs.getInt("orders") + ", order lines found=" + rs.getInt("lines")
+                + ", lines with BOMCODE=" + rs.getInt("lines_with_bomcode") + ", product BOM headers="
+                + rs.getInt("product_headers") + ", packaging BOM rows=" + rs.getInt("packaging_rows"));
+    }
+
+    /** Counts each step of the BOM lookup; scalar subqueries only, nothing inside an aggregate. */
+    static final String DIAGNOSE_QUERY = """
+            SELECT
+                @@SERVERNAME AS server_name,
+                DB_NAME()    AS db_name,
+                SUSER_SNAME() AS login_name,
+                (SELECT COUNT(*) FROM ORDCORD1 WITH (NOLOCK) WHERE CODE = :orderNo) AS orders,
+                (SELECT COUNT(*) FROM ORDCORD2 WITH (NOLOCK) WHERE ERI IN (:lineIds)) AS lines,
+                (SELECT COUNT(*) FROM ORDCORD2 WITH (NOLOCK)
+                  WHERE ERI IN (:lineIds) AND ISNULL(BOMCODE, '') <> '') AS lines_with_bomcode,
+                (SELECT COUNT(*) FROM ORDCORD2 cl WITH (NOLOCK)
+                   JOIN ORDBOM1 b WITH (NOLOCK)
+                     ON b.SRCERI = cl.ERI OR (ISNULL(cl.BOMCODE, '') <> '' AND b.CODE = cl.BOMCODE)
+                  WHERE cl.ERI IN (:lineIds)) AS product_headers,
+                (SELECT COUNT(*) FROM ORDCORD2 cl WITH (NOLOCK)
+                   JOIN ORDBOM3 o3 WITH (NOLOCK) ON o3.CODE = cl.BOMCODE
+                  WHERE cl.ERI IN (:lineIds)) AS packaging_rows
+            """;
 
     @Override
     public List<PriceRow> prices(Collection<String> materialCodes) {
