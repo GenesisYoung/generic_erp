@@ -124,4 +124,15 @@ class QuotationServiceTest {
         assertEquals(503, assertThrows(QuotationException.class, () -> service(null).orders(null, null, false))
                 .getStatus());
     }
+
+    @Test
+    void manualPricesMustBeZeroOrMoreWithAtMostSixDecimals() {
+        QuotationService.checkManualPrices(null);
+        QuotationService.checkManualPrices(java.util.Map.of("A", new java.math.BigDecimal("0.123456"),
+                "B", java.math.BigDecimal.ZERO));
+        assertThrows(QuotationException.class, () -> QuotationService.checkManualPrices(
+                java.util.Map.of("A", new java.math.BigDecimal("-1"))));
+        assertThrows(QuotationException.class, () -> QuotationService.checkManualPrices(
+                java.util.Map.of("A", new java.math.BigDecimal("0.1234567"))));
+    }
 }

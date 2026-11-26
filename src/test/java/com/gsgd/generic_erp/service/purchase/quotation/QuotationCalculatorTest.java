@@ -267,4 +267,51 @@ class QuotationCalculatorTest {
         assertNull(x.priceSource());
         assertEquals("NO_PRICE", x.priceCheck());
     }
+
+    @Test
+    void manualPriceFillsAMaterialWithoutAnyPrice() {
+        List<BomLineRow> bom = List.of(bom(null, "X", "202", "2", true, null));
+        Plan p = QuotationCalculator.calculate(new QuotationCalculator.Input(
+                new OrderSummary("O", null, null, null, null, null, null, 1, BigDecimal.TEN, true, false,
+                        "PRODUCT_ONLY", 0, 0),
+                List.of(new OrderLine("L1", "P-1", "Lamp", null, BigDecimal.TEN, "PCS", "BOM-1", null)), bom,
+                List.of(), defaults(), Map.of(), null, List.of("3"), LocalDateTime.of(2026, 11, 26, 9, 0), EN,
+                Map.of("X", bd("0.75"))));
+
+        Item x = p.productItems().get(0);
+        assertEquals("MANUAL", x.priceSource());
+        assertEquals(0, bd("0.75").compareTo(x.unitPrice()));
+        assertEquals(bd("15.0000"), x.amount(), "2 x 10 x 0.75");
+        assertEquals(0, p.missingPriceCount());
+        assertTrue(p.warnings().stream().anyMatch(w -> w.contains("X")), "manual prices are listed");
+    }
+
+    @Test
+    void eachOrderLineGetsItsShareOfTheTotalAndAUnitPrice() {
+        BomLineRow a = new BomLineRow(null, "B1", "L1", "P-1", null, 1, 1, "A", "a", null, "PCS", "202",
+                BigDecimal.ONE, true, null, null, null);
+        BomLineRow b = new BomLineRow(null, "B2", "L2", "P-2", null, 1, 1, "B", "b", null, "PCS", "202",
+                BigDecimal.ONE, true, null, null, null);
+        List<OrderLine> lines = List.of(
+                new OrderLine("L1", "P-1", "Lamp", null, bd("100"), "PCS", "B1", null),
+                new OrderLine("L2", "P-2", "Base", null, bd("50"), "PCS", "B2", null),
+                new OrderLine("L3", "P-3", "No BOM", null, bd("5"), "PCS", null, null));
+        Plan p = QuotationCalculator.calculate(new QuotationCalculator.Input(
+                new OrderSummary("O", null, null, null, null, null, null, 3, bd("155"), true, false,
+                        "PRODUCT_ONLY", 0, 0),
+                lines, List.of(a, b), List.of(price("A", "S1", "3"), price("B", "S1", "2")), defaults(), Map.of(),
+                null, List.of("3"), LocalDateTime.of(2026, 11, 26, 9, 0), EN));
+
+        // material 300 + 100 = 400; every fee, profit and tax is a percentage, so L1 gets 3/4 of the total.
+        OrderLine l1 = p.lines().get(0);
+        OrderLine l2 = p.lines().get(1);
+        assertEquals(bd("300.00"), l1.materialCost());
+        assertEquals(p.totalPrice().multiply(bd("0.75")).setScale(2, java.math.RoundingMode.HALF_UP),
+                l1.totalPrice());
+        assertEquals(p.totalPrice().multiply(bd("0.75")).divide(bd("100"), 4, java.math.RoundingMode.HALF_UP),
+                l1.unitPrice());
+        assertEquals(p.totalPrice().divide(bd("4"), 2, java.math.RoundingMode.HALF_UP), l2.totalPrice());
+        assertNull(p.lines().get(2).totalPrice(), "no priced material");
+        assertNull(p.lines().get(2).unitPrice());
+    }
 }

@@ -153,7 +153,8 @@ public class QuotationService {
             log.warn("Quotation: reading the old ERP failed for order {}", orderNo, e);
             throw new QuotationException(502, "quotation.error.legacyRead");
         }
-        CalculateRequest req = request == null ? new CalculateRequest(null, null, null) : request;
+        CalculateRequest req = request == null ? new CalculateRequest(null, null, null, null) : request;
+        checkManualPrices(req.manualPrices());
         if (req.marginRate() != null) {
             QuotationSettingsService.checkRate(req.marginRate());
         }
@@ -162,7 +163,19 @@ public class QuotationService {
                 saved.marginTiers(), saved.priceCheckLow(), saved.priceCheckHigh());
         return QuotationCalculator.calculate(new QuotationCalculator.Input(summary(rows), lines(rows), bomLines,
                 prices, effective, req.selections(), req.marginRate(), packagingClassPrefixes,
-                LocalDateTime.now(clock.withZone(ZoneId.of(zone))), I18n.currentLocale()));
+                LocalDateTime.now(clock.withZone(ZoneId.of(zone))), I18n.currentLocale(), req.manualPrices()));
+    }
+
+    /** A typed-in price must be a number of at most 6 decimals and below 100,000,000 (0 = none). */
+    static void checkManualPrices(Map<String, BigDecimal> prices) {
+        if (prices == null) {
+            return;
+        }
+        for (BigDecimal p : prices.values()) {
+            if (p != null && (p.signum() < 0 || p.scale() > 6 || p.compareTo(new BigDecimal("100000000")) >= 0)) {
+                throw new QuotationException(400, "quotation.error.manualPrice");
+            }
+        }
     }
 
     private static String diagnose(LegacyQuotationReader reader, String orderNo, List<String> lineIds) {

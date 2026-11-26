@@ -94,7 +94,8 @@ public final class QuotationExcelExporter {
         r++;
 
         r = section(sh, r, I18n.t(locale, "quotation.excel.orderLines"), st);
-        String[] lineHeaders = { "productCode", "productName", "spec", "qty", "unit", "productBom", "packagingBom" };
+        String[] lineHeaders = { "productCode", "productName", "spec", "qty", "unit", "productBom", "packagingBom",
+                "lineMaterialCost", "lineTotal", "lineUnitPrice" };
         Row h = sh.createRow(r++);
         for (int c = 0; c < lineHeaders.length; c++) {
             text(h, c, I18n.t(locale, "quotation.excel.col." + lineHeaders[c]), st.header);
@@ -108,6 +109,9 @@ public final class QuotationExcelExporter {
             text(row, 4, l.unit(), st.cell);
             text(row, 5, l.productBomCode(), st.cell);
             text(row, 6, l.packagingBomCode(), st.cell);
+            num(row, 7, l.materialCost(), st.money);
+            num(row, 8, l.totalPrice(), st.money);
+            num(row, 9, l.unitPrice(), st.price);
         }
         r++;
 

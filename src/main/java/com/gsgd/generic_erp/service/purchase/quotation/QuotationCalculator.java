@@ -43,7 +43,8 @@ import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.PriceR
  * bought takes the cheapest valid purchase strategy price. The purchaser can
  * pick another price for a material. The line says which source it uses and,
  * for a last purchase price, the purchase date. Amount = quantity per product
- * x order quantity x unit price.</li>
+ * x order quantity x unit price. A material without any price can be given
+ * a unit price by hand (source MANUAL).</li>
  * <li>Fees: MATERIAL fees are a percentage of the material cost, COST fees of
  * material cost plus MATERIAL fees. Their sum is the cost before profit.</li>
  * <li>Profit margin: the tier with the highest minimum the cost before profit
@@ -66,7 +67,15 @@ public final class QuotationCalculator {
     /** Everything one calculation needs. */
     public record Input(OrderSummary order, List<OrderLine> lines, List<BomLineRow> bomLines,
             List<PriceRow> prices, Settings settings, Map<String, String> selections, BigDecimal marginOverride,
-            List<String> packagingClassPrefixes, LocalDateTime now, Locale locale) {
+            List<String> packagingClassPrefixes, LocalDateTime now, Locale locale,
+            Map<String, BigDecimal> manualPrices) {
+
+        public Input(OrderSummary order, List<OrderLine> lines, List<BomLineRow> bomLines, List<PriceRow> prices,
+                Settings settings, Map<String, String> selections, BigDecimal marginOverride,
+                List<String> packagingClassPrefixes, LocalDateTime now, Locale locale) {
+            this(order, lines, bomLines, prices, settings, selections, marginOverride, packagingClassPrefixes, now,
+                    locale, null);
+        }
     }
 
     public static Plan calculate(Input in) {
@@ -82,6 +91,8 @@ public final class QuotationCalculator {
             totalOrderQty = totalOrderQty.add(nz(l.qty()));
         }
         Map<String, String> selections = in.selections() == null ? Map.of() : in.selections();
+        Map<String, BigDecimal> manual = in.manualPrices() == null ? Map.of() : in.manualPrices();
+        Set<String> manualLines = new LinkedHashSet<>();
         BigDecimal low = in.settings().priceCheckLow();
         BigDecimal high = in.settings().priceCheckHigh();
 
@@ -119,6 +130,13 @@ public final class QuotationCalculator {
                     badSelections.add(row.materialCode());
                 }
             }
+            BigDecimal typed = manual.get(row.materialCode());
+            if (typed != null && typed.signum() > 0) {
+                // Typed in by the purchaser for a material without a price: wins over everything else.
+                chosen = new SupplierPrice(QuotationViews.PRICE_SOURCE_MANUAL, QuotationViews.PRICE_SOURCE_MANUAL,
+                        null, null, typed, null, null, null, null, null, null);
+                manualLines.add(row.materialCode());
+            }
             BigDecimal unitPrice = chosen == null ? null : chosen.price();
             BigDecimal amount = unitPrice == null ? BigDecimal.ZERO
                     : totalQty.multiply(unitPrice).setScale(LINE, RoundingMode.HALF_UP);
@@ -134,7 +152,7 @@ public final class QuotationCalculator {
                 }
             }
             boolean fromLast = chosen != null && chosen == last;
-            Item item = new Item(kind, row.bomCode(), row.productCode(), row.lineNo(), row.level(),
+            Item item = new Item(kind, row.bomCode(), row.lineId(), row.productCode(), row.lineNo(), row.level(),
                     row.materialCode(), row.materialName(), row.spec(), row.unit(), row.materialClass(), perUnit,
                     orderQty, totalQty, offers, chosen == null ? null : chosen.key(),
                     chosen == null ? null : chosen.supplierCode(), chosen == null ? null : chosen.supplierName(),
@@ -206,11 +224,49 @@ public final class QuotationCalculator {
         if (totalOrderQty.signum() <= 0) {
             warnings.add(I18n.t(locale, "quotation.warn.noQty"));
         }
+        if (!manualLines.isEmpty()) {
+            warnings.add(I18n.t(locale, "quotation.warn.manualPrice", String.join(", ", manualLines)));
+        }
 
-        return new Plan(in.order(), in.lines(), product, packaging, productCost, packagingCost, materialCost,
+        return new Plan(in.order(), perLine(in.lines(), product, packaging, total), product, packaging, productCost, packagingCost, materialCost,
                 feeAmounts, costBeforeProfit, marginRate, overridden || tier == null ? null : tier.minAmount(),
                 overridden, profit, total, unitPrice, currencies.size() == 1 ? currencies.iterator().next() : null,
                 missing, priceWarnings, warnings, in.now());
+    }
+
+    /**
+     * Total and unit price of each order line. Fees and margin are
+     * percentages of the order's amounts, so a line's share of the total is
+     * its share of the material cost: line total = total x line material cost
+     * / material cost; unit price = line total / line quantity.
+     */
+    static List<OrderLine> perLine(List<OrderLine> lines, List<Item> product, List<Item> packaging,
+            BigDecimal total) {
+        Map<String, BigDecimal> cost = new HashMap<>();
+        BigDecimal all = BigDecimal.ZERO;
+        for (List<Item> list : List.of(product, packaging)) {
+            for (Item i : list) {
+                if (i.lineId() != null) {
+                    cost.merge(i.lineId(), i.amount(), BigDecimal::add);
+                }
+                all = all.add(i.amount());
+            }
+        }
+        List<OrderLine> out = new ArrayList<>();
+        for (OrderLine l : lines) {
+            BigDecimal c = l.lineId() == null ? null : cost.get(l.lineId());
+            if (c == null || c.signum() <= 0 || all.signum() <= 0) {
+                out.add(new OrderLine(l.lineId(), l.productCode(), l.productName(), l.spec(), l.qty(), l.unit(),
+                        l.productBomCode(), l.packagingBomCode(), c == null ? null : money(c), null, null));
+                continue;
+            }
+            BigDecimal lineTotal = total.multiply(c).divide(all, MONEY, RoundingMode.HALF_UP);
+            BigDecimal unit = l.qty() != null && l.qty().signum() > 0
+                    ? total.multiply(c).divide(all.multiply(l.qty()), LINE, RoundingMode.HALF_UP) : null;
+            out.add(new OrderLine(l.lineId(), l.productCode(), l.productName(), l.spec(), l.qty(), l.unit(),
+                    l.productBomCode(), l.packagingBomCode(), money(c), lineTotal, unit));
+        }
+        return out;
     }
 
     /**

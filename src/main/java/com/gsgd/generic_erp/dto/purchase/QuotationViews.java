@@ -39,8 +39,22 @@ public final class QuotationViews {
             int planLinesBought) {
     }
 
+    /**
+     * One order line (product). {@code materialCost}: its priced BOM lines;
+     * {@code totalPrice}: its share of the quotation total (fees and margin
+     * are percentages, so the same rates as the whole order);
+     * {@code unitPrice} = totalPrice / qty. The three are null on the way in
+     * and when the line has no priced material.
+     */
     public record OrderLine(String lineId, String productCode, String productName, String spec, BigDecimal qty,
-            String unit, String productBomCode, String packagingBomCode) {
+            String unit, String productBomCode, String packagingBomCode, BigDecimal materialCost,
+            BigDecimal totalPrice, BigDecimal unitPrice) {
+
+        public OrderLine(String lineId, String productCode, String productName, String spec, BigDecimal qty,
+                String unit, String productBomCode, String packagingBomCode) {
+            this(lineId, productCode, productName, spec, qty, unit, productBomCode, packagingBomCode, null, null,
+                    null);
+        }
     }
 
     /**
@@ -67,6 +81,8 @@ public final class QuotationViews {
 
     public static final String PRICE_SOURCE_LAST_PURCHASE = "LAST_PURCHASE";
     public static final String PRICE_SOURCE_STRATEGY = "STRATEGY";
+    /** Unit price typed in by the purchaser ({@link CalculateRequest#manualPrices}). */
+    public static final String PRICE_SOURCE_MANUAL = "MANUAL";
 
     /**
      * One priced BOM line. {@code kind} PRODUCT or PACKAGING. {@code suppliers}:
@@ -74,14 +90,15 @@ public final class QuotationViews {
      * then the purchase strategy prices, cheapest first. Without a choice of
      * the purchaser the last purchase price is used, and the cheapest strategy
      * price only when there is none. {@code priceSource} says which one the
-     * line uses (LAST_PURCHASE / STRATEGY, null without a price);
+     * line uses (LAST_PURCHASE / STRATEGY / MANUAL, null without a price);
      * {@code lastPurchaseDate} is set when it is LAST_PURCHASE.
      * {@code cheapestPrice} is the cheapest strategy price. {@code priceCheck}:
      * OK, HIGH, LOW (selected price outside the band around {@code basePrice},
      * the last purchase price), NO_BASE (no earlier purchase) or NO_PRICE (no
      * price at all).
      */
-    public record Item(String kind, String bomCode, String productCode, Integer lineNo, Integer level,
+    public record Item(String kind, String bomCode, String lineId, String productCode, Integer lineNo,
+            Integer level,
             String materialCode, String materialName, String spec, String unit, String materialClass,
             BigDecimal qtyPerUnit, BigDecimal orderQty, BigDecimal totalQty, List<SupplierPrice> suppliers,
             String selectedKey, String selectedSupplierCode, String selectedSupplierName, BigDecimal unitPrice,
@@ -115,10 +132,17 @@ public final class QuotationViews {
      * Changes the purchaser makes on the quotation page. {@code selections}:
      * material code to the {@link SupplierPrice#key} of the price to use
      * (LAST_PURCHASE or a strategy supplier code; missing = last purchase,
-     * else cheapest strategy price). {@code fees}: rate
+     * else cheapest strategy price). {@code manualPrices}: material code to a
+     * unit price excluding tax typed in by the purchaser, for a material
+     * without any price; it wins over every other price (0 or less = none). {@code fees}: rate
      * overrides by code for this quotation only. {@code marginRate}: fixed
      * margin instead of the tier (null = tier).
      */
-    public record CalculateRequest(Map<String, String> selections, List<Fee> fees, BigDecimal marginRate) {
+    public record CalculateRequest(Map<String, String> selections, List<Fee> fees, BigDecimal marginRate,
+            Map<String, BigDecimal> manualPrices) {
+
+        public CalculateRequest(Map<String, String> selections, List<Fee> fees, BigDecimal marginRate) {
+            this(selections, fees, marginRate, null);
+        }
     }
 }
