@@ -158,6 +158,54 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
         return (ascii ? "'" : "N'") + v.replace("'", "''") + "'";
     }
 
+    /**
+     * Everything the server sends back for {@code sql}: each result set with
+     * its row count and first value, update counts, warnings and the error,
+     * so nothing the driver might skip is lost.
+     */
+    static String rawResults(Connection con, String sql) {
+        StringBuilder sb = new StringBuilder("[");
+        try (Statement st = con.createStatement()) {
+            boolean isRs = st.execute(sql);
+            for (int guard = 0; guard < 20; guard++) {
+                if (isRs) {
+                    try (ResultSet rs = st.getResultSet()) {
+                        int n = 0;
+                        String first = null;
+                        while (rs.next()) {
+                            if (n == 0) {
+                                first = rs.getString(1);
+                            }
+                            n++;
+                        }
+                        sb.append("resultSet(cols=").append(rs.getMetaData().getColumnCount()).append(", rows=")
+                                .append(n).append(", first=").append(first).append(")");
+                        appendWarnings(sb, rs.getWarnings());
+                    }
+                } else {
+                    int uc = st.getUpdateCount();
+                    if (uc == -1) {
+                        break;
+                    }
+                    sb.append("updateCount=").append(uc);
+                }
+                sb.append(' ');
+                isRs = st.getMoreResults();
+            }
+            appendWarnings(sb, st.getWarnings());
+        } catch (SQLException e) {
+            sb.append("ERROR ").append(e.getErrorCode()).append(" state ").append(e.getSQLState()).append(": ")
+                    .append(e.getMessage());
+        }
+        return sb.append(']').toString();
+    }
+
+    private static void appendWarnings(StringBuilder sb, java.sql.SQLWarning w) {
+        for (int i = 0; w != null && i < 10; i++, w = w.getNextWarning()) {
+            sb.append(" warning ").append(w.getErrorCode()).append(": ").append(w.getMessage());
+        }
+    }
+
     private static int rowsOf(Connection con, String sql) throws SQLException {
         try (Statement st = con.createStatement(); ResultSet rs = st.executeQuery(sql)) {
             int n = 0;
@@ -203,6 +251,12 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
             sb.append("; counts with parameters: ").append(prepared.isEmpty() ? "no row" : prepared.get(0));
             List<String> literal = single.query(inline(DIAGNOSE_QUERY, params), countMapper);
             sb.append("; counts with literal values: ").append(literal.isEmpty() ? "no row" : literal.get(0));
+            sb.append("; raw results of the literal check: ").append(rawResults(con, inline(DIAGNOSE_QUERY, params)));
+            sb.append("; raw results of one-table count: ").append(rawResults(con,
+                    "SELECT COUNT(*) AS n FROM ORDCORD2 WITH (NOLOCK) WHERE ERI = "
+                            + literal(lineIds.iterator().next())));
+            sb.append("; raw results without NOLOCK: ").append(rawResults(con,
+                    "SELECT COUNT(*) AS n FROM ORDCORD2 WHERE ERI = " + literal(lineIds.iterator().next())));
             return sb.toString();
         });
     }
