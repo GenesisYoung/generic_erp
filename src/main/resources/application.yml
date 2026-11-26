@@ -331,44 +331,6 @@ erp:
       # base_price = the material's last purchase order price excl. tax (ORDSPHS2.PRICE; PRICETAX
       # is the tax-included one), for the 0.8-1.2 price check.
       bom-line-query: |
-        WITH ol AS (
-            SELECT cl.ERI AS line_eri, cl.PROD AS product_code, cl.QTY AS order_qty, cl.SERIAL AS line_serial,
-                   cl.BOMCODE AS order_bomcode, pb.ERI AS bom_eri, pb.CODE AS bom_code
-            FROM ORDCORD1 co WITH (NOLOCK)
-            JOIN ORDCORD2 cl WITH (NOLOCK) ON cl.MASTERI = co.ERI
-            OUTER APPLY (
-                SELECT TOP 1 b1.ERI, b1.CODE FROM ORDBOM1 b1 WITH (NOLOCK)
-                WHERE b1.SRCERI = cl.ERI OR (ISNULL(cl.BOMCODE, '') <> '' AND b1.CODE = cl.BOMCODE)
-                ORDER BY b1.SDATE DESC
-            ) pb
-            WHERE RTRIM(co.CODE) = :orderNo
-        ),
-        bl AS (
-            SELECT CAST('PRODUCT' AS varchar(10)) AS bom_kind, 1 AS kind_order, ol.bom_code, ol.line_eri, ol.product_code,
-                   ol.order_qty, ol.line_serial, l.SERIAL AS line_no, l.LVL AS bom_level,
-                   l.SUBPROD AS material_code, l.SPEC AS spec, l.QTY AS qty_per_unit,
-                   CASE WHEN l.VIRTUAL = 1 OR EXISTS (
-                            SELECT 1 FROM ORDBOM2 ch WITH (NOLOCK)
-                            WHERE ch.MASTERI = l.MASTERI AND ch.PERI = l.ERI)
-                        THEN 0 ELSE 1 END AS leaf,
-                   'P' + RTRIM(l.ERI) AS line_key,
-                   CASE WHEN ISNULL(RTRIM(l.PERI), '') = '' THEN NULL ELSE 'P' + RTRIM(l.PERI) END AS parent_key
-            FROM ol
-            JOIN ORDBOM2 l WITH (NOLOCK) ON l.MASTERI = ol.bom_eri
-            UNION ALL
-            SELECT 'PACKAGING', 2, RTRIM(l.CODE), ol.line_eri, ol.product_code,
-                   ol.order_qty, ol.line_serial, l.SERIAL, l.LVL,
-                   l.SUBPROD, l.SPEC, l.QTY,
-                   CASE WHEN l.VIRTUAL = 1 OR EXISTS (
-                            SELECT 1 FROM ORDBOM3 ch WITH (NOLOCK)
-                            WHERE ch.CODE = l.CODE AND ch.PERI = l.ERI)
-                        THEN 0 ELSE 1 END,
-                   'K' + RTRIM(l.ERI),
-                   CASE WHEN ISNULL(RTRIM(l.PERI), '') = '' THEN NULL ELSE 'K' + RTRIM(l.PERI) END
-            FROM ol
-            JOIN ORDBOM3 l WITH (NOLOCK) ON l.CODE = ol.order_bomcode
-            WHERE ISNULL(ol.order_bomcode, '') <> ''
-        )
         SELECT
             bl.bom_kind                                           AS bom_kind,
             RTRIM(bl.bom_code)                                    AS bom_code,
@@ -387,7 +349,43 @@ erp:
             lp.price                                              AS base_price,
             bl.line_key                                           AS line_key,
             bl.parent_key                                         AS parent_key
-        FROM bl
+        FROM (
+            SELECT CAST('PRODUCT' AS varchar(10)) AS bom_kind, 1 AS kind_order, pb.CODE AS bom_code,
+                   cl.ERI AS line_eri, cl.PROD AS product_code, cl.QTY AS order_qty, cl.SERIAL AS line_serial,
+                   l.SERIAL AS line_no, l.LVL AS bom_level, l.SUBPROD AS material_code, l.SPEC AS spec,
+                   l.QTY AS qty_per_unit,
+                   CASE WHEN l.VIRTUAL = 1 OR EXISTS (
+                            SELECT 1 FROM ORDBOM2 ch WITH (NOLOCK)
+                            WHERE ch.MASTERI = l.MASTERI AND ch.PERI = l.ERI)
+                        THEN 0 ELSE 1 END AS leaf,
+                   'P' + RTRIM(l.ERI) AS line_key,
+                   CASE WHEN ISNULL(RTRIM(l.PERI), '') = '' THEN NULL ELSE 'P' + RTRIM(l.PERI) END AS parent_key
+            FROM ORDCORD1 co WITH (NOLOCK)
+            JOIN ORDCORD2 cl WITH (NOLOCK) ON cl.MASTERI = co.ERI
+            CROSS APPLY (
+                SELECT TOP 1 b1.ERI, b1.CODE FROM ORDBOM1 b1 WITH (NOLOCK)
+                WHERE b1.SRCERI = cl.ERI OR (ISNULL(cl.BOMCODE, '') <> '' AND b1.CODE = cl.BOMCODE)
+                ORDER BY b1.SDATE DESC, b1.ERI DESC
+            ) pb
+            JOIN ORDBOM2 l WITH (NOLOCK) ON l.MASTERI = pb.ERI
+            WHERE co.CODE = :orderNo
+            UNION ALL
+            SELECT CAST('PACKAGING' AS varchar(10)), 2, l.CODE,
+                   cl.ERI, cl.PROD, cl.QTY, cl.SERIAL,
+                   l.SERIAL, l.LVL, l.SUBPROD, l.SPEC,
+                   l.QTY,
+                   CASE WHEN l.VIRTUAL = 1 OR EXISTS (
+                            SELECT 1 FROM ORDBOM3 ch WITH (NOLOCK)
+                            WHERE ch.CODE = l.CODE AND ch.PERI = l.ERI)
+                        THEN 0 ELSE 1 END,
+                   'K' + RTRIM(l.ERI),
+                   CASE WHEN ISNULL(RTRIM(l.PERI), '') = '' THEN NULL ELSE 'K' + RTRIM(l.PERI) END
+            FROM ORDCORD1 co WITH (NOLOCK)
+            JOIN ORDCORD2 cl WITH (NOLOCK) ON cl.MASTERI = co.ERI
+            JOIN ORDBOM3 l WITH (NOLOCK) ON l.CODE = cl.BOMCODE
+            WHERE co.CODE = :orderNo
+              AND ISNULL(cl.BOMCODE, '') <> ''
+        ) bl
         LEFT JOIN PRODUCT pr WITH (NOLOCK) ON pr.CODE = bl.material_code
         OUTER APPLY (
             SELECT TOP 1 o.PRICE AS price
