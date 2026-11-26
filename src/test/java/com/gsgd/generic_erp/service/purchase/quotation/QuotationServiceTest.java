@@ -42,7 +42,7 @@ class QuotationServiceTest {
     static OrderLineRow line(String order, String lineId, String product, String productBom, String packBom,
             LocalDate planDate) {
         return new OrderLineRow(order, "C1", "Customer", LocalDate.of(2026, 11, 1), null, order, planDate, lineId,
-                product, product + " name", null, BigDecimal.TEN, "PCS", productBom, packBom);
+                product, product + " name", null, BigDecimal.TEN, "PCS", productBom, packBom, null, null);
     }
 
     @Test
@@ -83,6 +83,29 @@ class QuotationServiceTest {
         Plan p = service(reader).plan(" A-1 ", null);
         assertEquals(new BigDecimal("1000.00"), p.materialCost());
         assertEquals(1, p.lines().size());
+    }
+
+    @Test
+    void listsPartlyBoughtPlansAndCountsBoughtLines() {
+        OrderLineRow nothing = withPlan(line("A-1", "L1", "P1", "B1", null, LocalDate.of(2026, 11, 20)), 2, 0);
+        OrderLineRow partly1 = withPlan(line("B-1", "L1", "P1", "B1", null, LocalDate.of(2026, 11, 21)), 4, 1);
+        OrderLineRow partly2 = withPlan(line("B-1", "L2", "P2", "B2", null, LocalDate.of(2026, 11, 21)), 4, 1);
+        OrderLineRow full = withPlan(line("C-1", "L1", "P1", "B1", null, LocalDate.of(2026, 11, 22)), 3, 3);
+        when(reader.supported()).thenReturn(true);
+        when(reader.orderLines(any(), anyInt())).thenReturn(List.of(nothing, partly1, partly2, full));
+        QuotationService s = service(reader);
+        List<OrderSummary> all = s.orders(null, null, true);
+        assertEquals(List.of("B-1", "A-1"), all.stream().map(OrderSummary::orderNo).toList());
+        assertEquals(4, all.get(0).planLines());
+        assertEquals(1, all.get(0).planLinesBought());
+        s.includePartlyBought = false;
+        assertEquals(List.of("A-1"), s.orders(null, null, true).stream().map(OrderSummary::orderNo).toList());
+    }
+
+    static OrderLineRow withPlan(OrderLineRow r, int lines, int bought) {
+        return new OrderLineRow(r.orderNo(), r.customerCode(), r.customerName(), r.orderDate(), r.deliveryDate(),
+                r.planNo(), r.planDate(), r.lineId(), r.productCode(), r.productName(), r.spec(), r.qty(), r.unit(),
+                r.productBomCode(), r.packagingBomCode(), lines, bought);
     }
 
     @Test

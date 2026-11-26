@@ -67,6 +67,10 @@ public class QuotationService {
     @Value("${erp.purchase.quotation.packaging-class-prefixes:3}")
     private List<String> packagingClassPrefixes = List.of("3");
 
+    /** List plans that are partly bought too (false = only plans with nothing bought yet). */
+    @Value("${erp.purchase.quotation.include-partly-bought:true}")
+    boolean includePartlyBought = true;
+
     Clock clock = Clock.systemUTC();
 
     private volatile Snapshot snapshot;
@@ -169,7 +173,7 @@ public class QuotationService {
             log.warn("Quotation: reading eligible orders from the old ERP failed", e);
             throw new QuotationException(502, "quotation.error.legacyRead");
         }
-        Map<String, List<OrderLineRow>> byOrder = group(rows);
+        Map<String, List<OrderLineRow>> byOrder = group(rows.stream().filter(this::eligible).toList());
         snapshot = new Snapshot(now, byOrder);
         return byOrder;
     }
@@ -189,6 +193,15 @@ public class QuotationService {
         return out;
     }
 
+    /** Not fully bought; with includePartlyBought off, nothing bought at all. */
+    boolean eligible(OrderLineRow r) {
+        if (r.planLines() == null || r.planLinesBought() == null) {
+            return true;
+        }
+        int bought = r.planLinesBought();
+        return includePartlyBought ? bought < r.planLines() : bought == 0;
+    }
+
     /** Keeps the first row of an order line but fills BOM codes found on a duplicate. */
     private static OrderLineRow merge(OrderLineRow a, OrderLineRow b) {
         return new OrderLineRow(a.orderNo(), a.customerCode(), a.customerName(), a.orderDate(), a.deliveryDate(),
@@ -197,7 +210,9 @@ public class QuotationService {
                         ? b.planDate() : a.planDate(),
                 a.lineId(), a.productCode(), a.productName(), a.spec(), a.qty(), a.unit(),
                 a.productBomCode() != null ? a.productBomCode() : b.productBomCode(),
-                a.packagingBomCode() != null ? a.packagingBomCode() : b.packagingBomCode());
+                a.packagingBomCode() != null ? a.packagingBomCode() : b.packagingBomCode(),
+                a.planLines() != null ? a.planLines() : b.planLines(),
+                a.planLinesBought() != null ? a.planLinesBought() : b.planLinesBought());
     }
 
     static OrderSummary summary(List<OrderLineRow> rows) {
@@ -209,10 +224,21 @@ public class QuotationService {
         LocalDate planDate = rows.stream().map(OrderLineRow::planDate).filter(d -> d != null)
                 .max(Comparator.naturalOrder()).orElse(null);
         String planNo = rows.stream().map(OrderLineRow::planNo).filter(p -> p != null).findFirst().orElse(null);
+        // Plan line counts per plan (repeated on every row of that plan), added up over the plans.
+        Map<String, int[]> perPlan = new LinkedHashMap<>();
+        for (OrderLineRow r : rows) {
+            if (r.planLines() != null) {
+                perPlan.putIfAbsent(r.planNo() == null ? "" : r.planNo(),
+                        new int[] {r.planLines(), r.planLinesBought() == null ? 0 : r.planLinesBought()});
+            }
+        }
+        int planLines = perPlan.values().stream().mapToInt(a -> a[0]).sum();
+        int planLinesBought = perPlan.values().stream().mapToInt(a -> a[1]).sum();
         String status = product && packaging ? BOM_BOTH : product ? BOM_PRODUCT_ONLY
                 : packaging ? BOM_PACKAGING_ONLY : BOM_NONE;
         return new OrderSummary(first.orderNo(), first.customerCode(), first.customerName(), first.orderDate(),
-                first.deliveryDate(), planNo, planDate, rows.size(), qty, product, packaging, status);
+                first.deliveryDate(), planNo, planDate, rows.size(), qty, product, packaging, status, planLines,
+                planLinesBought);
     }
 
     static List<OrderLine> lines(List<OrderLineRow> rows) {

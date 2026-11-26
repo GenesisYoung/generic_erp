@@ -25,11 +25,15 @@ public interface LegacyQuotationReader {
     /** Valid supplier prices of the given materials (any order). */
     List<PriceRow> prices(Collection<String> materialCodes);
 
-    /** One customer order line that can be quoted. */
+    /**
+     * One customer order line that can be quoted. {@code planLines} and
+     * {@code planLinesBought} count the lines of its purchase plan and how many
+     * of them already have a purchase order line (null when not known).
+     */
     record OrderLineRow(String orderNo, String customerCode, String customerName, LocalDate orderDate,
             LocalDate deliveryDate, String planNo, LocalDate planDate, String lineId, String productCode,
             String productName, String spec, BigDecimal qty, String unit, String productBomCode,
-            String packagingBomCode) {
+            String packagingBomCode, Integer planLines, Integer planLinesBought) {
     }
 
     /**

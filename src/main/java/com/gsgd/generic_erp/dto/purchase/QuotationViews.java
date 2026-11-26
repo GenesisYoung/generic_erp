@@ -35,7 +35,8 @@ public final class QuotationViews {
      */
     public record OrderSummary(String orderNo, String customerCode, String customerName, LocalDate orderDate,
             LocalDate deliveryDate, String planNo, LocalDate planDate, int lineCount, BigDecimal totalQty,
-            boolean hasProductBom, boolean hasPackagingBom, String bomStatus) {
+            boolean hasProductBom, boolean hasPackagingBom, String bomStatus, int planLines,
+            int planLinesBought) {
     }
 
     public record OrderLine(String lineId, String productCode, String productName, String spec, BigDecimal qty,

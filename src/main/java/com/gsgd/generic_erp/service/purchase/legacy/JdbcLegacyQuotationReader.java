@@ -58,7 +58,8 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
                 date(rs, "order_date"), date(rs, "delivery_date"), str(rs, "plan_no"), date(rs, "plan_date"),
                 str(rs, "line_id"), str(rs, "product_code"), str(rs, "product_name"), str(rs, "spec"),
                 num(rs, "qty"), str(rs, "unit"), blankToNull(str(rs, "product_bom_code")),
-                blankToNull(str(rs, "packaging_bom_code"))));
+                blankToNull(str(rs, "packaging_bom_code")), optInt(rs, "plan_lines"),
+                optInt(rs, "plan_lines_bought")));
     }
 
     @Override
@@ -117,5 +118,15 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
     private static Integer integer(ResultSet rs, String col) throws SQLException {
         int v = rs.getInt(col);
         return rs.wasNull() ? null : v;
+    }
+
+    /** Like {@link #integer} but null when a custom query leaves the column out. */
+    private static Integer optInt(ResultSet rs, String col) throws SQLException {
+        try {
+            rs.findColumn(col);
+        } catch (SQLException missing) {
+            return null;
+        }
+        return integer(rs, col);
     }
 }

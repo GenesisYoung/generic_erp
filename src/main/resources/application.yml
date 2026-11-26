@@ -105,6 +105,8 @@ erp:
       # Price check, same rule as the purchasing BOM sheets: OK when 0.8 < price / last PO price < 1.2.
       price-check-low: 0.8
       price-check-high: 1.2
+      # List purchase plans that are partly bought too (true), or only plans with nothing bought (false).
+      include-partly-bought: ${ERP_QUOTATION_INCLUDE_PARTLY_BOUGHT:true}
     exception:
       # 采购异常: who is alerted when an exception is reported or changes status
       # (besides the reporter, the order's purchaser and the handler).
@@ -261,7 +263,9 @@ erp:
       lookback-days: ${ERP_QUOTATION_LOOKBACK_DAYS:90}
       batch-limit: 5000
       # One row per customer order line of an OPEN purchase plan (PLANORDER1) dated on or after
-      # :since that has NO purchase order line yet (ORDSPHS2.PLANERI = PLANORDER2.ERI).
+      # :since that is not fully bought: plan_lines = its lines, plan_lines_bought = lines with a
+      # purchase order line (ORDSPHS2.PLANERI = PLANORDER2.ERI). Partly bought plans are listed
+      # (decided 2026-11-26; see erp.purchase.quotation.include-partly-bought).
       # Plan line -> order line: PLANORDER2.FROMORDERI = ORDCORD2.ERI (checked 2026-11-20).
       order-query: |
         SELECT
@@ -279,7 +283,9 @@ erp:
             cl.QTY                                                AS qty,
             RTRIM(cl.UNIT)                                        AS unit,
             pb.bom_code                                           AS product_bom_code,
-            kb.bom_code                                           AS packaging_bom_code
+            kb.bom_code                                           AS packaging_bom_code,
+            pc.plan_lines                                         AS plan_lines,
+            pc.plan_lines_bought                                  AS plan_lines_bought
         FROM (
             SELECT DISTINCT MASTERI, FROMORDERI FROM PLANORDER2 WITH (NOLOCK)
             WHERE ISNULL(FROMORDERI, '') <> ''
@@ -298,13 +304,20 @@ erp:
             SELECT TOP 1 RTRIM(o3.CODE) AS bom_code FROM ORDBOM3 o3 WITH (NOLOCK)
             WHERE ISNULL(cl.BOMCODE, '') <> '' AND o3.CODE = cl.BOMCODE
         ) kb
+        OUTER APPLY (
+            -- has_po is worked out first; only that plain column is summed (SQL Server error 130).
+            SELECT COUNT(*) AS plan_lines, SUM(f.has_po) AS plan_lines_bought
+            FROM (
+                SELECT CASE WHEN EXISTS (SELECT 1 FROM ORDSPHS2 p WITH (NOLOCK) WHERE p.PLANERI = l2.ERI)
+                            THEN 1 ELSE 0 END AS has_po
+                FROM PLANORDER2 l2 WITH (NOLOCK)
+                WHERE l2.MASTERI = h.ERI
+            ) f
+        ) pc
         WHERE h.SDATE >= :since
           AND h.CLOSETYPE = 0
           AND co.CLOSETYPE = 0
-          AND NOT EXISTS (
-              SELECT 1 FROM PLANORDER2 l2 WITH (NOLOCK)
-              JOIN ORDSPHS2 p WITH (NOLOCK) ON p.PLANERI = l2.ERI
-              WHERE l2.MASTERI = h.ERI)
+          AND pc.plan_lines_bought < pc.plan_lines
       # Lines of both order BOMs of each line of :orderNo (checked 2026-11-26, round 2):
       #  - PRODUCT  = ORDBOM2, lines of ORDBOM1 (ORDBOM1.CODE = ORDCORD2.BOMCODE or SRCERI = line ERI);
       #  - PACKAGING = ORDBOM3, ORDBOM3.CODE = ORDCORD2.BOMCODE (1,191 of 1,191 lines with

@@ -55,7 +55,8 @@ class QuotationCalculatorTest {
 
     static Plan calc(String orderQty, Map<String, String> selections, Settings settings, BigDecimal margin) {
         OrderSummary order = new OrderSummary("26394-W53", "C1", "Customer", LocalDate.of(2026, 11, 16), null,
-                "26394-W53", LocalDate.of(2026, 11, 16), 1, new BigDecimal(orderQty), true, false, "PRODUCT_ONLY");
+                "26394-W53", LocalDate.of(2026, 11, 16), 1, new BigDecimal(orderQty), true, false, "PRODUCT_ONLY",
+                0, 0);
         List<OrderLine> lines = List.of(new OrderLine("L1", "P-1", "Lamp", null, new BigDecimal(orderQty), "PCS",
                 "BOM-1", null));
         List<BomLineRow> bom = List.of(
@@ -139,7 +140,7 @@ class QuotationCalculatorTest {
                 .map(f -> new Fee(f.code(), f.base(), f.ratePercent(), f.code().equals("TAX"))).toList();
         Settings onlyTax = new Settings(fees, s.marginTiers(), s.priceCheckLow(), s.priceCheckHigh());
         OrderSummary order = new OrderSummary("X", null, null, null, null, null, null, 1, BigDecimal.TEN, false,
-                false, "NONE");
+                false, "NONE", 0, 0);
         Plan p = QuotationCalculator.calculate(new QuotationCalculator.Input(order,
                 List.of(new OrderLine("L1", "P", null, null, BigDecimal.TEN, null, null, null)),
                 List.of(bom("PACKAGING", "Z", "202", "3", true, null)), List.of(), onlyTax, null, null,
