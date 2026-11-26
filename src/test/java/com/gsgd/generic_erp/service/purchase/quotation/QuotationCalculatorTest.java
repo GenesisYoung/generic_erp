@@ -35,11 +35,18 @@ import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.PriceR
  */
 class QuotationCalculatorTest {
 
+    @Test
+    void taxFeeDefaultsToZeroBecausePricesIncludeTax() {
+        assertEquals(0, BigDecimal.ZERO.compareTo(QuotationFeeCode.TAX.defaultRate()));
+    }
+
     static final Locale EN = Locale.US;
 
+    /** The purchasing department's original rates (tax 6%), so the worked examples keep a PRICE fee. */
     static Settings defaults() {
         List<Fee> fees = java.util.Arrays.stream(QuotationFeeCode.values())
-                .map(c -> new Fee(c.name(), c.defaultBase().name(), c.defaultRate(), true)).toList();
+                .map(c -> new Fee(c.name(), c.defaultBase().name(),
+                        c == QuotationFeeCode.TAX ? new BigDecimal("6") : c.defaultRate(), true)).toList();
         return new Settings(fees, QuotationSettingsService.DEFAULT_TIERS, new BigDecimal("0.8"),
                 new BigDecimal("1.2"));
     }
