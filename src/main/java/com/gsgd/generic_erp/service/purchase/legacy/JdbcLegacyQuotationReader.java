@@ -14,6 +14,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -73,7 +75,7 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
             return List.of();
         }
         Map<String, Object> params = bomParams(orderNo, lineIds);
-        return onCleanSession(t -> t.query(bomLineQuery, params, (rs, i) -> new BomLineRow(
+        return onCleanSession(t -> t.getJdbcTemplate().query(inline(bomLineQuery, params), (rs, i) -> new BomLineRow(
                 blankToNull(str(rs, "bom_kind")), str(rs, "bom_code"), str(rs, "line_id"), str(rs, "product_code"),
                 num(rs, "order_qty"), integer(rs, "line_no"), integer(rs, "bom_level"), str(rs, "material_code"),
                 str(rs, "material_name"), str(rs, "spec"), str(rs, "unit"), str(rs, "material_class"),
@@ -107,6 +109,53 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
             st.setMaxRows(0);
             st.execute("SET FMTONLY OFF; SET ROWCOUNT 0;");
         }
+    }
+
+    private static final Pattern PARAM = Pattern.compile("(?<![:\\w]):(\\w+)");
+
+    /**
+     * Puts the values into the SQL as quoted literals and runs it as a plain
+     * statement. Through JDBC, parameterised statements on this old ERP came
+     * back without rows (2026-11-26) while plain ones worked. Values are
+     * codes read from the old ERP; quotes are doubled and control characters
+     * refused, so a value can never end the literal.
+     */
+    static String inline(String sql, Map<String, Object> params) {
+        Matcher m = PARAM.matcher(sql);
+        StringBuilder out = new StringBuilder();
+        while (m.find()) {
+            String name = m.group(1);
+            if (!params.containsKey(name)) {
+                throw new IllegalArgumentException("No value for :" + name);
+            }
+            Object v = params.get(name);
+            String lit;
+            if (v instanceof Collection<?> c) {
+                if (c.isEmpty()) {
+                    throw new IllegalArgumentException("Empty list for :" + name);
+                }
+                List<String> parts = new ArrayList<>();
+                for (Object o : c) {
+                    parts.add(literal(String.valueOf(o)));
+                }
+                lit = String.join(", ", parts);
+            } else {
+                lit = literal(String.valueOf(v));
+            }
+            m.appendReplacement(out, Matcher.quoteReplacement(lit));
+        }
+        m.appendTail(out);
+        return out.toString();
+    }
+
+    static String literal(String v) {
+        for (int i = 0; i < v.length(); i++) {
+            if (Character.isISOControl(v.charAt(i))) {
+                throw new IllegalArgumentException("Control character in a value");
+            }
+        }
+        boolean ascii = v.chars().allMatch(ch -> ch < 128);
+        return (ascii ? "'" : "N'") + v.replace("'", "''") + "'";
     }
 
     private static int rowsOf(Connection con, String sql) throws SQLException {
@@ -146,12 +195,14 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
                     .append(rowsOf(con, "SELECT 1 AS one")).append(" row(s)");
             JdbcTemplate single = new JdbcTemplate(new SingleConnectionDataSource(con, true));
             single.setMaxRows(0);
-            List<String> counts = new NamedParameterJdbcTemplate(single).query(DIAGNOSE_QUERY, params,
-                    (rs, i) -> "orders with this no.=" + rs.getInt("orders") + ", order lines found="
+            org.springframework.jdbc.core.RowMapper<String> countMapper = (rs, i) -> "orders with this no.=" + rs.getInt("orders") + ", order lines found="
                             + rs.getInt("lines") + ", lines with BOMCODE=" + rs.getInt("lines_with_bomcode")
                             + ", product BOM headers=" + rs.getInt("product_headers") + ", packaging BOM rows="
-                            + rs.getInt("packaging_rows"));
-            sb.append("; counts: ").append(counts.isEmpty() ? "no row" : counts.get(0));
+                            + rs.getInt("packaging_rows");
+            List<String> prepared = new NamedParameterJdbcTemplate(single).query(DIAGNOSE_QUERY, params, countMapper);
+            sb.append("; counts with parameters: ").append(prepared.isEmpty() ? "no row" : prepared.get(0));
+            List<String> literal = single.query(inline(DIAGNOSE_QUERY, params), countMapper);
+            sb.append("; counts with literal values: ").append(literal.isEmpty() ? "no row" : literal.get(0));
             return sb.toString();
         });
     }
@@ -182,7 +233,8 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
             List<PriceRow> out = new ArrayList<>();
             for (int from = 0; from < codes.size(); from += IN_CHUNK) {
                 List<String> chunk = codes.subList(from, Math.min(codes.size(), from + IN_CHUNK));
-                out.addAll(t.query(priceQuery, Map.of("materialCodes", chunk), (rs, i) -> new PriceRow(
+                out.addAll(t.getJdbcTemplate().query(inline(priceQuery, Map.of("materialCodes", chunk)),
+                        (rs, i) -> new PriceRow(
                         str(rs, "material_code"), str(rs, "supplier_code"), str(rs, "supplier_name"),
                         num(rs, "price"), num(rs, "tax_rate"), blankToNull(str(rs, "currency")),
                         date(rs, "valid_from"), date(rs, "valid_to"))));
