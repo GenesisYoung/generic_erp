@@ -10,6 +10,8 @@ import java.util.Map;
  * Request and response shapes of the purchase quotation (报价方案) API. All
  * rates are percentages (2.5 = 2.5%); amounts are in the purchase strategy's
  * currency (one currency per quotation; a warning says when prices mix).
+ * Material prices INCLUDE tax (last purchase ORDSPHS2.PRICETAX, purchase
+ * strategy PHSSPROMOT2.PRICE, typed-in prices).
  */
 public final class QuotationViews {
 
@@ -39,25 +41,71 @@ public final class QuotationViews {
             int planLinesBought) {
     }
 
+    /**
+     * One order line (product). {@code materialCost}: its priced BOM lines;
+     * {@code totalPrice}: its share of the quotation total (fees and margin
+     * are percentages, so the same rates as the whole order);
+     * {@code unitPrice} = totalPrice / qty. The three are null on the way in
+     * and when the line has no priced material.
+     */
     public record OrderLine(String lineId, String productCode, String productName, String spec, BigDecimal qty,
-            String unit, String productBomCode, String packagingBomCode) {
-    }
+            String unit, String productBomCode, String packagingBomCode, BigDecimal materialCost,
+            BigDecimal totalPrice, BigDecimal unitPrice) {
 
-    public record SupplierPrice(String supplierCode, String supplierName, BigDecimal price, BigDecimal taxRate,
-            String currency, LocalDate validFrom, LocalDate validTo) {
+        public OrderLine(String lineId, String productCode, String productName, String spec, BigDecimal qty,
+                String unit, String productBomCode, String packagingBomCode) {
+            this(lineId, productCode, productName, spec, qty, unit, productBomCode, packagingBomCode, null, null,
+                    null);
+        }
     }
 
     /**
-     * One priced BOM line. {@code kind} PRODUCT or PACKAGING. {@code suppliers}
-     * cheapest first. {@code priceCheck}: OK, HIGH, LOW (selected price
-     * outside the band around {@code basePrice}, the last purchase price),
-     * NO_BASE (no earlier purchase) or NO_PRICE (no supplier price).
+     * One price a material can be bought at. {@code source} LAST_PURCHASE (the
+     * material's most recent purchase order line: {@code purchaseDate},
+     * {@code poNo}) or STRATEGY (purchase strategy 采购策略: {@code validFrom} /
+     * {@code validTo}). {@code key} is what {@link CalculateRequest#selections}
+     * names to choose it: {@link #LAST_PURCHASE_KEY} or the supplier code of a
+     * strategy price.
      */
-    public record Item(String kind, String bomCode, String productCode, Integer lineNo, Integer level,
+    public record SupplierPrice(String key, String source, String supplierCode, String supplierName,
+            BigDecimal price, BigDecimal taxRate, String currency, LocalDate validFrom, LocalDate validTo,
+            LocalDate purchaseDate, String poNo) {
+
+        public static final String LAST_PURCHASE_KEY = "LAST_PURCHASE";
+
+        /** A purchase strategy price. */
+        public static SupplierPrice strategy(String supplierCode, String supplierName, BigDecimal price,
+                BigDecimal taxRate, String currency, LocalDate validFrom, LocalDate validTo) {
+            return new SupplierPrice(supplierCode, PRICE_SOURCE_STRATEGY, supplierCode, supplierName, price,
+                    taxRate, currency, validFrom, validTo, null, null);
+        }
+    }
+
+    public static final String PRICE_SOURCE_LAST_PURCHASE = "LAST_PURCHASE";
+    public static final String PRICE_SOURCE_STRATEGY = "STRATEGY";
+    /** Unit price typed in by the purchaser ({@link CalculateRequest#manualPrices}). */
+    public static final String PRICE_SOURCE_MANUAL = "MANUAL";
+
+    /**
+     * One priced BOM line. {@code kind} PRODUCT or PACKAGING. {@code suppliers}:
+     * the last purchase price first (when the material was bought before),
+     * then the purchase strategy prices, cheapest first. Without a choice of
+     * the purchaser the last purchase price is used, and the cheapest strategy
+     * price only when there is none. {@code priceSource} says which one the
+     * line uses (LAST_PURCHASE / STRATEGY / MANUAL, null without a price);
+     * {@code lastPurchaseDate} is set when it is LAST_PURCHASE.
+     * {@code cheapestPrice} is the cheapest strategy price. {@code priceCheck}:
+     * OK, HIGH, LOW (selected price outside the band around {@code basePrice},
+     * the last purchase price), NO_BASE (no earlier purchase) or NO_PRICE (no
+     * price at all).
+     */
+    public record Item(String kind, String bomCode, String lineId, String productCode, Integer lineNo,
+            Integer level,
             String materialCode, String materialName, String spec, String unit, String materialClass,
             BigDecimal qtyPerUnit, BigDecimal orderQty, BigDecimal totalQty, List<SupplierPrice> suppliers,
-            String selectedSupplierCode, String selectedSupplierName, BigDecimal unitPrice, BigDecimal amount,
-            BigDecimal cheapestPrice, BigDecimal basePrice, String priceCheck) {
+            String selectedKey, String selectedSupplierCode, String selectedSupplierName, BigDecimal unitPrice,
+            BigDecimal amount, BigDecimal cheapestPrice, BigDecimal basePrice, String priceCheck,
+            String priceSource, LocalDate lastPurchaseDate, String lastPurchaseNo) {
     }
 
     /** {@code amount} = {@code baseAmount} x {@code ratePercent} / 100. */
@@ -84,10 +132,19 @@ public final class QuotationViews {
 
     /**
      * Changes the purchaser makes on the quotation page. {@code selections}:
-     * material code to supplier code (missing = cheapest). {@code fees}: rate
+     * material code to the {@link SupplierPrice#key} of the price to use
+     * (LAST_PURCHASE or a strategy supplier code; missing = last purchase,
+     * else cheapest strategy price). {@code manualPrices}: material code to a
+     * unit price including tax typed in by the purchaser, for a material
+     * without any price; it wins over every other price (0 or less = none). {@code fees}: rate
      * overrides by code for this quotation only. {@code marginRate}: fixed
      * margin instead of the tier (null = tier).
      */
-    public record CalculateRequest(Map<String, String> selections, List<Fee> fees, BigDecimal marginRate) {
+    public record CalculateRequest(Map<String, String> selections, List<Fee> fees, BigDecimal marginRate,
+            Map<String, BigDecimal> manualPrices) {
+
+        public CalculateRequest(Map<String, String> selections, List<Fee> fees, BigDecimal marginRate) {
+            this(selections, fees, marginRate, null);
+        }
     }
 }

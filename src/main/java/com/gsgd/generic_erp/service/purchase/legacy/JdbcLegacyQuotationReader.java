@@ -1,11 +1,9 @@
 package com.gsgd.generic_erp.service.purchase.legacy;
 
 import java.math.BigDecimal;
-import java.sql.Connection;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -13,14 +11,9 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
 /**
  * Runs the configured quotation SELECTs ({@code erp.legacy.quotation.*})
@@ -32,7 +25,14 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
     /** SQL Server allows 2,100 parameters per statement; stay well below. */
     static final int IN_CHUNK = 1000;
 
+    /** Order list: its maxRows is set to the batch limit on every call. */
     private final NamedParameterJdbcTemplate jdbc;
+    /**
+     * BOM lines and prices: never limited. Spring 7 treats every maxRows
+     * other than -1 as a limit that its row mappers apply themselves, so 0
+     * means "no row at all", not "no limit" as in JDBC.
+     */
+    private final NamedParameterJdbcTemplate unlimited;
     private final String orderQuery;
     private final String bomLineQuery;
     private final String priceQuery;
@@ -40,6 +40,10 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
     public JdbcLegacyQuotationReader(JdbcTemplate jdbcTemplate, String orderQuery, String bomLineQuery,
             String priceQuery) {
         this.jdbc = new NamedParameterJdbcTemplate(jdbcTemplate);
+        JdbcTemplate all = new JdbcTemplate(jdbcTemplate.getDataSource());
+        all.setQueryTimeout(jdbcTemplate.getQueryTimeout());
+        all.setMaxRows(-1);
+        this.unlimited = new NamedParameterJdbcTemplate(all);
         this.orderQuery = check(orderQuery, "erp.legacy.quotation.order-query");
         this.bomLineQuery = check(bomLineQuery, "erp.legacy.quotation.bom-line-query");
         this.priceQuery = check(priceQuery, "erp.legacy.quotation.price-query");
@@ -74,98 +78,16 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
         if (bomLineQuery == null || lineIds == null || lineIds.isEmpty()) {
             return List.of();
         }
-        Map<String, Object> params = bomParams(orderNo, lineIds);
-        return onCleanSession(t -> t.getJdbcTemplate().query(inline(bomLineQuery, params), (rs, i) -> new BomLineRow(
+        return unlimited.query(bomLineQuery, bomParams(orderNo, lineIds), (rs, i) -> new BomLineRow(
                 blankToNull(str(rs, "bom_kind")), str(rs, "bom_code"), str(rs, "line_id"), str(rs, "product_code"),
                 num(rs, "order_qty"), integer(rs, "line_no"), integer(rs, "bom_level"), str(rs, "material_code"),
                 str(rs, "material_name"), str(rs, "spec"), str(rs, "unit"), str(rs, "material_class"),
                 num(rs, "qty_per_unit"), rs.getInt("leaf") != 0, num(rs, "base_price"),
-                blankToNull(str(rs, "line_key")), blankToNull(str(rs, "parent_key")))));
+                blankToNull(str(rs, "line_key")), blankToNull(str(rs, "parent_key")), lastPurchase(rs)));
     }
 
     private static Map<String, Object> bomParams(String orderNo, Collection<String> lineIds) {
         return Map.of("orderNo", orderNo == null ? "" : orderNo, "lineIds", List.copyOf(new LinkedHashSet<>(lineIds)));
-    }
-
-    /**
-     * Runs {@code work} on ONE pooled connection after switching off the two
-     * session options that make SQL Server send result sets without rows:
-     * FMTONLY (column information only) and ROWCOUNT (row limit, which the
-     * driver uses for maxRows). Neither changes data. The driver is told the
-     * limit is 0 again, so it stays in step with the session.
-     */
-    private <T> T onCleanSession(Function<NamedParameterJdbcTemplate, T> work) {
-        return jdbc.getJdbcTemplate().execute((ConnectionCallback<T>) con -> {
-            resetSession(con);
-            JdbcTemplate single = new JdbcTemplate(new SingleConnectionDataSource(con, true));
-            single.setQueryTimeout(jdbc.getJdbcTemplate().getQueryTimeout());
-            single.setMaxRows(0);
-            return work.apply(new NamedParameterJdbcTemplate(single));
-        });
-    }
-
-    private static void resetSession(Connection con) throws SQLException {
-        try (Statement st = con.createStatement()) {
-            st.setMaxRows(0);
-            st.execute("SET FMTONLY OFF; SET ROWCOUNT 0;");
-        }
-    }
-
-    private static final Pattern PARAM = Pattern.compile("(?<![:\\w]):(\\w+)");
-
-    /**
-     * Puts the values into the SQL as quoted literals and runs it as a plain
-     * statement. Through JDBC, parameterised statements on this old ERP came
-     * back without rows (2026-11-26) while plain ones worked. Values are
-     * codes read from the old ERP; quotes are doubled and control characters
-     * refused, so a value can never end the literal.
-     */
-    static String inline(String sql, Map<String, Object> params) {
-        Matcher m = PARAM.matcher(sql);
-        StringBuilder out = new StringBuilder();
-        while (m.find()) {
-            String name = m.group(1);
-            if (!params.containsKey(name)) {
-                throw new IllegalArgumentException("No value for :" + name);
-            }
-            Object v = params.get(name);
-            String lit;
-            if (v instanceof Collection<?> c) {
-                if (c.isEmpty()) {
-                    throw new IllegalArgumentException("Empty list for :" + name);
-                }
-                List<String> parts = new ArrayList<>();
-                for (Object o : c) {
-                    parts.add(literal(String.valueOf(o)));
-                }
-                lit = String.join(", ", parts);
-            } else {
-                lit = literal(String.valueOf(v));
-            }
-            m.appendReplacement(out, Matcher.quoteReplacement(lit));
-        }
-        m.appendTail(out);
-        return out.toString();
-    }
-
-    static String literal(String v) {
-        for (int i = 0; i < v.length(); i++) {
-            if (Character.isISOControl(v.charAt(i))) {
-                throw new IllegalArgumentException("Control character in a value");
-            }
-        }
-        boolean ascii = v.chars().allMatch(ch -> ch < 128);
-        return (ascii ? "'" : "N'") + v.replace("'", "''") + "'";
-    }
-
-    private static int rowsOf(Connection con, String sql) throws SQLException {
-        try (Statement st = con.createStatement(); ResultSet rs = st.executeQuery(sql)) {
-            int n = 0;
-            while (rs.next()) {
-                n++;
-            }
-            return n;
-        }
     }
 
     @Override
@@ -173,38 +95,11 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
         if (lineIds == null || lineIds.isEmpty()) {
             return "no order line ids";
         }
-        Map<String, Object> params = bomParams(orderNo, lineIds);
-        return jdbc.getJdbcTemplate().execute((ConnectionCallback<String>) con -> {
-            StringBuilder sb = new StringBuilder();
-            sb.append("'SELECT 1' before reset returned ").append(rowsOf(con, "SELECT 1 AS one")).append(" row(s)");
-            try (Statement st = con.createStatement(); ResultSet rs = st.executeQuery(
-                    "SELECT @@SPID AS spid, @@SERVERNAME AS server_name, DB_NAME() AS db_name,"
-                            + " SUSER_SNAME() AS login_name, @@OPTIONS AS options,"
-                            + " CAST(SERVERPROPERTY('ProductVersion') AS varchar(30)) AS version")) {
-                if (rs.next()) {
-                    sb.append("; spid=").append(rs.getInt("spid")).append(", server=")
-                            .append(rs.getString("server_name")).append(", database=").append(rs.getString("db_name"))
-                            .append(", login=").append(rs.getString("login_name")).append(", options=")
-                            .append(rs.getInt("options")).append(", version=").append(rs.getString("version"));
-                } else {
-                    sb.append("; the session query returned no row");
-                }
-            }
-            resetSession(con);
-            sb.append("; 'SELECT 1' after SET FMTONLY OFF / ROWCOUNT 0 returned ")
-                    .append(rowsOf(con, "SELECT 1 AS one")).append(" row(s)");
-            JdbcTemplate single = new JdbcTemplate(new SingleConnectionDataSource(con, true));
-            single.setMaxRows(0);
-            org.springframework.jdbc.core.RowMapper<String> countMapper = (rs, i) -> "orders with this no.=" + rs.getInt("orders") + ", order lines found="
-                            + rs.getInt("lines") + ", lines with BOMCODE=" + rs.getInt("lines_with_bomcode")
-                            + ", product BOM headers=" + rs.getInt("product_headers") + ", packaging BOM rows="
-                            + rs.getInt("packaging_rows");
-            List<String> prepared = new NamedParameterJdbcTemplate(single).query(DIAGNOSE_QUERY, params, countMapper);
-            sb.append("; counts with parameters: ").append(prepared.isEmpty() ? "no row" : prepared.get(0));
-            List<String> literal = single.query(inline(DIAGNOSE_QUERY, params), countMapper);
-            sb.append("; counts with literal values: ").append(literal.isEmpty() ? "no row" : literal.get(0));
-            return sb.toString();
-        });
+        List<String> counts = unlimited.query(DIAGNOSE_QUERY, bomParams(orderNo, lineIds),
+                (rs, i) -> "orders with this no.=" + rs.getInt("orders") + ", order lines found=" + rs.getInt("lines")
+                        + ", lines with BOMCODE=" + rs.getInt("lines_with_bomcode") + ", product BOM headers="
+                        + rs.getInt("product_headers") + ", packaging BOM rows=" + rs.getInt("packaging_rows"));
+        return counts.isEmpty() ? "the check query returned no row" : counts.get(0);
     }
 
     /** Counts each step of the BOM lookup; scalar subqueries only, nothing inside an aggregate. */
@@ -229,18 +124,15 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
             return List.of();
         }
         List<String> codes = new ArrayList<>(new LinkedHashSet<>(materialCodes));
-        return onCleanSession(t -> {
-            List<PriceRow> out = new ArrayList<>();
-            for (int from = 0; from < codes.size(); from += IN_CHUNK) {
-                List<String> chunk = codes.subList(from, Math.min(codes.size(), from + IN_CHUNK));
-                out.addAll(t.getJdbcTemplate().query(inline(priceQuery, Map.of("materialCodes", chunk)),
-                        (rs, i) -> new PriceRow(
-                        str(rs, "material_code"), str(rs, "supplier_code"), str(rs, "supplier_name"),
-                        num(rs, "price"), num(rs, "tax_rate"), blankToNull(str(rs, "currency")),
-                        date(rs, "valid_from"), date(rs, "valid_to"))));
-            }
-            return out;
-        });
+        List<PriceRow> out = new ArrayList<>();
+        for (int from = 0; from < codes.size(); from += IN_CHUNK) {
+            List<String> chunk = codes.subList(from, Math.min(codes.size(), from + IN_CHUNK));
+            out.addAll(unlimited.query(priceQuery, Map.of("materialCodes", chunk), (rs, i) -> new PriceRow(
+                    str(rs, "material_code"), str(rs, "supplier_code"), str(rs, "supplier_name"),
+                    num(rs, "price"), num(rs, "tax_rate"), blankToNull(str(rs, "currency")),
+                    date(rs, "valid_from"), date(rs, "valid_to"))));
+        }
+        return out;
     }
 
     private static String str(ResultSet rs, String col) throws SQLException {
@@ -267,6 +159,32 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
     private static Integer integer(ResultSet rs, String col) throws SQLException {
         int v = rs.getInt(col);
         return rs.wasNull() ? null : v;
+    }
+
+    /** The last purchase columns; null when the query leaves them out or the material was never bought. */
+    private static LegacyQuotationReader.LastPurchase lastPurchase(ResultSet rs) throws SQLException {
+        if (!hasColumn(rs, "last_supplier_code")) {
+            return null;
+        }
+        String supplier = blankToNull(str(rs, "last_supplier_code"));
+        if (supplier == null) {
+            return null;
+        }
+        return new LegacyQuotationReader.LastPurchase(supplier,
+                hasColumn(rs, "last_supplier_name") ? blankToNull(str(rs, "last_supplier_name")) : null,
+                hasColumn(rs, "last_purchase_date") ? date(rs, "last_purchase_date") : null,
+                hasColumn(rs, "last_po_no") ? blankToNull(str(rs, "last_po_no")) : null,
+                hasColumn(rs, "last_tax_rate") ? num(rs, "last_tax_rate") : null,
+                hasColumn(rs, "last_currency") ? blankToNull(str(rs, "last_currency")) : null);
+    }
+
+    private static boolean hasColumn(ResultSet rs, String col) {
+        try {
+            rs.findColumn(col);
+            return true;
+        } catch (SQLException missing) {
+            return false;
+        }
     }
 
     /** Like {@link #integer} but null when a custom query leaves the column out. */

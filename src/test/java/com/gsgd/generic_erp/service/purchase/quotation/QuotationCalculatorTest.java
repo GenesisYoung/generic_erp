@@ -23,6 +23,7 @@ import com.gsgd.generic_erp.dto.purchase.QuotationViews.Plan;
 import com.gsgd.generic_erp.dto.purchase.QuotationViews.Settings;
 import com.gsgd.generic_erp.enums.QuotationFeeCode;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.BomLineRow;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.LastPurchase;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.PriceRow;
 
 /**
@@ -34,11 +35,18 @@ import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.PriceR
  */
 class QuotationCalculatorTest {
 
+    @Test
+    void taxFeeDefaultsToZeroBecausePricesIncludeTax() {
+        assertEquals(0, BigDecimal.ZERO.compareTo(QuotationFeeCode.TAX.defaultRate()));
+    }
+
     static final Locale EN = Locale.US;
 
+    /** The purchasing department's original rates (tax 6%), so the worked examples keep a PRICE fee. */
     static Settings defaults() {
         List<Fee> fees = java.util.Arrays.stream(QuotationFeeCode.values())
-                .map(c -> new Fee(c.name(), c.defaultBase().name(), c.defaultRate(), true)).toList();
+                .map(c -> new Fee(c.name(), c.defaultBase().name(),
+                        c == QuotationFeeCode.TAX ? new BigDecimal("6") : c.defaultRate(), true)).toList();
         return new Settings(fees, QuotationSettingsService.DEFAULT_TIERS, new BigDecimal("0.8"),
                 new BigDecimal("1.2"));
     }
@@ -191,5 +199,126 @@ class QuotationCalculatorTest {
         assertEquals(0, new BigDecimal("6").compareTo(q.get("E2")));
         assertEquals(0, new BigDecimal("4").compareTo(q.get("E4")));
         assertEquals(0, new BigDecimal("10").compareTo(q.get("E5")));
+    }
+
+    static BomLineRow bought(String material, String base, String supplier, LocalDate date) {
+        return new BomLineRow(null, "BOM-1", "L1", "P-1", null, 1, 1, material, material + " name", "spec", "PCS",
+                "202", BigDecimal.ONE, true, new BigDecimal(base), null, null,
+                new LastPurchase(supplier, supplier + " Ltd", date, "P2611", new BigDecimal("13"), "RMB"));
+    }
+
+    static Plan calcRows(List<BomLineRow> bom, List<PriceRow> prices, Map<String, String> selections) {
+        OrderSummary order = new OrderSummary("O", null, null, null, null, null, null, 1, BigDecimal.TEN, true,
+                false, "PRODUCT_ONLY", 0, 0);
+        List<OrderLine> lines = List.of(new OrderLine("L1", "P-1", "Lamp", null, BigDecimal.TEN, "PCS", "BOM-1",
+                null));
+        return QuotationCalculator.calculate(new QuotationCalculator.Input(order, lines, bom, prices, defaults(),
+                selections, null, List.of("3"), LocalDateTime.of(2026, 11, 26, 9, 0), EN));
+    }
+
+    @Test
+    void lastPurchasePriceComesFirstEvenWhenAStrategyPriceIsLower() {
+        LocalDate day = LocalDate.of(2026, 10, 3);
+        Plan p = calcRows(List.of(bought("A", "1.70", "S7", day)),
+                List.of(price("A", "S1", "1.50"), price("A", "S2", "1.80")), Map.of());
+
+        Item a = p.productItems().get(0);
+        assertEquals("LAST_PURCHASE", a.priceSource());
+        assertEquals("LAST_PURCHASE", a.selectedKey());
+        assertEquals("S7", a.selectedSupplierCode(), "supplier of the last purchase");
+        assertEquals(0, bd("1.70").compareTo(a.unitPrice()));
+        assertEquals(day, a.lastPurchaseDate());
+        assertEquals("P2611", a.lastPurchaseNo());
+        assertEquals(3, a.suppliers().size(), "last purchase + two strategy prices");
+        assertEquals("LAST_PURCHASE", a.suppliers().get(0).source());
+        assertEquals(day, a.suppliers().get(0).purchaseDate());
+        assertEquals("STRATEGY", a.suppliers().get(1).source());
+        assertEquals(0, bd("1.50").compareTo(a.cheapestPrice()), "cheapest strategy price still shown");
+        assertEquals("OK", a.priceCheck());
+        assertEquals(bd("17.00"), p.productMaterialCost());
+    }
+
+    @Test
+    void strategyPriceOnlyWhenTheMaterialWasNeverBought() {
+        Plan p = calcRows(List.of(bom(null, "N", "202", "1", true, null)),
+                List.of(price("N", "S2", "1.80"), price("N", "S1", "1.50")), Map.of());
+
+        Item n = p.productItems().get(0);
+        assertEquals("STRATEGY", n.priceSource());
+        assertEquals("S1", n.selectedSupplierCode(), "best strategy price");
+        assertEquals("S1", n.selectedKey());
+        assertNull(n.lastPurchaseDate());
+        assertEquals("NO_BASE", n.priceCheck());
+    }
+
+    @Test
+    void purchaserCanPickAStrategyPriceOfTheSameSupplierOrGoBack() {
+        LocalDate day = LocalDate.of(2026, 10, 3);
+        List<BomLineRow> bom = List.of(bought("A", "1.70", "S1", day));
+        List<PriceRow> prices = List.of(price("A", "S1", "1.50"));
+
+        Item picked = calcRows(bom, prices, Map.of("A", "S1")).productItems().get(0);
+        assertEquals("STRATEGY", picked.priceSource());
+        assertEquals(0, bd("1.50").compareTo(picked.unitPrice()));
+        assertNull(picked.lastPurchaseDate());
+
+        Item back = calcRows(bom, prices, Map.of("A", "LAST_PURCHASE")).productItems().get(0);
+        assertEquals("LAST_PURCHASE", back.priceSource());
+        assertEquals(0, bd("1.70").compareTo(back.unitPrice()));
+    }
+
+    @Test
+    void noPriceWithoutPurchaseOrStrategy() {
+        Item x = calcRows(List.of(bom(null, "X", "202", "1", true, null)), List.of(), Map.of()).productItems()
+                .get(0);
+        assertNull(x.priceSource());
+        assertEquals("NO_PRICE", x.priceCheck());
+    }
+
+    @Test
+    void manualPriceFillsAMaterialWithoutAnyPrice() {
+        List<BomLineRow> bom = List.of(bom(null, "X", "202", "2", true, null));
+        Plan p = QuotationCalculator.calculate(new QuotationCalculator.Input(
+                new OrderSummary("O", null, null, null, null, null, null, 1, BigDecimal.TEN, true, false,
+                        "PRODUCT_ONLY", 0, 0),
+                List.of(new OrderLine("L1", "P-1", "Lamp", null, BigDecimal.TEN, "PCS", "BOM-1", null)), bom,
+                List.of(), defaults(), Map.of(), null, List.of("3"), LocalDateTime.of(2026, 11, 26, 9, 0), EN,
+                Map.of("X", bd("0.75"))));
+
+        Item x = p.productItems().get(0);
+        assertEquals("MANUAL", x.priceSource());
+        assertEquals(0, bd("0.75").compareTo(x.unitPrice()));
+        assertEquals(bd("15.0000"), x.amount(), "2 x 10 x 0.75");
+        assertEquals(0, p.missingPriceCount());
+        assertTrue(p.warnings().stream().anyMatch(w -> w.contains("X")), "manual prices are listed");
+    }
+
+    @Test
+    void eachOrderLineGetsItsShareOfTheTotalAndAUnitPrice() {
+        BomLineRow a = new BomLineRow(null, "B1", "L1", "P-1", null, 1, 1, "A", "a", null, "PCS", "202",
+                BigDecimal.ONE, true, null, null, null);
+        BomLineRow b = new BomLineRow(null, "B2", "L2", "P-2", null, 1, 1, "B", "b", null, "PCS", "202",
+                BigDecimal.ONE, true, null, null, null);
+        List<OrderLine> lines = List.of(
+                new OrderLine("L1", "P-1", "Lamp", null, bd("100"), "PCS", "B1", null),
+                new OrderLine("L2", "P-2", "Base", null, bd("50"), "PCS", "B2", null),
+                new OrderLine("L3", "P-3", "No BOM", null, bd("5"), "PCS", null, null));
+        Plan p = QuotationCalculator.calculate(new QuotationCalculator.Input(
+                new OrderSummary("O", null, null, null, null, null, null, 3, bd("155"), true, false,
+                        "PRODUCT_ONLY", 0, 0),
+                lines, List.of(a, b), List.of(price("A", "S1", "3"), price("B", "S1", "2")), defaults(), Map.of(),
+                null, List.of("3"), LocalDateTime.of(2026, 11, 26, 9, 0), EN));
+
+        // material 300 + 100 = 400; every fee, profit and tax is a percentage, so L1 gets 3/4 of the total.
+        OrderLine l1 = p.lines().get(0);
+        OrderLine l2 = p.lines().get(1);
+        assertEquals(bd("300.00"), l1.materialCost());
+        assertEquals(p.totalPrice().multiply(bd("0.75")).setScale(2, java.math.RoundingMode.HALF_UP),
+                l1.totalPrice());
+        assertEquals(p.totalPrice().multiply(bd("0.75")).divide(bd("100"), 4, java.math.RoundingMode.HALF_UP),
+                l1.unitPrice());
+        assertEquals(p.totalPrice().divide(bd("4"), 2, java.math.RoundingMode.HALF_UP), l2.totalPrice());
+        assertNull(p.lines().get(2).totalPrice(), "no priced material");
+        assertNull(p.lines().get(2).unitPrice());
     }
 }

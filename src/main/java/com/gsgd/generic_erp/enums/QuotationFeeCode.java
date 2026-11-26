@@ -13,7 +13,8 @@ public enum QuotationFeeCode {
     MANAGEMENT("15", QuotationFeeBase.MATERIAL),
     MATERIAL_LOSS("1", QuotationFeeBase.MATERIAL),
     DEVELOPMENT("2", QuotationFeeBase.MATERIAL),
-    TAX("6", QuotationFeeBase.PRICE);
+    /** 0 since 2026-11-26: material prices include VAT, so a tax on top would count it twice. */
+    TAX("0", QuotationFeeBase.PRICE);
 
     private final BigDecimal defaultRate;
     private final QuotationFeeBase defaultBase;

@@ -88,14 +88,19 @@ class QuotationServiceTest {
     }
 
     @Test
-    void listsPartlyBoughtPlansAndCountsBoughtLines() {
+    void listsAllOrdersOrOnlyUnboughtPlans() {
         OrderLineRow nothing = withPlan(line("A-1", "L1", "P1", "B1", null, LocalDate.of(2026, 11, 20)), 2, 0);
         OrderLineRow partly1 = withPlan(line("B-1", "L1", "P1", "B1", null, LocalDate.of(2026, 11, 21)), 4, 1);
         OrderLineRow partly2 = withPlan(line("B-1", "L2", "P2", "B2", null, LocalDate.of(2026, 11, 21)), 4, 1);
         OrderLineRow full = withPlan(line("C-1", "L1", "P1", "B1", null, LocalDate.of(2026, 11, 22)), 3, 3);
         when(reader.supported()).thenReturn(true);
-        when(reader.orderLines(any(), anyInt())).thenReturn(List.of(nothing, partly1, partly2, full));
+        OrderLineRow noPlan = withPlan(line("D-1", "L1", "P1", "B1", null, null), 0, 0);
+        when(reader.orderLines(any(), anyInt())).thenReturn(List.of(nothing, partly1, partly2, full, noPlan));
         QuotationService s = service(reader);
+        // Default scope "all": every open sales order, with or without a plan.
+        assertEquals(List.of("C-1", "B-1", "A-1", "D-1"),
+                s.orders(null, null, true).stream().map(OrderSummary::orderNo).toList());
+        s.orderScope = "unbought";
         List<OrderSummary> all = s.orders(null, null, true);
         assertEquals(List.of("B-1", "A-1"), all.stream().map(OrderSummary::orderNo).toList());
         assertEquals(4, all.get(0).planLines());
@@ -118,5 +123,16 @@ class QuotationServiceTest {
         assertEquals(404, e.getStatus());
         assertEquals(503, assertThrows(QuotationException.class, () -> service(null).orders(null, null, false))
                 .getStatus());
+    }
+
+    @Test
+    void manualPricesMustBeZeroOrMoreWithAtMostSixDecimals() {
+        QuotationService.checkManualPrices(null);
+        QuotationService.checkManualPrices(java.util.Map.of("A", new java.math.BigDecimal("0.123456"),
+                "B", java.math.BigDecimal.ZERO));
+        assertThrows(QuotationException.class, () -> QuotationService.checkManualPrices(
+                java.util.Map.of("A", new java.math.BigDecimal("-1"))));
+        assertThrows(QuotationException.class, () -> QuotationService.checkManualPrices(
+                java.util.Map.of("A", new java.math.BigDecimal("0.1234567"))));
     }
 }

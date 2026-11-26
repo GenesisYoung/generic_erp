@@ -109,6 +109,9 @@ erp:
       price-check-high: 1.2
       # List purchase plans that are partly bought too (true), or only plans with nothing bought (false).
       include-partly-bought: ${ERP_QUOTATION_INCLUDE_PARTLY_BOUGHT:true}
+      # all = every open sales order (decided 2026-11-26); unbought = only orders whose
+      # purchase plan is not fully bought (the first rule, with include-partly-bought).
+      order-scope: ${ERP_QUOTATION_ORDER_SCOPE:all}
     exception:
       # 采购异常: who is alerted when an exception is reported or changes status
       # (besides the reporter, the order's purchaser and the handler).
@@ -265,6 +268,8 @@ erp:
       lookback-days: ${ERP_QUOTATION_LOOKBACK_DAYS:90}
       batch-limit: 5000
       # One row per customer order line of an OPEN purchase plan (PLANORDER1) dated on or after
+      # (CHANGED 2026-11-26: every open sales order dated on or after :since is listed, with or
+      # without a purchase plan; erp.purchase.quotation.order-scope decides what is shown.)
       # :since that is not fully bought: plan_lines = its lines, plan_lines_bought = lines with a
       # purchase order line (ORDSPHS2.PLANERI = PLANORDER2.ERI). Partly bought plans are listed
       # (decided 2026-11-26; see erp.purchase.quotation.include-partly-bought).
@@ -288,15 +293,18 @@ erp:
             kb.bom_code                                           AS packaging_bom_code,
             pc.plan_lines                                         AS plan_lines,
             pc.plan_lines_bought                                  AS plan_lines_bought
-        FROM (
-            SELECT DISTINCT MASTERI, FROMORDERI FROM PLANORDER2 WITH (NOLOCK)
-            WHERE ISNULL(FROMORDERI, '') <> ''
-        ) pl
-        JOIN PLANORDER1 h  WITH (NOLOCK) ON h.ERI = pl.MASTERI
-        JOIN ORDCORD2   cl WITH (NOLOCK) ON cl.ERI = pl.FROMORDERI
-        JOIN ORDCORD1   co WITH (NOLOCK) ON co.ERI = cl.MASTERI
+        FROM ORDCORD1 co WITH (NOLOCK)
+        JOIN ORDCORD2 cl WITH (NOLOCK) ON cl.MASTERI = co.ERI
         LEFT JOIN CUSTOMER c  WITH (NOLOCK) ON c.CODE = co.CUST
         LEFT JOIN PRODUCT  pr WITH (NOLOCK) ON pr.CODE = cl.PROD
+        OUTER APPLY (
+            -- Newest open purchase plan made from this order line, if any.
+            SELECT TOP 1 p1.ERI, p1.CODE, p1.SDATE
+            FROM PLANORDER2 p2 WITH (NOLOCK)
+            JOIN PLANORDER1 p1 WITH (NOLOCK) ON p1.ERI = p2.MASTERI
+            WHERE p2.FROMORDERI = cl.ERI AND p1.CLOSETYPE = 0
+            ORDER BY p1.SDATE DESC, p1.ERI DESC
+        ) h
         OUTER APPLY (
             SELECT TOP 1 RTRIM(b.CODE) AS bom_code FROM ORDBOM1 b WITH (NOLOCK)
             WHERE b.SRCERI = cl.ERI OR (ISNULL(cl.BOMCODE, '') <> '' AND b.CODE = cl.BOMCODE)
@@ -308,7 +316,8 @@ erp:
         ) kb
         OUTER APPLY (
             -- has_po is worked out first; only that plain column is summed (SQL Server error 130).
-            SELECT COUNT(*) AS plan_lines, SUM(f.has_po) AS plan_lines_bought
+            -- No plan: plan_lines = 0.
+            SELECT COUNT(*) AS plan_lines, ISNULL(SUM(f.has_po), 0) AS plan_lines_bought
             FROM (
                 SELECT CASE WHEN EXISTS (SELECT 1 FROM ORDSPHS2 p WITH (NOLOCK) WHERE p.PLANERI = l2.ERI)
                             THEN 1 ELSE 0 END AS has_po
@@ -316,10 +325,8 @@ erp:
                 WHERE l2.MASTERI = h.ERI
             ) f
         ) pc
-        WHERE h.SDATE >= :since
-          AND h.CLOSETYPE = 0
+        WHERE co.SDATE >= :since
           AND co.CLOSETYPE = 0
-          AND pc.plan_lines_bought < pc.plan_lines
       # Lines of both order BOMs of the order lines :lineIds (ORDCORD2.ERI, as order-query read them;
       # :orderNo is also bound). Checked 2026-11-26, round 2:
       #  - PRODUCT  = ORDBOM2, lines of ORDBOM1 (ORDBOM1.CODE = ORDCORD2.BOMCODE or SRCERI = line ERI);
@@ -331,8 +338,14 @@ erp:
       # checked by legacy_quotation_check_round3.sql (R3_1, R3_2); if it is per finished product,
       # return NULL as parent_key. Keys are prefixed with P/K so the two tables never mix.
       # leaf = 0 for a line that has sub-lines or is virtual: only bought parts are priced.
-      # base_price = the material's last purchase order price excl. tax (ORDSPHS2.PRICE; PRICETAX
-      # is the tax-included one), for the 0.8-1.2 price check.
+      # base_price = the material's last purchase order price INCLUDING tax (ORDSPHS2.PRICETAX;
+      # PRICE is the one excluding tax, used only when PRICETAX is empty; decided 2026-11-26: the
+      # quotation works with tax-inclusive prices throughout): the most recent AUDITED purchase order line (ORDSPHS1.SCRUTINY set;
+      # drafts are left out), newest SDATE, then entry time, PO no. and line. last_* = its supplier
+      # (line SUPP, else header SUPP; always equal on 2025-2026 lines), date, PO no., tax rate %
+      # (ORDSPHS1.TAX is an AMOUNT, so the rate comes from PRICETAX / PRICE) and currency.
+      # Price selection (decided 2026-11-26): this last purchase price is used first; the purchase
+      # strategy price (price-query) only when the material was never bought.
       bom-line-query: |
         SELECT
             bl.bom_kind                                           AS bom_kind,
@@ -350,6 +363,12 @@ erp:
             bl.qty_per_unit                                       AS qty_per_unit,
             bl.leaf                                               AS leaf,
             lp.price                                              AS base_price,
+            lp.supplier_code                                      AS last_supplier_code,
+            RTRIM(ls.CNAME)                                       AS last_supplier_name,
+            lp.purchase_date                                      AS last_purchase_date,
+            lp.po_no                                              AS last_po_no,
+            lp.tax_rate                                           AS last_tax_rate,
+            lp.currency                                           AS last_currency,
             bl.line_key                                           AS line_key,
             bl.parent_key                                         AS parent_key
         FROM (
@@ -389,17 +408,24 @@ erp:
         ) bl
         LEFT JOIN PRODUCT pr WITH (NOLOCK) ON pr.CODE = bl.material_code
         OUTER APPLY (
-            SELECT TOP 1 o.PRICE AS price
+            SELECT TOP 1 COALESCE(NULLIF(o.PRICETAX, 0), o.PRICE) AS price,
+                   COALESCE(NULLIF(RTRIM(o.SUPP), ''), RTRIM(oh.SUPP)) AS supplier_code,
+                   oh.SDATE AS purchase_date, RTRIM(oh.CODE) AS po_no,
+                   CASE WHEN o.PRICETAX > o.PRICE THEN ROUND((o.PRICETAX / o.PRICE - 1) * 100, 0)
+                        ELSE 0 END AS tax_rate,
+                   COALESCE(NULLIF(RTRIM(o.CURR), ''), RTRIM(oh.CURR)) AS currency
             FROM ORDSPHS2 o WITH (NOLOCK)
             JOIN ORDSPHS1 oh WITH (NOLOCK) ON oh.ERI = o.MASTERI
-            WHERE o.PROD = bl.material_code AND o.PRICE > 0
-            ORDER BY oh.SDATE DESC
+            WHERE o.PROD = bl.material_code AND COALESCE(NULLIF(o.PRICETAX, 0), o.PRICE) > 0
+              AND ISNULL(oh.SCRUTINY, '') <> ''
+            ORDER BY oh.SDATE DESC, oh.INDATETIME DESC, oh.CODE DESC, o.SERIAL DESC
         ) lp
+        LEFT JOIN SUPPLIER ls WITH (NOLOCK) ON ls.CODE = lp.supplier_code
         ORDER BY bl.line_serial, bl.kind_order, bl.line_no
       # Purchase strategy (采购策略) prices: PHSSPROMOT1 header / PHSSPROMOT2 lines, valid today,
-      # newest line per material and supplier. Price compared = price EXCLUDING tax: PRC when
-      # TAXRATE > 0, else PRICE (suppliers with 13% and 0% VAT become comparable, and it matches
-      # the last PO price ORDSPHS2.PRICE). Supplier = line SUPP, or the header CODE when empty.
+      # newest line per material and supplier. Price = PHSSPROMOT2.PRICE, INCLUDING tax (decided
+      # 2026-11-26: tax-inclusive throughout, like the last PO price ORDSPHS2.PRICETAX; PRC is the
+      # price excluding tax). Supplier = line SUPP, or the header CODE when empty.
       price-query: |
         SELECT material_code, supplier_code, supplier_name, price, tax_rate, currency, valid_from, valid_to
         FROM (
@@ -407,7 +433,7 @@ erp:
                 RTRIM(l.PROD)                                     AS material_code,
                 sp.supplier_code                                  AS supplier_code,
                 COALESCE(RTRIM(s.CNAME), RTRIM(h.NAME))           AS supplier_name,
-                CASE WHEN l.TAXRATE > 0 AND l.PRC > 0 THEN l.PRC ELSE l.PRICE END AS price,
+                l.PRICE                                           AS price,
                 l.TAXRATE                                         AS tax_rate,
                 RTRIM(l.CURR)                                     AS currency,
                 COALESCE(l.BGNDATE, h.BGNDATE)                    AS valid_from,

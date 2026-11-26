@@ -70,7 +70,7 @@ public final class QuotationExcelExporter {
 
     private static final String[] ITEM_HEADERS = { "no", "product", "bom", "level", "materialCode", "materialName",
             "spec", "unit", "qtyPerUnit", "orderQty", "totalQty", "supplier", "unitPrice", "amount", "cheapest",
-            "basePrice", "priceCheck" };
+            "basePrice", "priceCheck", "priceSource", "lastPurchaseDate" };
 
     private static void quotationSheet(Sheet sh, Plan plan, Locale locale, Styles st) {
         int r = 0;
@@ -94,7 +94,8 @@ public final class QuotationExcelExporter {
         r++;
 
         r = section(sh, r, I18n.t(locale, "quotation.excel.orderLines"), st);
-        String[] lineHeaders = { "productCode", "productName", "spec", "qty", "unit", "productBom", "packagingBom" };
+        String[] lineHeaders = { "productCode", "productName", "spec", "qty", "unit", "productBom", "packagingBom",
+                "lineMaterialCost", "lineTotal", "lineUnitPrice" };
         Row h = sh.createRow(r++);
         for (int c = 0; c < lineHeaders.length; c++) {
             text(h, c, I18n.t(locale, "quotation.excel.col." + lineHeaders[c]), st.header);
@@ -108,6 +109,9 @@ public final class QuotationExcelExporter {
             text(row, 4, l.unit(), st.cell);
             text(row, 5, l.productBomCode(), st.cell);
             text(row, 6, l.packagingBomCode(), st.cell);
+            num(row, 7, l.materialCost(), st.money);
+            num(row, 8, l.totalPrice(), st.money);
+            num(row, 9, l.unitPrice(), st.price);
         }
         r++;
 
@@ -162,7 +166,7 @@ public final class QuotationExcelExporter {
             }
         }
 
-        int[] widths = { 8, 16, 16, 8, 16, 24, 36, 8, 12, 12, 12, 26, 12, 14, 12, 12, 12 };
+        int[] widths = { 8, 16, 16, 8, 16, 24, 36, 8, 12, 12, 12, 26, 12, 14, 12, 12, 12, 14, 12 };
         for (int c = 0; c < widths.length; c++) {
             sh.setColumnWidth(c, widths[c] * 256);
         }
@@ -201,6 +205,9 @@ public final class QuotationExcelExporter {
             num(row, 15, i.basePrice(), st.price);
             boolean bad = !"OK".equals(i.priceCheck()) && !"NO_BASE".equals(i.priceCheck());
             text(row, 16, I18n.t(locale, "quotation.check." + i.priceCheck()), bad ? st.warn : st.cell);
+            text(row, 17, i.priceSource() == null ? "" : I18n.t(locale, "quotation.source." + i.priceSource()),
+                    st.cell);
+            text(row, 18, date(i.lastPurchaseDate()), st.cell);
         }
         if (items.isEmpty()) {
             text(sh.createRow(r++), 0, I18n.t(locale, "quotation.excel.none"), st.cell);
@@ -213,7 +220,8 @@ public final class QuotationExcelExporter {
 
     private static void supplierSheet(Sheet sh, Plan plan, Locale locale, Styles st) {
         String[] headers = { "kind", "materialCode", "materialName", "supplierCode", "supplierName", "price",
-                "taxRate", "currency", "validFrom", "validTo", "selected" };
+                "taxRate", "currency", "validFrom", "validTo", "selected", "priceSource", "lastPurchaseDate",
+                "poNo" };
         Row h = sh.createRow(0);
         for (int c = 0; c < headers.length; c++) {
             text(h, c, I18n.t(locale, "quotation.excel.col." + headers[c]), st.header);
@@ -246,10 +254,13 @@ public final class QuotationExcelExporter {
                 text(row, 7, p.currency(), st.cell);
                 text(row, 8, date(p.validFrom()), st.cell);
                 text(row, 9, date(p.validTo()), st.cell);
-                text(row, 10, p.supplierCode().equals(i.selectedSupplierCode()) ? "✓" : "", st.cell);
+                text(row, 10, p.key() != null && p.key().equals(i.selectedKey()) ? "✓" : "", st.cell);
+                text(row, 11, p.source() == null ? "" : I18n.t(locale, "quotation.source." + p.source()), st.cell);
+                text(row, 12, date(p.purchaseDate()), st.cell);
+                text(row, 13, p.poNo(), st.cell);
             }
         }
-        int[] widths = { 10, 16, 28, 14, 28, 12, 10, 8, 12, 12, 8 };
+        int[] widths = { 10, 16, 28, 14, 28, 12, 10, 8, 12, 12, 8, 14, 12, 14 };
         for (int c = 0; c < widths.length; c++) {
             sh.setColumnWidth(c, widths[c] * 256);
         }
