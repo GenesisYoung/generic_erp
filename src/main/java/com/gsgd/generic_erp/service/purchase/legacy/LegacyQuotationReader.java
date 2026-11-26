@@ -57,18 +57,28 @@ public interface LegacyQuotationReader {
      * product. {@code orderQty} is the order line quantity. {@code basePrice}
      * is the price including tax of the material's most recent purchase order
      * line, {@code lastPurchase} where it comes from (null when not known).
+     * {@code processing}: a part with sub-parts that an outsourced processor
+     * makes for us (PRODUCT.MADETYPE = 3): its processing fee is priced too.
      */
     record BomLineRow(String bomKind, String bomCode, String lineId, String productCode, BigDecimal orderQty,
             Integer lineNo, Integer level, String materialCode, String materialName, String spec, String unit,
             String materialClass, BigDecimal qtyPerUnit, boolean leaf, BigDecimal basePrice, String lineKey,
-            String parentKey, LastPurchase lastPurchase) {
+            String parentKey, LastPurchase lastPurchase, boolean processing) {
 
         public BomLineRow(String bomKind, String bomCode, String lineId, String productCode, BigDecimal orderQty,
                 Integer lineNo, Integer level, String materialCode, String materialName, String spec, String unit,
                 String materialClass, BigDecimal qtyPerUnit, boolean leaf, BigDecimal basePrice, String lineKey,
                 String parentKey) {
             this(bomKind, bomCode, lineId, productCode, orderQty, lineNo, level, materialCode, materialName, spec,
-                    unit, materialClass, qtyPerUnit, leaf, basePrice, lineKey, parentKey, null);
+                    unit, materialClass, qtyPerUnit, leaf, basePrice, lineKey, parentKey, null, false);
+        }
+
+        public BomLineRow(String bomKind, String bomCode, String lineId, String productCode, BigDecimal orderQty,
+                Integer lineNo, Integer level, String materialCode, String materialName, String spec, String unit,
+                String materialClass, BigDecimal qtyPerUnit, boolean leaf, BigDecimal basePrice, String lineKey,
+                String parentKey, LastPurchase lastPurchase) {
+            this(bomKind, bomCode, lineId, productCode, orderQty, lineNo, level, materialCode, materialName, spec,
+                    unit, materialClass, qtyPerUnit, leaf, basePrice, lineKey, parentKey, lastPurchase, false);
         }
     }
 
@@ -77,8 +87,17 @@ public interface LegacyQuotationReader {
             String currency) {
     }
 
-    /** One supplier's price for one material. */
+    /**
+     * One supplier's price for one material. {@code processing}: an outsourced
+     * processing fee (委外加工, PHSSPROMOT1.SPTYPE = 1), not the price of the
+     * whole part.
+     */
     record PriceRow(String materialCode, String supplierCode, String supplierName, BigDecimal price,
-            BigDecimal taxRate, String currency, LocalDate validFrom, LocalDate validTo) {
+            BigDecimal taxRate, String currency, LocalDate validFrom, LocalDate validTo, boolean processing) {
+
+        public PriceRow(String materialCode, String supplierCode, String supplierName, BigDecimal price,
+                BigDecimal taxRate, String currency, LocalDate validFrom, LocalDate validTo) {
+            this(materialCode, supplierCode, supplierName, price, taxRate, currency, validFrom, validTo, false);
+        }
     }
 }

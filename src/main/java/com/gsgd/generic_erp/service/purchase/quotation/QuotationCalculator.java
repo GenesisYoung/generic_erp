@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import com.gsgd.generic_erp.configuration.i18n.I18n;
@@ -24,6 +25,7 @@ import com.gsgd.generic_erp.dto.purchase.QuotationViews.OrderSummary;
 import com.gsgd.generic_erp.dto.purchase.QuotationViews.Plan;
 import com.gsgd.generic_erp.dto.purchase.QuotationViews.Settings;
 import com.gsgd.generic_erp.dto.purchase.QuotationViews.SupplierPrice;
+import com.gsgd.generic_erp.dto.purchase.QuotationViews.UnitCalc;
 import com.gsgd.generic_erp.enums.QuotationFeeBase;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.BomLineRow;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.LastPurchase;
@@ -45,12 +47,21 @@ import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.PriceR
  * for a last purchase price, the purchase date. Amount = quantity per product
  * x order quantity x unit price. A material without any price can be given
  * a unit price by hand (source MANUAL).</li>
- * <li>Fees: MATERIAL fees are a percentage of the material cost, COST fees of
- * material cost plus MATERIAL fees. Their sum is the cost before profit.</li>
+ * <li>A part with sub-parts that an outsourced processor makes for us
+ * (委外加工) is priced too: its sub-parts as materials, the part itself at its
+ * processing fee (item type PROCESSING).</li>
+ * <li>Unit total price of a line = unit price x usage per finished product;
+ * their sum per order line is the BOM cost of one finished product.</li>
+ * <li>Everything below is calculated per finished product of each order line,
+ * the base amounts being per unit: MATERIAL fees are a percentage of the BOM
+ * cost per unit, COST fees of that plus MATERIAL fees; their sum is the cost
+ * before profit per unit.</li>
  * <li>Profit margin: the tier with the highest minimum the cost before profit
- * reaches (below every minimum: the lowest tier), unless overridden.</li>
+ * PER UNIT reaches (below every minimum: the lowest tier), unless
+ * overridden.</li>
  * <li>PRICE fees (tax) are a percentage of cost before profit plus profit.
- * Total = cost before profit + profit + PRICE fees.</li>
+ * Unit price = cost before profit + profit + PRICE fees; line total = unit
+ * price x quantity; order total = sum of the line totals.</li>
  * </ol>
  */
 public final class QuotationCalculator {
@@ -60,6 +71,8 @@ public final class QuotationCalculator {
 
     static final int MONEY = 2;
     static final int LINE = 4;
+    /** Unit total price (price x usage per product) keeps 6 decimals; small parts cost fractions of a cent. */
+    static final int UNIT = 6;
 
     private QuotationCalculator() {
     }
@@ -81,7 +94,10 @@ public final class QuotationCalculator {
     public static Plan calculate(Input in) {
         Locale locale = in.locale() == null ? I18n.currentLocale() : in.locale();
         List<String> warnings = new ArrayList<>();
-        Map<String, List<SupplierPrice>> suppliers = suppliersByMaterial(in.prices());
+        Map<String, List<SupplierPrice>> suppliers = suppliersByMaterial(
+                in.prices().stream().filter(p -> !p.processing()).toList());
+        Map<String, List<SupplierPrice>> processors = suppliersByMaterial(
+                in.prices().stream().filter(PriceRow::processing).toList());
         Map<String, BigDecimal> lineQty = new HashMap<>();
         BigDecimal totalOrderQty = BigDecimal.ZERO;
         for (OrderLine l : in.lines()) {
@@ -104,7 +120,8 @@ public final class QuotationCalculator {
         int missing = 0;
         int priceWarnings = 0;
         for (BomLineRow row : in.bomLines()) {
-            if (!row.leaf() || row.materialCode() == null) {
+            boolean processing = row.processing() && !row.leaf();
+            if (row.materialCode() == null || !(row.leaf() || processing)) {
                 continue;
             }
             String kind = kindOf(row, in.packagingClassPrefixes());
@@ -112,8 +129,12 @@ public final class QuotationCalculator {
             BigDecimal perUnit = row.lineKey() != null && perProduct.containsKey(row.lineKey())
                     ? perProduct.get(row.lineKey()) : nz(row.qtyPerUnit());
             BigDecimal totalQty = perUnit.multiply(nz(orderQty));
-            List<SupplierPrice> strategy = suppliers.getOrDefault(row.materialCode(), List.of());
-            SupplierPrice last = lastPurchaseOffer(row);
+            // A processed part: only its processing fee (its sub-parts are priced as materials). A bought
+            // part: its purchase prices, or a processing fee when that is all the strategy has.
+            List<SupplierPrice> strategy = processing ? processors.getOrDefault(row.materialCode(), List.of())
+                    : suppliers.getOrDefault(row.materialCode(),
+                            processors.getOrDefault(row.materialCode(), List.of()));
+            SupplierPrice last = processing ? null : lastPurchaseOffer(row);
             List<SupplierPrice> offers = new ArrayList<>();
             if (last != null) {
                 offers.add(last);
@@ -140,7 +161,8 @@ public final class QuotationCalculator {
             BigDecimal unitPrice = chosen == null ? null : chosen.price();
             BigDecimal amount = unitPrice == null ? BigDecimal.ZERO
                     : totalQty.multiply(unitPrice).setScale(LINE, RoundingMode.HALF_UP);
-            String check = priceCheck(unitPrice, row.basePrice(), low, high);
+            String check = processing && chosen != null ? "OK"
+                    : priceCheck(unitPrice, row.basePrice(), low, high);
             if (chosen == null) {
                 missing++;
             } else {
@@ -158,7 +180,9 @@ public final class QuotationCalculator {
                     chosen == null ? null : chosen.supplierCode(), chosen == null ? null : chosen.supplierName(),
                     unitPrice, amount, strategy.isEmpty() ? null : strategy.get(0).price(), row.basePrice(), check,
                     chosen == null ? null : chosen.source(), fromLast ? last.purchaseDate() : null,
-                    fromLast ? last.poNo() : null);
+                    fromLast ? last.poNo() : null,
+                    processing ? QuotationViews.ITEM_PROCESSING : QuotationViews.ITEM_MATERIAL,
+                    unitPrice == null ? null : unitPrice.multiply(perUnit).setScale(UNIT, RoundingMode.HALF_UP));
             (KIND_PACKAGING.equals(kind) ? packaging : product).add(item);
         }
 
@@ -166,43 +190,57 @@ public final class QuotationCalculator {
         BigDecimal packagingCost = money(sum(packaging));
         BigDecimal materialCost = productCost.add(packagingCost);
 
+        // Fees, margin and price per finished product of each order line (base amounts per unit).
         List<Fee> fees = in.settings().fees().stream().filter(Fee::enabled).toList();
-        List<FeeAmount> feeAmounts = new ArrayList<>();
-        BigDecimal materialFees = BigDecimal.ZERO;
-        for (Fee f : fees) {
-            if (QuotationFeeBase.MATERIAL.name().equals(f.base())) {
-                FeeAmount a = fee(f, materialCost);
-                feeAmounts.add(a);
-                materialFees = materialFees.add(a.amount());
+        List<UnitCalc> units = new ArrayList<>();
+        List<OrderLine> lines = new ArrayList<>();
+        for (OrderLine l : linesWithItems(in.lines(), product, packaging)) {
+            BigDecimal productUnit = unitCost(product, l.lineId());
+            BigDecimal packagingUnit = unitCost(packaging, l.lineId());
+            BigDecimal lineMaterial = lineAmount(product, l.lineId()).add(lineAmount(packaging, l.lineId()));
+            if (productUnit == null && packagingUnit == null) {
+                lines.add(withPrices(l, null, null, null, null));
+                continue;
             }
+            BigDecimal bomUnit = nz(productUnit).add(nz(packagingUnit));
+            UnitCalc u = perUnit(l, nz(productUnit), nz(packagingUnit), bomUnit, fees,
+                    in.settings().marginTiers(), in.marginOverride());
+            units.add(u);
+            lines.add(withPrices(l, money(lineMaterial), u.totalPrice(), u.unitPrice(), u.bomUnitCost()));
         }
-        BigDecimal costBase = materialCost.add(materialFees);
-        BigDecimal costFees = BigDecimal.ZERO;
-        for (Fee f : fees) {
-            if (QuotationFeeBase.COST.name().equals(f.base())) {
-                FeeAmount a = fee(f, costBase);
-                feeAmounts.add(a);
-                costFees = costFees.add(a.amount());
-            }
-        }
-        BigDecimal costBeforeProfit = costBase.add(costFees);
 
-        MarginTier tier = tierFor(costBeforeProfit, in.settings().marginTiers());
+        Map<String, FeeAmount> feeTotals = new LinkedHashMap<>();
+        BigDecimal costBeforeProfit = BigDecimal.ZERO;
+        BigDecimal profit = BigDecimal.ZERO;
+        BigDecimal total = BigDecimal.ZERO;
+        for (UnitCalc u : units) {
+            BigDecimal q = nz(u.qty());
+            for (FeeAmount f : u.fees()) {
+                FeeAmount scaled = new FeeAmount(f.code(), f.base(), f.ratePercent(), money(f.baseAmount().multiply(q)),
+                        money(f.amount().multiply(q)));
+                feeTotals.merge(f.code(), scaled, (x, y) -> new FeeAmount(x.code(), x.base(), x.ratePercent(),
+                        x.baseAmount().add(y.baseAmount()), x.amount().add(y.amount())));
+            }
+            costBeforeProfit = costBeforeProfit.add(money(u.costBeforeProfit().multiply(q)));
+            profit = profit.add(money(u.profit().multiply(q)));
+            total = total.add(u.totalPrice());
+        }
+        List<FeeAmount> feeAmounts = new ArrayList<>(feeTotals.values());
+        if (units.isEmpty()) {
+            for (Fee f : fees) {
+                feeAmounts.add(new FeeAmount(f.code(), f.base(), f.ratePercent(), money(BigDecimal.ZERO),
+                        money(BigDecimal.ZERO)));
+            }
+        }
         boolean overridden = in.marginOverride() != null;
+        UnitCalc firstUnit = units.isEmpty() ? null : units.get(0);
+        MarginTier emptyTier = tierFor(BigDecimal.ZERO, in.settings().marginTiers());
         BigDecimal marginRate = overridden ? in.marginOverride()
-                : tier == null ? BigDecimal.ZERO : tier.ratePercent();
-        BigDecimal profit = percent(costBeforeProfit, marginRate);
-
-        BigDecimal priceBase = costBeforeProfit.add(profit);
-        BigDecimal priceFees = BigDecimal.ZERO;
-        for (Fee f : fees) {
-            if (QuotationFeeBase.PRICE.name().equals(f.base())) {
-                FeeAmount a = fee(f, priceBase);
-                feeAmounts.add(a);
-                priceFees = priceFees.add(a.amount());
-            }
-        }
-        BigDecimal total = priceBase.add(priceFees);
+                : firstUnit != null ? firstUnit.marginRate()
+                : emptyTier == null ? BigDecimal.ZERO : emptyTier.ratePercent();
+        BigDecimal marginTierMin = overridden ? null
+                : firstUnit != null ? firstUnit.marginTierMin() : emptyTier == null ? null : emptyTier.minAmount();
+        total = money(total);
         BigDecimal unitPrice = totalOrderQty.signum() > 0
                 ? total.divide(totalOrderQty, LINE, RoundingMode.HALF_UP) : null;
 
@@ -228,45 +266,112 @@ public final class QuotationCalculator {
             warnings.add(I18n.t(locale, "quotation.warn.manualPrice", String.join(", ", manualLines)));
         }
 
-        return new Plan(in.order(), perLine(in.lines(), product, packaging, total), product, packaging, productCost, packagingCost, materialCost,
-                feeAmounts, costBeforeProfit, marginRate, overridden || tier == null ? null : tier.minAmount(),
-                overridden, profit, total, unitPrice, currencies.size() == 1 ? currencies.iterator().next() : null,
-                missing, priceWarnings, warnings, in.now());
+        return new Plan(in.order(), lines, product, packaging, productCost, packagingCost, materialCost,
+                feeAmounts, money(costBeforeProfit), marginRate, marginTierMin, overridden, money(profit), total,
+                unitPrice, currencies.size() == 1 ? currencies.iterator().next() : null, missing, priceWarnings,
+                warnings, in.now(), units);
     }
 
     /**
-     * Total and unit price of each order line. Fees and margin are
-     * percentages of the order's amounts, so a line's share of the total is
-     * its share of the material cost: line total = total x line material cost
-     * / material cost; unit price = line total / line quantity.
+     * The order lines, plus one for BOM lines whose order line was not passed
+     * in (quantity from the BOM line), so no priced material is left out.
      */
-    static List<OrderLine> perLine(List<OrderLine> lines, List<Item> product, List<Item> packaging,
-            BigDecimal total) {
-        Map<String, BigDecimal> cost = new HashMap<>();
-        BigDecimal all = BigDecimal.ZERO;
+    static List<OrderLine> linesWithItems(List<OrderLine> lines, List<Item> product, List<Item> packaging) {
+        List<OrderLine> out = new ArrayList<>(lines);
+        Set<String> known = new java.util.HashSet<>();
+        for (OrderLine l : lines) {
+            known.add(l.lineId());
+        }
         for (List<Item> list : List.of(product, packaging)) {
             for (Item i : list) {
-                if (i.lineId() != null) {
-                    cost.merge(i.lineId(), i.amount(), BigDecimal::add);
+                if (known.add(i.lineId())) {
+                    out.add(new OrderLine(i.lineId(), i.productCode(), null, null, i.orderQty(), null, null, null));
                 }
-                all = all.add(i.amount());
             }
-        }
-        List<OrderLine> out = new ArrayList<>();
-        for (OrderLine l : lines) {
-            BigDecimal c = l.lineId() == null ? null : cost.get(l.lineId());
-            if (c == null || c.signum() <= 0 || all.signum() <= 0) {
-                out.add(new OrderLine(l.lineId(), l.productCode(), l.productName(), l.spec(), l.qty(), l.unit(),
-                        l.productBomCode(), l.packagingBomCode(), c == null ? null : money(c), null, null));
-                continue;
-            }
-            BigDecimal lineTotal = total.multiply(c).divide(all, MONEY, RoundingMode.HALF_UP);
-            BigDecimal unit = l.qty() != null && l.qty().signum() > 0
-                    ? total.multiply(c).divide(all.multiply(l.qty()), LINE, RoundingMode.HALF_UP) : null;
-            out.add(new OrderLine(l.lineId(), l.productCode(), l.productName(), l.spec(), l.qty(), l.unit(),
-                    l.productBomCode(), l.packagingBomCode(), money(c), lineTotal, unit));
         }
         return out;
+    }
+
+    /** Sum of the unit total prices of one order line's items; null when none of them has a price. */
+    static BigDecimal unitCost(List<Item> items, String lineId) {
+        BigDecimal sum = null;
+        for (Item i : items) {
+            if (Objects.equals(i.lineId(), lineId) && i.unitTotalPrice() != null) {
+                sum = (sum == null ? BigDecimal.ZERO : sum).add(i.unitTotalPrice());
+            }
+        }
+        return sum;
+    }
+
+    private static BigDecimal lineAmount(List<Item> items, String lineId) {
+        return items.stream().filter(i -> Objects.equals(i.lineId(), lineId)).map(Item::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private static OrderLine withPrices(OrderLine l, BigDecimal materialCost, BigDecimal totalPrice,
+            BigDecimal unitPrice, BigDecimal bomUnitCost) {
+        return new OrderLine(l.lineId(), l.productCode(), l.productName(), l.spec(), l.qty(), l.unit(),
+                l.productBomCode(), l.packagingBomCode(), materialCost, totalPrice, unitPrice, bomUnitCost);
+    }
+
+    /**
+     * The calculation for one finished product: MATERIAL fees on the BOM cost
+     * per unit, COST fees on that plus MATERIAL fees, the margin tier by the
+     * cost before profit PER UNIT, PRICE fees on cost before profit plus
+     * profit. Unit amounts are kept to 4 decimals; line total = unit price x
+     * quantity.
+     */
+    static UnitCalc perUnit(OrderLine l, BigDecimal productUnit, BigDecimal packagingUnit, BigDecimal bomUnit,
+            List<Fee> fees, List<MarginTier> tiers, BigDecimal marginOverride) {
+        List<FeeAmount> amounts = new ArrayList<>();
+        BigDecimal materialFees = BigDecimal.ZERO;
+        for (Fee f : fees) {
+            if (QuotationFeeBase.MATERIAL.name().equals(f.base())) {
+                FeeAmount a = unitFee(f, bomUnit);
+                amounts.add(a);
+                materialFees = materialFees.add(a.amount());
+            }
+        }
+        BigDecimal costBase = bomUnit.add(materialFees);
+        BigDecimal costFees = BigDecimal.ZERO;
+        for (Fee f : fees) {
+            if (QuotationFeeBase.COST.name().equals(f.base())) {
+                FeeAmount a = unitFee(f, costBase);
+                amounts.add(a);
+                costFees = costFees.add(a.amount());
+            }
+        }
+        BigDecimal costBeforeProfit = costBase.add(costFees);
+        MarginTier tier = tierFor(costBeforeProfit, tiers);
+        boolean overridden = marginOverride != null;
+        BigDecimal marginRate = overridden ? marginOverride : tier == null ? BigDecimal.ZERO : tier.ratePercent();
+        BigDecimal profit = unitPercent(costBeforeProfit, marginRate);
+        BigDecimal priceBase = costBeforeProfit.add(profit);
+        BigDecimal priceFees = BigDecimal.ZERO;
+        for (Fee f : fees) {
+            if (QuotationFeeBase.PRICE.name().equals(f.base())) {
+                FeeAmount a = unitFee(f, priceBase);
+                amounts.add(a);
+                priceFees = priceFees.add(a.amount());
+            }
+        }
+        BigDecimal unitPrice = priceBase.add(priceFees).setScale(LINE, RoundingMode.HALF_UP);
+        BigDecimal totalPrice = money(unitPrice.multiply(nz(l.qty())));
+        return new UnitCalc(l.lineId(), l.productCode(), l.productName(), l.qty(), unitScale(productUnit),
+                unitScale(packagingUnit), unitScale(bomUnit), amounts, unitScale(costBeforeProfit), marginRate,
+                overridden || tier == null ? null : tier.minAmount(), overridden, profit, unitPrice, totalPrice);
+    }
+
+    private static FeeAmount unitFee(Fee f, BigDecimal base) {
+        return new FeeAmount(f.code(), f.base(), f.ratePercent(), unitScale(base), unitPercent(base, f.ratePercent()));
+    }
+
+    private static BigDecimal unitPercent(BigDecimal amount, BigDecimal ratePercent) {
+        return amount.multiply(nz(ratePercent)).divide(BigDecimal.valueOf(100), LINE, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal unitScale(BigDecimal v) {
+        return v.setScale(LINE, RoundingMode.HALF_UP);
     }
 
     /**
@@ -381,14 +486,6 @@ public final class QuotationCalculator {
                 .sorted(Comparator.comparing(SupplierPrice::price).thenComparing(SupplierPrice::supplierCode))
                 .toList()));
         return out;
-    }
-
-    private static FeeAmount fee(Fee f, BigDecimal base) {
-        return new FeeAmount(f.code(), f.base(), f.ratePercent(), base, percent(base, f.ratePercent()));
-    }
-
-    private static BigDecimal percent(BigDecimal amount, BigDecimal ratePercent) {
-        return money(amount.multiply(nz(ratePercent)).divide(BigDecimal.valueOf(100)));
     }
 
     private static BigDecimal sum(List<Item> items) {

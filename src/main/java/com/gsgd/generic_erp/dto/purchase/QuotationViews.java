@@ -42,22 +42,41 @@ public final class QuotationViews {
     }
 
     /**
-     * One order line (product). {@code materialCost}: its priced BOM lines;
-     * {@code totalPrice}: its share of the quotation total (fees and margin
-     * are percentages, so the same rates as the whole order);
-     * {@code unitPrice} = totalPrice / qty. The three are null on the way in
-     * and when the line has no priced material.
+     * One order line (product). {@code materialCost}: its priced BOM lines for
+     * the whole line quantity; {@code bomUnitCost}: the BOM cost of ONE
+     * finished product (sum of the unit total prices); {@code unitPrice}: the
+     * quoted price of one product, calculated from bomUnitCost (see
+     * {@link UnitCalc}); {@code totalPrice} = unitPrice x qty. Null on the way
+     * in and when the line has no priced material.
      */
     public record OrderLine(String lineId, String productCode, String productName, String spec, BigDecimal qty,
             String unit, String productBomCode, String packagingBomCode, BigDecimal materialCost,
-            BigDecimal totalPrice, BigDecimal unitPrice) {
+            BigDecimal totalPrice, BigDecimal unitPrice, BigDecimal bomUnitCost) {
 
         public OrderLine(String lineId, String productCode, String productName, String spec, BigDecimal qty,
                 String unit, String productBomCode, String packagingBomCode) {
             this(lineId, productCode, productName, spec, qty, unit, productBomCode, packagingBomCode, null, null,
-                    null);
+                    null, null);
         }
     }
+
+    /**
+     * The calculation for ONE finished product of an order line: every base
+     * amount is per unit. bomUnitCost = productUnitCost + packagingUnitCost
+     * (sums of the unit total prices); costBeforeProfit = bomUnitCost +
+     * MATERIAL and COST fees; the margin tier is chosen by costBeforeProfit
+     * per unit; unitPrice = costBeforeProfit + profit + PRICE fees;
+     * totalPrice = unitPrice x qty.
+     */
+    public record UnitCalc(String lineId, String productCode, String productName, BigDecimal qty,
+            BigDecimal productUnitCost, BigDecimal packagingUnitCost, BigDecimal bomUnitCost,
+            List<FeeAmount> fees, BigDecimal costBeforeProfit, BigDecimal marginRate, BigDecimal marginTierMin,
+            boolean marginOverridden, BigDecimal profit, BigDecimal unitPrice, BigDecimal totalPrice) {
+    }
+
+    /** A bought material, or the outsourced processing fee (委外加工费) of a part processed for us. */
+    public static final String ITEM_MATERIAL = "MATERIAL";
+    public static final String ITEM_PROCESSING = "PROCESSING";
 
     /**
      * One price a material can be bought at. {@code source} LAST_PURCHASE (the
@@ -97,7 +116,11 @@ public final class QuotationViews {
      * {@code cheapestPrice} is the cheapest strategy price. {@code priceCheck}:
      * OK, HIGH, LOW (selected price outside the band around {@code basePrice},
      * the last purchase price), NO_BASE (no earlier purchase) or NO_PRICE (no
-     * price at all).
+     * price at all). {@code itemType}: MATERIAL (a bought part) or PROCESSING
+     * (a part made for us by an outsourced processor from our materials: its
+     * sub-parts are priced as materials and this line adds the processing
+     * fee). {@code unitTotalPrice} = unitPrice x qtyPerUnit: its cost in ONE
+     * finished product.
      */
     public record Item(String kind, String bomCode, String lineId, String productCode, Integer lineNo,
             Integer level,
@@ -105,7 +128,8 @@ public final class QuotationViews {
             BigDecimal qtyPerUnit, BigDecimal orderQty, BigDecimal totalQty, List<SupplierPrice> suppliers,
             String selectedKey, String selectedSupplierCode, String selectedSupplierName, BigDecimal unitPrice,
             BigDecimal amount, BigDecimal cheapestPrice, BigDecimal basePrice, String priceCheck,
-            String priceSource, LocalDate lastPurchaseDate, String lastPurchaseNo) {
+            String priceSource, LocalDate lastPurchaseDate, String lastPurchaseNo, String itemType,
+            BigDecimal unitTotalPrice) {
     }
 
     /** {@code amount} = {@code baseAmount} x {@code ratePercent} / 100. */
@@ -114,20 +138,21 @@ public final class QuotationViews {
     }
 
     /**
-     * The quotation plan of one order.
-     * <p>
-     * materialCost = productMaterialCost + packagingMaterialCost;
-     * costBeforeProfit = materialCost + MATERIAL and COST fees;
-     * profit = costBeforeProfit x marginRate;
-     * totalPrice = costBeforeProfit + profit + PRICE fees (tax);
-     * unitPrice = totalPrice / total order quantity.
+     * The quotation plan of one order. Fees, margin and price are calculated
+     * per finished product of each order line ({@code units}, base amounts per
+     * unit). The order figures add them up: fees, costBeforeProfit, profit and
+     * totalPrice = sum over the lines of the per-unit amount x qty;
+     * materialCost = productMaterialCost + packagingMaterialCost (whole
+     * order); unitPrice = totalPrice / total order quantity. marginRate and
+     * marginTierMin are those of the first line (each line has its own in
+     * {@code units}).
      */
     public record Plan(OrderSummary order, List<OrderLine> lines, List<Item> productItems,
             List<Item> packagingItems, BigDecimal productMaterialCost, BigDecimal packagingMaterialCost,
             BigDecimal materialCost, List<FeeAmount> fees, BigDecimal costBeforeProfit, BigDecimal marginRate,
             BigDecimal marginTierMin, boolean marginOverridden, BigDecimal profit, BigDecimal totalPrice,
             BigDecimal unitPrice, String currency, int missingPriceCount, int priceWarningCount,
-            List<String> warnings, LocalDateTime generatedAt) {
+            List<String> warnings, LocalDateTime generatedAt, List<UnitCalc> units) {
     }
 
     /**

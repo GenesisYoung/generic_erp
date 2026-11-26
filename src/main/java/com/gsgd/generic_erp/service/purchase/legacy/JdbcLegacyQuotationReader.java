@@ -83,7 +83,8 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
                 num(rs, "order_qty"), integer(rs, "line_no"), integer(rs, "bom_level"), str(rs, "material_code"),
                 str(rs, "material_name"), str(rs, "spec"), str(rs, "unit"), str(rs, "material_class"),
                 num(rs, "qty_per_unit"), rs.getInt("leaf") != 0, num(rs, "base_price"),
-                blankToNull(str(rs, "line_key")), blankToNull(str(rs, "parent_key")), lastPurchase(rs)));
+                blankToNull(str(rs, "line_key")), blankToNull(str(rs, "parent_key")), lastPurchase(rs),
+                hasColumn(rs, "processing") && rs.getInt("processing") != 0));
     }
 
     private static Map<String, Object> bomParams(String orderNo, Collection<String> lineIds) {
@@ -130,7 +131,8 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
             out.addAll(unlimited.query(priceQuery, Map.of("materialCodes", chunk), (rs, i) -> new PriceRow(
                     str(rs, "material_code"), str(rs, "supplier_code"), str(rs, "supplier_name"),
                     num(rs, "price"), num(rs, "tax_rate"), blankToNull(str(rs, "currency")),
-                    date(rs, "valid_from"), date(rs, "valid_to"))));
+                    date(rs, "valid_from"), date(rs, "valid_to"),
+                    hasColumn(rs, "price_type") && "PROCESSING".equalsIgnoreCase(str(rs, "price_type")))));
         }
         return out;
     }

@@ -337,7 +337,10 @@ erp:
       # parent_key = PERI). Whether QTY is per ONE parent or already per finished product is
       # checked by legacy_quotation_check_round3.sql (R3_1, R3_2); if it is per finished product,
       # return NULL as parent_key. Keys are prefixed with P/K so the two tables never mix.
-      # leaf = 0 for a line that has sub-lines or is virtual: only bought parts are priced.
+      # leaf = 0 for a line that has sub-lines or is virtual: only bought parts are priced, plus
+      # processing = 1: a part with sub-lines made for us by an outsourced processor (PRODUCT.MADETYPE
+      # = 3, 委外加工; MADETYPE 2 = made in-house, 0 = bought). Its sub-parts are priced as
+      # materials and the part itself adds its processing fee (price-query, price_type PROCESSING).
       # base_price = the material's last purchase order price INCLUDING tax (ORDSPHS2.PRICETAX;
       # PRICE is the one excluding tax, used only when PRICETAX is empty; decided 2026-11-26: the
       # quotation works with tax-inclusive prices throughout): the most recent AUDITED purchase order line (ORDSPHS1.SCRUTINY set;
@@ -369,6 +372,7 @@ erp:
             lp.po_no                                              AS last_po_no,
             lp.tax_rate                                           AS last_tax_rate,
             lp.currency                                           AS last_currency,
+            CASE WHEN pr.MADETYPE = 3 AND bl.leaf = 0 THEN 1 ELSE 0 END AS processing,
             bl.line_key                                           AS line_key,
             bl.parent_key                                         AS parent_key
         FROM (
@@ -426,19 +430,26 @@ erp:
       # newest line per material and supplier. Price = PHSSPROMOT2.PRICE, INCLUDING tax (decided
       # 2026-11-26: tax-inclusive throughout, like the last PO price ORDSPHS2.PRICETAX; PRC is the
       # price excluding tax). Supplier = line SUPP, or the header CODE when empty.
+      # price_type PROCESSING = outsourced processing fee (委外加工, PHSSPROMOT1.SPTYPE = 1; 2,703 of
+      # its 2,707 lines are MADETYPE 3 parts, checked 2026-11-26). Those lines have no PRICE, only PRC
+      # (excl. tax) and TAXRATE, so the tax-inclusive price is PRC x (1 + TAXRATE%), e.g. 0.885 x 1.13
+      # = 1.00 for 501-DB0020.
       price-query: |
-        SELECT material_code, supplier_code, supplier_name, price, tax_rate, currency, valid_from, valid_to
+        SELECT material_code, supplier_code, supplier_name, price, tax_rate, currency, valid_from, valid_to,
+               price_type
         FROM (
             SELECT
                 RTRIM(l.PROD)                                     AS material_code,
                 sp.supplier_code                                  AS supplier_code,
                 COALESCE(RTRIM(s.CNAME), RTRIM(h.NAME))           AS supplier_name,
-                l.PRICE                                           AS price,
+                CAST(CASE WHEN l.PRICE > 0 THEN l.PRICE
+                          ELSE ROUND(l.PRC * (1 + ISNULL(l.TAXRATE, 0) / 100.0), 4) END AS decimal(18, 6)) AS price,
                 l.TAXRATE                                         AS tax_rate,
+                CASE WHEN h.SPTYPE = 1 THEN 'PROCESSING' ELSE 'PURCHASE' END AS price_type,
                 RTRIM(l.CURR)                                     AS currency,
                 COALESCE(l.BGNDATE, h.BGNDATE)                    AS valid_from,
                 COALESCE(l.ENDDATE, h.ENDDATE)                    AS valid_to,
-                ROW_NUMBER() OVER (PARTITION BY l.PROD, sp.supplier_code
+                ROW_NUMBER() OVER (PARTITION BY l.PROD, sp.supplier_code, CASE WHEN h.SPTYPE = 1 THEN 1 ELSE 0 END
                                    ORDER BY COALESCE(l.BGNDATE, h.BGNDATE, l.SDATE) DESC, l.SDATE DESC) AS rn
             FROM PHSSPROMOT2 l WITH (NOLOCK)
             LEFT JOIN PHSSPROMOT1 h WITH (NOLOCK) ON h.ERI = l.MASTERI
@@ -447,7 +458,7 @@ erp:
             ) sp
             LEFT JOIN SUPPLIER    s WITH (NOLOCK) ON s.CODE = sp.supplier_code
             WHERE l.PROD IN (:materialCodes)
-              AND l.PRICE > 0
+              AND (l.PRICE > 0 OR l.PRC > 0)
               AND sp.supplier_code IS NOT NULL
               AND (COALESCE(l.BGNDATE, h.BGNDATE) IS NULL OR COALESCE(l.BGNDATE, h.BGNDATE) <= GETDATE())
               AND (h.NOLIMIT = 1
