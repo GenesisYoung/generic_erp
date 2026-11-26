@@ -109,6 +109,9 @@ erp:
       price-check-high: 1.2
       # List purchase plans that are partly bought too (true), or only plans with nothing bought (false).
       include-partly-bought: ${ERP_QUOTATION_INCLUDE_PARTLY_BOUGHT:true}
+      # all = every open sales order (decided 2026-11-26); unbought = only orders whose
+      # purchase plan is not fully bought (the first rule, with include-partly-bought).
+      order-scope: ${ERP_QUOTATION_ORDER_SCOPE:all}
     exception:
       # 采购异常: who is alerted when an exception is reported or changes status
       # (besides the reporter, the order's purchaser and the handler).
@@ -265,6 +268,8 @@ erp:
       lookback-days: ${ERP_QUOTATION_LOOKBACK_DAYS:90}
       batch-limit: 5000
       # One row per customer order line of an OPEN purchase plan (PLANORDER1) dated on or after
+      # (CHANGED 2026-11-26: every open sales order dated on or after :since is listed, with or
+      # without a purchase plan; erp.purchase.quotation.order-scope decides what is shown.)
       # :since that is not fully bought: plan_lines = its lines, plan_lines_bought = lines with a
       # purchase order line (ORDSPHS2.PLANERI = PLANORDER2.ERI). Partly bought plans are listed
       # (decided 2026-11-26; see erp.purchase.quotation.include-partly-bought).
@@ -288,15 +293,18 @@ erp:
             kb.bom_code                                           AS packaging_bom_code,
             pc.plan_lines                                         AS plan_lines,
             pc.plan_lines_bought                                  AS plan_lines_bought
-        FROM (
-            SELECT DISTINCT MASTERI, FROMORDERI FROM PLANORDER2 WITH (NOLOCK)
-            WHERE ISNULL(FROMORDERI, '') <> ''
-        ) pl
-        JOIN PLANORDER1 h  WITH (NOLOCK) ON h.ERI = pl.MASTERI
-        JOIN ORDCORD2   cl WITH (NOLOCK) ON cl.ERI = pl.FROMORDERI
-        JOIN ORDCORD1   co WITH (NOLOCK) ON co.ERI = cl.MASTERI
+        FROM ORDCORD1 co WITH (NOLOCK)
+        JOIN ORDCORD2 cl WITH (NOLOCK) ON cl.MASTERI = co.ERI
         LEFT JOIN CUSTOMER c  WITH (NOLOCK) ON c.CODE = co.CUST
         LEFT JOIN PRODUCT  pr WITH (NOLOCK) ON pr.CODE = cl.PROD
+        OUTER APPLY (
+            -- Newest open purchase plan made from this order line, if any.
+            SELECT TOP 1 p1.ERI, p1.CODE, p1.SDATE
+            FROM PLANORDER2 p2 WITH (NOLOCK)
+            JOIN PLANORDER1 p1 WITH (NOLOCK) ON p1.ERI = p2.MASTERI
+            WHERE p2.FROMORDERI = cl.ERI AND p1.CLOSETYPE = 0
+            ORDER BY p1.SDATE DESC, p1.ERI DESC
+        ) h
         OUTER APPLY (
             SELECT TOP 1 RTRIM(b.CODE) AS bom_code FROM ORDBOM1 b WITH (NOLOCK)
             WHERE b.SRCERI = cl.ERI OR (ISNULL(cl.BOMCODE, '') <> '' AND b.CODE = cl.BOMCODE)
@@ -308,7 +316,8 @@ erp:
         ) kb
         OUTER APPLY (
             -- has_po is worked out first; only that plain column is summed (SQL Server error 130).
-            SELECT COUNT(*) AS plan_lines, SUM(f.has_po) AS plan_lines_bought
+            -- No plan: plan_lines = 0.
+            SELECT COUNT(*) AS plan_lines, ISNULL(SUM(f.has_po), 0) AS plan_lines_bought
             FROM (
                 SELECT CASE WHEN EXISTS (SELECT 1 FROM ORDSPHS2 p WITH (NOLOCK) WHERE p.PLANERI = l2.ERI)
                             THEN 1 ELSE 0 END AS has_po
@@ -316,10 +325,8 @@ erp:
                 WHERE l2.MASTERI = h.ERI
             ) f
         ) pc
-        WHERE h.SDATE >= :since
-          AND h.CLOSETYPE = 0
+        WHERE co.SDATE >= :since
           AND co.CLOSETYPE = 0
-          AND pc.plan_lines_bought < pc.plan_lines
       # Lines of both order BOMs of the order lines :lineIds (ORDCORD2.ERI, as order-query read them;
       # :orderNo is also bound). Checked 2026-11-26, round 2:
       #  - PRODUCT  = ORDBOM2, lines of ORDBOM1 (ORDBOM1.CODE = ORDCORD2.BOMCODE or SRCERI = line ERI);

@@ -72,6 +72,10 @@ public class QuotationService {
     @Value("${erp.purchase.quotation.include-partly-bought:true}")
     boolean includePartlyBought = true;
 
+    /** "all": every open sales order is listed; "unbought": only orders whose plan is not fully bought. */
+    @Value("${erp.purchase.quotation.order-scope:all}")
+    String orderScope = "all";
+
     Clock clock = Clock.systemUTC();
 
     private volatile Snapshot snapshot;
@@ -102,7 +106,9 @@ public class QuotationService {
                 out.add(s);
             }
         }
-        out.sort(Comparator.comparing(OrderSummary::planDate, Comparator.nullsLast(Comparator.reverseOrder()))
+        // Newest sales order first; orders without a plan sort after those with one on the same day.
+        out.sort(Comparator.comparing(OrderSummary::orderDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(OrderSummary::planDate, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(OrderSummary::orderNo, Comparator.reverseOrder()));
         return out;
     }
@@ -213,8 +219,17 @@ public class QuotationService {
         return out;
     }
 
-    /** Not fully bought; with includePartlyBought off, nothing bought at all. */
+    /**
+     * With order-scope "all", every row. Otherwise: has a plan that is not fully bought; with
+     * includePartlyBought off, nothing bought at all.
+     */
     boolean eligible(OrderLineRow r) {
+        if (!"unbought".equalsIgnoreCase(orderScope)) {
+            return true;
+        }
+        if (r.planLines() != null && r.planLines() == 0) {
+            return false;
+        }
         if (r.planLines() == null || r.planLinesBought() == null) {
             return true;
         }
