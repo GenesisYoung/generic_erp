@@ -38,6 +38,8 @@ public class LegacyErpProperties {
 
     private PlacementSourceQueries placementSource = new PlacementSourceQueries();
 
+    private QuotationQueries quotation = new QuotationQueries();
+
     @Getter
     @Setter
     public static class Datasource {
@@ -149,5 +151,47 @@ public class LegacyErpProperties {
 
         /** Maximum rows per order type per run. */
         private int batchLimit = 20000;
+    }
+
+    /**
+     * Data for purchase quotations (报价方案): orders that can be quoted, their
+     * BOM lines and the supplier prices of the purchase strategy (采购策略).
+     * A blank query switches the quotation pages to "old ERP not connected".
+     */
+    @Getter
+    @Setter
+    public static class QuotationQueries {
+        /**
+         * Customer order lines whose purchase plan exists and has no purchase
+         * order yet, dated on or after {@code :since}. Required aliases:
+         * order_no, customer_code, customer_name, order_date, delivery_date,
+         * plan_no, plan_date, line_id, product_code, product_name, spec, qty,
+         * unit, product_bom_code, packaging_bom_code.
+         */
+        private String orderQuery;
+
+        /**
+         * BOM lines of one order ({@code :orderNo}). Required aliases:
+         * bom_kind (PRODUCT / PACKAGING, or empty = decide by material class),
+         * bom_code, line_id, product_code, order_qty, line_no, bom_level,
+         * material_code, material_name, spec, unit, material_class,
+         * qty_per_unit (per parent), leaf (0/1), base_price,
+         * line_key, parent_key (the BOM tree).
+         */
+        private String bomLineQuery;
+
+        /**
+         * Valid supplier prices of the materials in the named list parameter
+         * {@code :materialCodes}. Required aliases: material_code,
+         * supplier_code, supplier_name, price, tax_rate, currency, valid_from,
+         * valid_to.
+         */
+        private String priceQuery;
+
+        /** Orders whose purchase plan is dated in the last N days are listed. */
+        private int lookbackDays = 90;
+
+        /** Maximum order lines read for the list. */
+        private int batchLimit = 5000;
     }
 }

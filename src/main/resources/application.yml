@@ -98,6 +98,15 @@ erp:
       # Falls back to ORDER_AUDIT while neither query is set or the old ERP is off.
       # ORDER_AUDIT: one task per PMC order review PASS (the behaviour before 2026-11-25).
       trigger: ${ERP_PLACEMENT_TRIGGER:CONFIRMATION}
+    quotation:
+      # 报价方案: a BOM line counts as packaging when its material class (PRODUCT.CLAS) starts with one
+      # of these (3xx = packaging in PRODCLAS, checked 2026-11-24), unless it comes from a packaging BOM.
+      packaging-class-prefixes: ${ERP_QUOTATION_PACKAGING_CLASSES:3}
+      # Price check, same rule as the purchasing BOM sheets: OK when 0.8 < price / last PO price < 1.2.
+      price-check-low: 0.8
+      price-check-high: 1.2
+      # List purchase plans that are partly bought too (true), or only plans with nothing bought (false).
+      include-partly-bought: ${ERP_QUOTATION_INCLUDE_PARTLY_BOUGHT:true}
     exception:
       # 采购异常: who is alerted when an exception is reported or changes status
       # (besides the reporter, the order's purchaser and the handler).
@@ -241,6 +250,186 @@ erp:
           AND h.CODE IS NOT NULL
       lookback-days: 30
       batch-limit: 20000
+    quotation:
+      # 报价方案: orders that can be quoted, their order BOMs and purchase strategy prices.
+      # Checked 2026-11-26 (legacy_quotation_bom_price_check.sql, round 1):
+      #  - one order BOM per customer order line: ORDBOM1.CODE = ORDCORD2.BOMCODE (1,302/1,306)
+      #    and ORDBOM1.SRCERI = ORDCORD2.ERI (1,303/1,306);
+      #  - ORDBOM1.TYPE is 1 on every BOM, so it does NOT tell product and packaging apart;
+      #  - the packaging BOM is ORDBOM3 (ORDBOM3.CODE = ORDCORD2.BOMCODE, round 2 Q1);
+      #  - purchase strategy PHSSPROMOT2.PRICE includes tax, PRC = PRICE / (1 + TAXRATE%) when
+      #    TAXRATE > 0; the supplier is often only on the header PHSSPROMOT1.CODE.
+      # Blank any of the three queries to switch the quotation pages off.
+      lookback-days: ${ERP_QUOTATION_LOOKBACK_DAYS:90}
+      batch-limit: 5000
+      # One row per customer order line of an OPEN purchase plan (PLANORDER1) dated on or after
+      # :since that is not fully bought: plan_lines = its lines, plan_lines_bought = lines with a
+      # purchase order line (ORDSPHS2.PLANERI = PLANORDER2.ERI). Partly bought plans are listed
+      # (decided 2026-11-26; see erp.purchase.quotation.include-partly-bought).
+      # Plan line -> order line: PLANORDER2.FROMORDERI = ORDCORD2.ERI (checked 2026-11-20).
+      order-query: |
+        SELECT
+            RTRIM(co.CODE)                                        AS order_no,
+            RTRIM(co.CUST)                                        AS customer_code,
+            RTRIM(c.CNAME)                                        AS customer_name,
+            co.SDATE                                              AS order_date,
+            co.DLVDATE                                            AS delivery_date,
+            RTRIM(h.CODE)                                         AS plan_no,
+            h.SDATE                                               AS plan_date,
+            RTRIM(cl.ERI)                                         AS line_id,
+            RTRIM(cl.PROD)                                        AS product_code,
+            RTRIM(pr.CNAME)                                       AS product_name,
+            RTRIM(cl.SPEC)                                        AS spec,
+            cl.QTY                                                AS qty,
+            RTRIM(cl.UNIT)                                        AS unit,
+            pb.bom_code                                           AS product_bom_code,
+            kb.bom_code                                           AS packaging_bom_code,
+            pc.plan_lines                                         AS plan_lines,
+            pc.plan_lines_bought                                  AS plan_lines_bought
+        FROM (
+            SELECT DISTINCT MASTERI, FROMORDERI FROM PLANORDER2 WITH (NOLOCK)
+            WHERE ISNULL(FROMORDERI, '') <> ''
+        ) pl
+        JOIN PLANORDER1 h  WITH (NOLOCK) ON h.ERI = pl.MASTERI
+        JOIN ORDCORD2   cl WITH (NOLOCK) ON cl.ERI = pl.FROMORDERI
+        JOIN ORDCORD1   co WITH (NOLOCK) ON co.ERI = cl.MASTERI
+        LEFT JOIN CUSTOMER c  WITH (NOLOCK) ON c.CODE = co.CUST
+        LEFT JOIN PRODUCT  pr WITH (NOLOCK) ON pr.CODE = cl.PROD
+        OUTER APPLY (
+            SELECT TOP 1 RTRIM(b.CODE) AS bom_code FROM ORDBOM1 b WITH (NOLOCK)
+            WHERE b.SRCERI = cl.ERI OR (ISNULL(cl.BOMCODE, '') <> '' AND b.CODE = cl.BOMCODE)
+            ORDER BY b.SDATE DESC
+        ) pb
+        OUTER APPLY (
+            SELECT TOP 1 RTRIM(o3.CODE) AS bom_code FROM ORDBOM3 o3 WITH (NOLOCK)
+            WHERE ISNULL(cl.BOMCODE, '') <> '' AND o3.CODE = cl.BOMCODE
+        ) kb
+        OUTER APPLY (
+            -- has_po is worked out first; only that plain column is summed (SQL Server error 130).
+            SELECT COUNT(*) AS plan_lines, SUM(f.has_po) AS plan_lines_bought
+            FROM (
+                SELECT CASE WHEN EXISTS (SELECT 1 FROM ORDSPHS2 p WITH (NOLOCK) WHERE p.PLANERI = l2.ERI)
+                            THEN 1 ELSE 0 END AS has_po
+                FROM PLANORDER2 l2 WITH (NOLOCK)
+                WHERE l2.MASTERI = h.ERI
+            ) f
+        ) pc
+        WHERE h.SDATE >= :since
+          AND h.CLOSETYPE = 0
+          AND co.CLOSETYPE = 0
+          AND pc.plan_lines_bought < pc.plan_lines
+      # Lines of both order BOMs of each line of :orderNo (checked 2026-11-26, round 2):
+      #  - PRODUCT  = ORDBOM2, lines of ORDBOM1 (ORDBOM1.CODE = ORDCORD2.BOMCODE or SRCERI = line ERI);
+      #  - PACKAGING = ORDBOM3, ORDBOM3.CODE = ORDCORD2.BOMCODE (1,191 of 1,191 lines with
+      #    HASPKBOM = 1; PKPRODBOM matches none). Rows: product -> 7xx 包装BOM -> materials.
+      # qty_per_unit = QTY, the usage (BOMQTY is 0 or 1 and is NOT the usage: a line with
+      # BOMQTY 1 has QTY 300). The application multiplies it up the tree (line_key = ERI,
+      # parent_key = PERI). Whether QTY is per ONE parent or already per finished product is
+      # checked by legacy_quotation_check_round3.sql (R3_1, R3_2); if it is per finished product,
+      # return NULL as parent_key. Keys are prefixed with P/K so the two tables never mix.
+      # leaf = 0 for a line that has sub-lines or is virtual: only bought parts are priced.
+      # base_price = the material's last purchase order price excl. tax (ORDSPHS2.PRICE; PRICETAX
+      # is the tax-included one), for the 0.8-1.2 price check.
+      bom-line-query: |
+        WITH ol AS (
+            SELECT cl.ERI AS line_eri, cl.PROD AS product_code, cl.QTY AS order_qty, cl.SERIAL AS line_serial,
+                   cl.BOMCODE AS order_bomcode, pb.ERI AS bom_eri, pb.CODE AS bom_code
+            FROM ORDCORD1 co WITH (NOLOCK)
+            JOIN ORDCORD2 cl WITH (NOLOCK) ON cl.MASTERI = co.ERI
+            OUTER APPLY (
+                SELECT TOP 1 b1.ERI, b1.CODE FROM ORDBOM1 b1 WITH (NOLOCK)
+                WHERE b1.SRCERI = cl.ERI OR (ISNULL(cl.BOMCODE, '') <> '' AND b1.CODE = cl.BOMCODE)
+                ORDER BY b1.SDATE DESC
+            ) pb
+            WHERE RTRIM(co.CODE) = :orderNo
+        ),
+        bl AS (
+            SELECT CAST('PRODUCT' AS varchar(10)) AS bom_kind, 1 AS kind_order, ol.bom_code, ol.line_eri, ol.product_code,
+                   ol.order_qty, ol.line_serial, l.SERIAL AS line_no, l.LVL AS bom_level,
+                   l.SUBPROD AS material_code, l.SPEC AS spec, l.QTY AS qty_per_unit,
+                   CASE WHEN l.VIRTUAL = 1 OR EXISTS (
+                            SELECT 1 FROM ORDBOM2 ch WITH (NOLOCK)
+                            WHERE ch.MASTERI = l.MASTERI AND ch.PERI = l.ERI)
+                        THEN 0 ELSE 1 END AS leaf,
+                   'P' + RTRIM(l.ERI) AS line_key,
+                   CASE WHEN ISNULL(RTRIM(l.PERI), '') = '' THEN NULL ELSE 'P' + RTRIM(l.PERI) END AS parent_key
+            FROM ol
+            JOIN ORDBOM2 l WITH (NOLOCK) ON l.MASTERI = ol.bom_eri
+            UNION ALL
+            SELECT 'PACKAGING', 2, RTRIM(l.CODE), ol.line_eri, ol.product_code,
+                   ol.order_qty, ol.line_serial, l.SERIAL, l.LVL,
+                   l.SUBPROD, l.SPEC, l.QTY,
+                   CASE WHEN l.VIRTUAL = 1 OR EXISTS (
+                            SELECT 1 FROM ORDBOM3 ch WITH (NOLOCK)
+                            WHERE ch.CODE = l.CODE AND ch.PERI = l.ERI)
+                        THEN 0 ELSE 1 END,
+                   'K' + RTRIM(l.ERI),
+                   CASE WHEN ISNULL(RTRIM(l.PERI), '') = '' THEN NULL ELSE 'K' + RTRIM(l.PERI) END
+            FROM ol
+            JOIN ORDBOM3 l WITH (NOLOCK) ON l.CODE = ol.order_bomcode
+            WHERE ISNULL(ol.order_bomcode, '') <> ''
+        )
+        SELECT
+            bl.bom_kind                                           AS bom_kind,
+            RTRIM(bl.bom_code)                                    AS bom_code,
+            RTRIM(bl.line_eri)                                    AS line_id,
+            RTRIM(bl.product_code)                                AS product_code,
+            bl.order_qty                                          AS order_qty,
+            bl.line_no                                            AS line_no,
+            bl.bom_level                                          AS bom_level,
+            RTRIM(bl.material_code)                               AS material_code,
+            RTRIM(pr.CNAME)                                       AS material_name,
+            COALESCE(NULLIF(RTRIM(bl.spec), ''), RTRIM(pr.SPEC))  AS spec,
+            RTRIM(pr.UNIT)                                        AS unit,
+            RTRIM(pr.CLAS)                                        AS material_class,
+            bl.qty_per_unit                                       AS qty_per_unit,
+            bl.leaf                                               AS leaf,
+            lp.price                                              AS base_price,
+            bl.line_key                                           AS line_key,
+            bl.parent_key                                         AS parent_key
+        FROM bl
+        LEFT JOIN PRODUCT pr WITH (NOLOCK) ON pr.CODE = bl.material_code
+        OUTER APPLY (
+            SELECT TOP 1 o.PRICE AS price
+            FROM ORDSPHS2 o WITH (NOLOCK)
+            JOIN ORDSPHS1 oh WITH (NOLOCK) ON oh.ERI = o.MASTERI
+            WHERE o.PROD = bl.material_code AND o.PRICE > 0
+            ORDER BY oh.SDATE DESC
+        ) lp
+        ORDER BY bl.line_serial, bl.kind_order, bl.line_no
+      # Purchase strategy (采购策略) prices: PHSSPROMOT1 header / PHSSPROMOT2 lines, valid today,
+      # newest line per material and supplier. Price compared = price EXCLUDING tax: PRC when
+      # TAXRATE > 0, else PRICE (suppliers with 13% and 0% VAT become comparable, and it matches
+      # the last PO price ORDSPHS2.PRICE). Supplier = line SUPP, or the header CODE when empty.
+      price-query: |
+        SELECT material_code, supplier_code, supplier_name, price, tax_rate, currency, valid_from, valid_to
+        FROM (
+            SELECT
+                RTRIM(l.PROD)                                     AS material_code,
+                sp.supplier_code                                  AS supplier_code,
+                COALESCE(RTRIM(s.CNAME), RTRIM(h.NAME))           AS supplier_name,
+                CASE WHEN l.TAXRATE > 0 AND l.PRC > 0 THEN l.PRC ELSE l.PRICE END AS price,
+                l.TAXRATE                                         AS tax_rate,
+                RTRIM(l.CURR)                                     AS currency,
+                COALESCE(l.BGNDATE, h.BGNDATE)                    AS valid_from,
+                COALESCE(l.ENDDATE, h.ENDDATE)                    AS valid_to,
+                ROW_NUMBER() OVER (PARTITION BY l.PROD, sp.supplier_code
+                                   ORDER BY COALESCE(l.BGNDATE, h.BGNDATE, l.SDATE) DESC, l.SDATE DESC) AS rn
+            FROM PHSSPROMOT2 l WITH (NOLOCK)
+            LEFT JOIN PHSSPROMOT1 h WITH (NOLOCK) ON h.ERI = l.MASTERI
+            CROSS APPLY (
+                SELECT COALESCE(NULLIF(RTRIM(l.SUPP), ''), RTRIM(h.CODE)) AS supplier_code
+            ) sp
+            LEFT JOIN SUPPLIER    s WITH (NOLOCK) ON s.CODE = sp.supplier_code
+            WHERE l.PROD IN (:materialCodes)
+              AND l.PRICE > 0
+              AND sp.supplier_code IS NOT NULL
+              AND (COALESCE(l.BGNDATE, h.BGNDATE) IS NULL OR COALESCE(l.BGNDATE, h.BGNDATE) <= GETDATE())
+              AND (h.NOLIMIT = 1
+                   OR COALESCE(l.ENDDATE, h.ENDDATE) IS NULL
+                   OR COALESCE(l.ENDDATE, h.ENDDATE) >= CAST(GETDATE() AS date))
+        ) x
+        WHERE x.rn = 1
     customer-order:
       # New customer orders (ORDCORD1) -> PMC notification + 待评审客户订单 page.
       # Source and assumptions: Implementation Doc/Customer Order Sync/legacy_customer_order_query.sql
