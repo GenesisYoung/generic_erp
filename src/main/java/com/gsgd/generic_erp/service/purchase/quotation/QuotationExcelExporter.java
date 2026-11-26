@@ -52,6 +52,7 @@ public final class QuotationExcelExporter {
     public static byte[] write(Plan plan, Locale locale) {
         try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Styles st = new Styles(wb);
+            wb.setForceFormulaRecalculation(true);
             quotationSheet(wb.createSheet(sheetName(I18n.t(locale, "quotation.excel.sheetQuotation"))), plan,
                     locale, st);
             supplierSheet(wb.createSheet(sheetName(I18n.t(locale, "quotation.excel.sheetSuppliers"))), plan,
@@ -115,11 +116,14 @@ public final class QuotationExcelExporter {
         }
         r++;
 
+        BigDecimal productionQty = productionQty(plan);
         r = items(sh, r, I18n.t(locale, "quotation.excel.productMaterials"), plan.productItems(),
-                I18n.t(locale, "quotation.excel.productSubtotal"), plan.productMaterialCost(), locale, st);
+                I18n.t(locale, "quotation.excel.productSubtotal"), plan.productMaterialCost(),
+                I18n.t(locale, "quotation.excel.productUnitCost"), productionQty, locale, st);
         r++;
         r = items(sh, r, I18n.t(locale, "quotation.excel.packagingMaterials"), plan.packagingItems(),
-                I18n.t(locale, "quotation.excel.packagingSubtotal"), plan.packagingMaterialCost(), locale, st);
+                I18n.t(locale, "quotation.excel.packagingSubtotal"), plan.packagingMaterialCost(),
+                I18n.t(locale, "quotation.excel.packagingUnitCost"), productionQty, locale, st);
         r++;
 
         r = section(sh, r, I18n.t(locale, "quotation.excel.calculation"), st);
@@ -173,15 +177,36 @@ public final class QuotationExcelExporter {
         sh.createFreezePane(0, 1);
     }
 
+    /** Total production quantity: all order line quantities (the order total when no line has one). */
+    static BigDecimal productionQty(Plan plan) {
+        BigDecimal sum = BigDecimal.ZERO;
+        boolean any = false;
+        for (OrderLine l : plan.lines()) {
+            if (l.qty() != null) {
+                sum = sum.add(l.qty());
+                any = true;
+            }
+        }
+        return any ? sum : plan.order().totalQty();
+    }
+
+    /**
+     * One material section. Total qty = usage per product x order qty and
+     * amount = total qty x unit price are written as formulas, so the usage
+     * visibly drives the cost; the subtotal is their sum and the unit cost
+     * row = subtotal / total production quantity.
+     */
     private static int items(Sheet sh, int r, String title, List<Item> items, String subtotalLabel,
-            BigDecimal subtotal, Locale locale, Styles st) {
+            BigDecimal subtotal, String unitCostLabel, BigDecimal productionQty, Locale locale, Styles st) {
         r = section(sh, r, title, st);
         Row h = sh.createRow(r++);
         for (int c = 0; c < ITEM_HEADERS.length; c++) {
             text(h, c, I18n.t(locale, "quotation.excel.col." + ITEM_HEADERS[c]), st.header);
         }
         int n = 1;
+        int first = r;
         for (Item i : items) {
+            int excelRow = r + 1;
             Row row = sh.createRow(r++);
             num(row, 0, BigDecimal.valueOf(n++), st.cell);
             text(row, 1, i.productCode(), st.cell);
@@ -197,10 +222,10 @@ public final class QuotationExcelExporter {
             text(row, 7, i.unit(), st.cell);
             num(row, 8, i.qtyPerUnit(), st.qty);
             num(row, 9, i.orderQty(), st.qty);
-            num(row, 10, i.totalQty(), st.qty);
+            formula(row, 10, "I" + excelRow + "*J" + excelRow, i.totalQty(), st.qty);
             text(row, 11, join(i.selectedSupplierCode(), i.selectedSupplierName()), st.cell);
             num(row, 12, i.unitPrice(), st.price);
-            num(row, 13, i.amount(), st.money);
+            formula(row, 13, "K" + excelRow + "*M" + excelRow, i.amount(), st.money);
             num(row, 14, i.cheapestPrice(), st.price);
             num(row, 15, i.basePrice(), st.price);
             boolean bad = !"OK".equals(i.priceCheck()) && !"NO_BASE".equals(i.priceCheck());
@@ -212,9 +237,25 @@ public final class QuotationExcelExporter {
         if (items.isEmpty()) {
             text(sh.createRow(r++), 0, I18n.t(locale, "quotation.excel.none"), st.cell);
         }
+        int last = r;
+        int subtotalRow = r + 1;
         Row s = sh.createRow(r++);
         text(s, 12, subtotalLabel, st.bold);
-        num(s, 13, subtotal, st.moneyBold);
+        if (items.isEmpty()) {
+            num(s, 13, subtotal, st.moneyBold);
+        } else {
+            formula(s, 13, "SUM(N" + (first + 1) + ":N" + last + ")", subtotal, st.moneyBold);
+        }
+        Row u = sh.createRow(r++);
+        text(u, 9, I18n.t(locale, "quotation.excel.productionQty"), st.bold);
+        num(u, 10, productionQty, st.qty);
+        text(u, 12, unitCostLabel, st.bold);
+        if (productionQty != null && productionQty.signum() > 0) {
+            formula(u, 13, "N" + subtotalRow + "/K" + (subtotalRow + 1),
+                    subtotal.divide(productionQty, 4, java.math.RoundingMode.HALF_UP), st.price);
+        } else {
+            text(u, 13, "", st.cell);
+        }
         return r;
     }
 
@@ -300,6 +341,14 @@ public final class QuotationExcelExporter {
     private static void text(Row row, int col, String value, CellStyle style) {
         Cell c = row.createCell(col);
         c.setCellValue(value == null ? "" : value);
+        c.setCellStyle(style);
+    }
+
+    /** A formula with its result already filled in (shown even before Excel recalculates). */
+    private static void formula(Row row, int col, String f, BigDecimal value, CellStyle style) {
+        Cell c = row.createCell(col);
+        c.setCellFormula(f);
+        c.setCellValue(value == null ? 0 : value.doubleValue());
         c.setCellStyle(style);
     }
 

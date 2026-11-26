@@ -46,4 +46,32 @@ class QuotationExcelExporterTest {
         }
         assertEquals("报价方案_26394-W53.xlsx", QuotationExcelExporter.fileName(plan, Locale.SIMPLIFIED_CHINESE));
     }
+
+    @Test
+    void amountsFollowUsageAndEachSubtotalHasAUnitCost() throws Exception {
+        Plan plan = QuotationCalculatorTest.calc("100", Map.of(), QuotationCalculatorTest.defaults(), null);
+        try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(
+                QuotationExcelExporter.write(plan, Locale.US)))) {
+            Sheet sh = wb.getSheetAt(0);
+            org.apache.poi.ss.usermodel.FormulaEvaluator ev = wb.getCreationHelper().createFormulaEvaluator();
+            Row a = null;
+            Row unitCost = null;
+            for (Row r : sh) {
+                if (r.getCell(4) != null && "A".equals(r.getCell(4).toString())) {
+                    a = r;
+                }
+                if (r.getCell(12) != null && r.getCell(12).toString().equals("Product material cost per unit")) {
+                    unitCost = r;
+                }
+            }
+            int n = a.getRowNum() + 1;
+            assertEquals("I" + n + "*J" + n, a.getCell(10).getCellFormula(), "total qty = usage x order qty");
+            assertEquals("K" + n + "*M" + n, a.getCell(13).getCellFormula(), "amount = total qty x price");
+            assertEquals(200, ev.evaluate(a.getCell(10)).getNumberValue(), 1e-9, "2 per product x 100");
+            assertEquals(300, ev.evaluate(a.getCell(13)).getNumberValue(), 1e-9);
+            assertEquals(100, unitCost.getCell(10).getNumericCellValue(), 1e-9, "total production qty");
+            assertEquals(5.0, ev.evaluate(unitCost.getCell(13)).getNumberValue(), 1e-9, "500 / 100");
+            assertTrue(allText(sh).contains("Packaging material cost per unit"));
+        }
+    }
 }
