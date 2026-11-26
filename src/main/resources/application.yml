@@ -253,10 +253,8 @@ erp:
       # Checked 2026-11-26 (legacy_quotation_bom_price_check.sql, round 1):
       #  - one order BOM per customer order line: ORDBOM1.CODE = ORDCORD2.BOMCODE (1,302/1,306)
       #    and ORDBOM1.SRCERI = ORDCORD2.ERI (1,303/1,306);
-      #  - ORDBOM1.TYPE is 1 on every BOM, so it does NOT tell product and packaging apart.
-      #    Packaging materials are told apart by class (3xx). Where the separate packaging BOM
-      #    lives is still open (legacy_quotation_check_round2.sql, Q1-Q5), so packaging_bom_code
-      #    stays empty for now;
+      #  - ORDBOM1.TYPE is 1 on every BOM, so it does NOT tell product and packaging apart;
+      #  - the packaging BOM is ORDBOM3 (ORDBOM3.CODE = ORDCORD2.BOMCODE, round 2 Q1);
       #  - purchase strategy PHSSPROMOT2.PRICE includes tax, PRC = PRICE / (1 + TAXRATE%) when
       #    TAXRATE > 0; the supplier is often only on the header PHSSPROMOT1.CODE.
       # Blank any of the three queries to switch the quotation pages off.
@@ -281,7 +279,7 @@ erp:
             cl.QTY                                                AS qty,
             RTRIM(cl.UNIT)                                        AS unit,
             pb.bom_code                                           AS product_bom_code,
-            CAST(NULL AS varchar(40))                             AS packaging_bom_code
+            kb.bom_code                                           AS packaging_bom_code
         FROM (
             SELECT DISTINCT MASTERI, FROMORDERI FROM PLANORDER2 WITH (NOLOCK)
             WHERE ISNULL(FROMORDERI, '') <> ''
@@ -296,6 +294,10 @@ erp:
             WHERE b.SRCERI = cl.ERI OR (ISNULL(cl.BOMCODE, '') <> '' AND b.CODE = cl.BOMCODE)
             ORDER BY b.SDATE DESC
         ) pb
+        OUTER APPLY (
+            SELECT TOP 1 RTRIM(o3.CODE) AS bom_code FROM ORDBOM3 o3 WITH (NOLOCK)
+            WHERE ISNULL(cl.BOMCODE, '') <> '' AND o3.CODE = cl.BOMCODE
+        ) kb
         WHERE h.SDATE >= :since
           AND h.CLOSETYPE = 0
           AND co.CLOSETYPE = 0
@@ -303,54 +305,85 @@ erp:
               SELECT 1 FROM PLANORDER2 l2 WITH (NOLOCK)
               JOIN ORDSPHS2 p WITH (NOLOCK) ON p.PLANERI = l2.ERI
               WHERE l2.MASTERI = h.ERI)
-      # Lines of the order BOM of each line of :orderNo. bom_kind is empty, so the material class
-      # decides product or packaging (3xx, see erp.purchase.quotation.packaging-class-prefixes).
-      # qty_per_unit = BOMQTY, the quantity per ONE parent (基础用量); the application multiplies it
-      # up the tree (line_key = ERI, parent_key = PERI) to get the quantity per finished product.
+      # Lines of both order BOMs of each line of :orderNo (checked 2026-11-26, round 2):
+      #  - PRODUCT  = ORDBOM2, lines of ORDBOM1 (ORDBOM1.CODE = ORDCORD2.BOMCODE or SRCERI = line ERI);
+      #  - PACKAGING = ORDBOM3, ORDBOM3.CODE = ORDCORD2.BOMCODE (1,191 of 1,191 lines with
+      #    HASPKBOM = 1; PKPRODBOM matches none). Rows: product -> 7xx 包装BOM -> materials.
+      # qty_per_unit = QTY, the usage (BOMQTY is 0 or 1 and is NOT the usage: a line with
+      # BOMQTY 1 has QTY 300). The application multiplies it up the tree (line_key = ERI,
+      # parent_key = PERI). Whether QTY is per ONE parent or already per finished product is
+      # checked by legacy_quotation_check_round3.sql (R3_1, R3_2); if it is per finished product,
+      # return NULL as parent_key. Keys are prefixed with P/K so the two tables never mix.
       # leaf = 0 for a line that has sub-lines or is virtual: only bought parts are priced.
       # base_price = the material's last purchase order price excl. tax (ORDSPHS2.PRICE; PRICETAX
       # is the tax-included one), for the 0.8-1.2 price check.
       bom-line-query: |
+        WITH ol AS (
+            SELECT cl.ERI AS line_eri, cl.PROD AS product_code, cl.QTY AS order_qty, cl.SERIAL AS line_serial,
+                   cl.BOMCODE AS order_bomcode, pb.ERI AS bom_eri, pb.CODE AS bom_code
+            FROM ORDCORD1 co WITH (NOLOCK)
+            JOIN ORDCORD2 cl WITH (NOLOCK) ON cl.MASTERI = co.ERI
+            OUTER APPLY (
+                SELECT TOP 1 b1.ERI, b1.CODE FROM ORDBOM1 b1 WITH (NOLOCK)
+                WHERE b1.SRCERI = cl.ERI OR (ISNULL(cl.BOMCODE, '') <> '' AND b1.CODE = cl.BOMCODE)
+                ORDER BY b1.SDATE DESC
+            ) pb
+            WHERE RTRIM(co.CODE) = :orderNo
+        ),
+        bl AS (
+            SELECT CAST('PRODUCT' AS varchar(10)) AS bom_kind, 1 AS kind_order, ol.bom_code, ol.line_eri, ol.product_code,
+                   ol.order_qty, ol.line_serial, l.SERIAL AS line_no, l.LVL AS bom_level,
+                   l.SUBPROD AS material_code, l.SPEC AS spec, l.QTY AS qty_per_unit,
+                   CASE WHEN l.VIRTUAL = 1 OR EXISTS (
+                            SELECT 1 FROM ORDBOM2 ch WITH (NOLOCK)
+                            WHERE ch.MASTERI = l.MASTERI AND ch.PERI = l.ERI)
+                        THEN 0 ELSE 1 END AS leaf,
+                   'P' + RTRIM(l.ERI) AS line_key,
+                   CASE WHEN ISNULL(RTRIM(l.PERI), '') = '' THEN NULL ELSE 'P' + RTRIM(l.PERI) END AS parent_key
+            FROM ol
+            JOIN ORDBOM2 l WITH (NOLOCK) ON l.MASTERI = ol.bom_eri
+            UNION ALL
+            SELECT 'PACKAGING', 2, RTRIM(l.CODE), ol.line_eri, ol.product_code,
+                   ol.order_qty, ol.line_serial, l.SERIAL, l.LVL,
+                   l.SUBPROD, l.SPEC, l.QTY,
+                   CASE WHEN l.VIRTUAL = 1 OR EXISTS (
+                            SELECT 1 FROM ORDBOM3 ch WITH (NOLOCK)
+                            WHERE ch.CODE = l.CODE AND ch.PERI = l.ERI)
+                        THEN 0 ELSE 1 END,
+                   'K' + RTRIM(l.ERI),
+                   CASE WHEN ISNULL(RTRIM(l.PERI), '') = '' THEN NULL ELSE 'K' + RTRIM(l.PERI) END
+            FROM ol
+            JOIN ORDBOM3 l WITH (NOLOCK) ON l.CODE = ol.order_bomcode
+            WHERE ISNULL(ol.order_bomcode, '') <> ''
+        )
         SELECT
-            CAST(NULL AS varchar(10))                             AS bom_kind,
-            RTRIM(b.CODE)                                         AS bom_code,
-            RTRIM(cl.ERI)                                         AS line_id,
-            RTRIM(cl.PROD)                                        AS product_code,
-            cl.QTY                                                AS order_qty,
-            l.SERIAL                                              AS line_no,
-            l.LVL                                                 AS bom_level,
-            RTRIM(l.SUBPROD)                                      AS material_code,
+            bl.bom_kind                                           AS bom_kind,
+            RTRIM(bl.bom_code)                                    AS bom_code,
+            RTRIM(bl.line_eri)                                    AS line_id,
+            RTRIM(bl.product_code)                                AS product_code,
+            bl.order_qty                                          AS order_qty,
+            bl.line_no                                            AS line_no,
+            bl.bom_level                                          AS bom_level,
+            RTRIM(bl.material_code)                               AS material_code,
             RTRIM(pr.CNAME)                                       AS material_name,
-            COALESCE(NULLIF(RTRIM(l.SPEC), ''), RTRIM(pr.SPEC))   AS spec,
+            COALESCE(NULLIF(RTRIM(bl.spec), ''), RTRIM(pr.SPEC))  AS spec,
             RTRIM(pr.UNIT)                                        AS unit,
             RTRIM(pr.CLAS)                                        AS material_class,
-            l.BOMQTY                                              AS qty_per_unit,
-            CASE WHEN l.VIRTUAL = 1 OR EXISTS (
-                     SELECT 1 FROM ORDBOM2 ch WITH (NOLOCK)
-                     WHERE ch.MASTERI = l.MASTERI AND ch.PERI = l.ERI)
-                 THEN 0 ELSE 1 END                                AS leaf,
+            bl.qty_per_unit                                       AS qty_per_unit,
+            bl.leaf                                               AS leaf,
             lp.price                                              AS base_price,
-            RTRIM(l.ERI)                                          AS line_key,
-            RTRIM(l.PERI)                                         AS parent_key
-        FROM ORDCORD1 co WITH (NOLOCK)
-        JOIN ORDCORD2 cl WITH (NOLOCK) ON cl.MASTERI = co.ERI
-        OUTER APPLY (
-            SELECT TOP 1 b1.ERI FROM ORDBOM1 b1 WITH (NOLOCK)
-            WHERE b1.SRCERI = cl.ERI OR (ISNULL(cl.BOMCODE, '') <> '' AND b1.CODE = cl.BOMCODE)
-            ORDER BY b1.SDATE DESC
-        ) pb
-        JOIN ORDBOM1  b  WITH (NOLOCK) ON b.ERI = pb.ERI
-        JOIN ORDBOM2  l  WITH (NOLOCK) ON l.MASTERI = b.ERI
-        LEFT JOIN PRODUCT pr WITH (NOLOCK) ON pr.CODE = l.SUBPROD
+            bl.line_key                                           AS line_key,
+            bl.parent_key                                         AS parent_key
+        FROM bl
+        LEFT JOIN PRODUCT pr WITH (NOLOCK) ON pr.CODE = bl.material_code
         OUTER APPLY (
             SELECT TOP 1 o.PRICE AS price
             FROM ORDSPHS2 o WITH (NOLOCK)
             JOIN ORDSPHS1 oh WITH (NOLOCK) ON oh.ERI = o.MASTERI
-            WHERE o.PROD = l.SUBPROD AND o.PRICE > 0
+            WHERE o.PROD = bl.material_code AND o.PRICE > 0
             ORDER BY oh.SDATE DESC
         ) lp
-        WHERE RTRIM(co.CODE) = :orderNo
-        ORDER BY cl.SERIAL, l.SERIAL
+        ORDER BY bl.line_serial, bl.kind_order, bl.line_no
       # Purchase strategy (采购策略) prices: PHSSPROMOT1 header / PHSSPROMOT2 lines, valid today,
       # newest line per material and supplier. Price compared = price EXCLUDING tax: PRC when
       # TAXRATE > 0, else PRICE (suppliers with 13% and 0% VAT become comparable, and it matches
