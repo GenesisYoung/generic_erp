@@ -10,6 +10,8 @@ import java.util.Map;
  * Request and response shapes of the purchase quotation (报价方案) API. All
  * rates are percentages (2.5 = 2.5%); amounts are in the purchase strategy's
  * currency (one currency per quotation; a warning says when prices mix).
+ * Material prices INCLUDE tax (last purchase ORDSPHS2.PRICETAX, purchase
+ * strategy PHSSPROMOT2.PRICE, typed-in prices).
  */
 public final class QuotationViews {
 
@@ -133,7 +135,7 @@ public final class QuotationViews {
      * material code to the {@link SupplierPrice#key} of the price to use
      * (LAST_PURCHASE or a strategy supplier code; missing = last purchase,
      * else cheapest strategy price). {@code manualPrices}: material code to a
-     * unit price excluding tax typed in by the purchaser, for a material
+     * unit price including tax typed in by the purchaser, for a material
      * without any price; it wins over every other price (0 or less = none). {@code fees}: rate
      * overrides by code for this quotation only. {@code marginRate}: fixed
      * margin instead of the tier (null = tier).

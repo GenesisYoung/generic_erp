@@ -338,8 +338,9 @@ erp:
       # checked by legacy_quotation_check_round3.sql (R3_1, R3_2); if it is per finished product,
       # return NULL as parent_key. Keys are prefixed with P/K so the two tables never mix.
       # leaf = 0 for a line that has sub-lines or is virtual: only bought parts are priced.
-      # base_price = the material's last purchase order price excl. tax (ORDSPHS2.PRICE; PRICETAX
-      # is the tax-included one): the most recent AUDITED purchase order line (ORDSPHS1.SCRUTINY set;
+      # base_price = the material's last purchase order price INCLUDING tax (ORDSPHS2.PRICETAX;
+      # PRICE is the one excluding tax, used only when PRICETAX is empty; decided 2026-11-26: the
+      # quotation works with tax-inclusive prices throughout): the most recent AUDITED purchase order line (ORDSPHS1.SCRUTINY set;
       # drafts are left out), newest SDATE, then entry time, PO no. and line. last_* = its supplier
       # (line SUPP, else header SUPP; always equal on 2025-2026 lines), date, PO no., tax rate %
       # (ORDSPHS1.TAX is an AMOUNT, so the rate comes from PRICETAX / PRICE) and currency.
@@ -407,7 +408,7 @@ erp:
         ) bl
         LEFT JOIN PRODUCT pr WITH (NOLOCK) ON pr.CODE = bl.material_code
         OUTER APPLY (
-            SELECT TOP 1 o.PRICE AS price,
+            SELECT TOP 1 COALESCE(NULLIF(o.PRICETAX, 0), o.PRICE) AS price,
                    COALESCE(NULLIF(RTRIM(o.SUPP), ''), RTRIM(oh.SUPP)) AS supplier_code,
                    oh.SDATE AS purchase_date, RTRIM(oh.CODE) AS po_no,
                    CASE WHEN o.PRICETAX > o.PRICE THEN ROUND((o.PRICETAX / o.PRICE - 1) * 100, 0)
@@ -415,16 +416,16 @@ erp:
                    COALESCE(NULLIF(RTRIM(o.CURR), ''), RTRIM(oh.CURR)) AS currency
             FROM ORDSPHS2 o WITH (NOLOCK)
             JOIN ORDSPHS1 oh WITH (NOLOCK) ON oh.ERI = o.MASTERI
-            WHERE o.PROD = bl.material_code AND o.PRICE > 0
+            WHERE o.PROD = bl.material_code AND COALESCE(NULLIF(o.PRICETAX, 0), o.PRICE) > 0
               AND ISNULL(oh.SCRUTINY, '') <> ''
             ORDER BY oh.SDATE DESC, oh.INDATETIME DESC, oh.CODE DESC, o.SERIAL DESC
         ) lp
         LEFT JOIN SUPPLIER ls WITH (NOLOCK) ON ls.CODE = lp.supplier_code
         ORDER BY bl.line_serial, bl.kind_order, bl.line_no
       # Purchase strategy (采购策略) prices: PHSSPROMOT1 header / PHSSPROMOT2 lines, valid today,
-      # newest line per material and supplier. Price compared = price EXCLUDING tax: PRC when
-      # TAXRATE > 0, else PRICE (suppliers with 13% and 0% VAT become comparable, and it matches
-      # the last PO price ORDSPHS2.PRICE). Supplier = line SUPP, or the header CODE when empty.
+      # newest line per material and supplier. Price = PHSSPROMOT2.PRICE, INCLUDING tax (decided
+      # 2026-11-26: tax-inclusive throughout, like the last PO price ORDSPHS2.PRICETAX; PRC is the
+      # price excluding tax). Supplier = line SUPP, or the header CODE when empty.
       price-query: |
         SELECT material_code, supplier_code, supplier_name, price, tax_rate, currency, valid_from, valid_to
         FROM (
@@ -432,7 +433,7 @@ erp:
                 RTRIM(l.PROD)                                     AS material_code,
                 sp.supplier_code                                  AS supplier_code,
                 COALESCE(RTRIM(s.CNAME), RTRIM(h.NAME))           AS supplier_name,
-                CASE WHEN l.TAXRATE > 0 AND l.PRC > 0 THEN l.PRC ELSE l.PRICE END AS price,
+                l.PRICE                                           AS price,
                 l.TAXRATE                                         AS tax_rate,
                 RTRIM(l.CURR)                                     AS currency,
                 COALESCE(l.BGNDATE, h.BGNDATE)                    AS valid_from,

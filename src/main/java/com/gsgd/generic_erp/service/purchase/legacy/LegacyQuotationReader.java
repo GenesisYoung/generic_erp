@@ -55,7 +55,7 @@ public interface LegacyQuotationReader {
      * parent ({@code parentKey}); the calculator multiplies it up the tree
      * ({@code lineKey} / {@code parentKey}) to get the quantity per finished
      * product. {@code orderQty} is the order line quantity. {@code basePrice}
-     * is the price excluding tax of the material's most recent purchase order
+     * is the price including tax of the material's most recent purchase order
      * line, {@code lastPurchase} where it comes from (null when not known).
      */
     record BomLineRow(String bomKind, String bomCode, String lineId, String productCode, BigDecimal orderQty,
