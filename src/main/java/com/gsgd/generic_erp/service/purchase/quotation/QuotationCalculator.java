@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.gsgd.generic_erp.configuration.i18n.I18n;
+import com.gsgd.generic_erp.dto.purchase.QuotationViews;
 import com.gsgd.generic_erp.dto.purchase.QuotationViews.Fee;
 import com.gsgd.generic_erp.dto.purchase.QuotationViews.FeeAmount;
 import com.gsgd.generic_erp.dto.purchase.QuotationViews.Item;
@@ -25,6 +26,7 @@ import com.gsgd.generic_erp.dto.purchase.QuotationViews.Settings;
 import com.gsgd.generic_erp.dto.purchase.QuotationViews.SupplierPrice;
 import com.gsgd.generic_erp.enums.QuotationFeeBase;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.BomLineRow;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.LastPurchase;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.PriceRow;
 
 /**
@@ -36,9 +38,12 @@ import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.PriceR
  * otherwise count twice). Each line is PRODUCT or PACKAGING: the BOM it comes
  * from decides, or, when the BOM does not say, the material class (classes
  * starting with a packaging prefix, "3" by default).</li>
- * <li>Each line takes the cheapest valid supplier price unless the purchaser
- * picked another supplier for that material. Amount = quantity per product x
- * order quantity x unit price.</li>
+ * <li>Each line takes the material's most recent purchase price (supplier and
+ * price of its last purchase order line); only a material that was never
+ * bought takes the cheapest valid purchase strategy price. The purchaser can
+ * pick another price for a material. The line says which source it uses and,
+ * for a last purchase price, the purchase date. Amount = quantity per product
+ * x order quantity x unit price.</li>
  * <li>Fees: MATERIAL fees are a percentage of the material cost, COST fees of
  * material cost plus MATERIAL fees. Their sum is the cost before profit.</li>
  * <li>Profit margin: the tier with the highest minimum the cost before profit
@@ -96,12 +101,18 @@ public final class QuotationCalculator {
             BigDecimal perUnit = row.lineKey() != null && perProduct.containsKey(row.lineKey())
                     ? perProduct.get(row.lineKey()) : nz(row.qtyPerUnit());
             BigDecimal totalQty = perUnit.multiply(nz(orderQty));
-            List<SupplierPrice> offers = suppliers.getOrDefault(row.materialCode(), List.of());
+            List<SupplierPrice> strategy = suppliers.getOrDefault(row.materialCode(), List.of());
+            SupplierPrice last = lastPurchaseOffer(row);
+            List<SupplierPrice> offers = new ArrayList<>();
+            if (last != null) {
+                offers.add(last);
+            }
+            offers.addAll(strategy);
+            // Rule: the last purchase price first; the cheapest strategy price only without one.
             SupplierPrice chosen = offers.isEmpty() ? null : offers.get(0);
             String wanted = selections.get(row.materialCode());
             if (wanted != null && !wanted.isBlank()) {
-                SupplierPrice match = offers.stream().filter(o -> wanted.equals(o.supplierCode())).findFirst()
-                        .orElse(null);
+                SupplierPrice match = offers.stream().filter(o -> wanted.equals(o.key())).findFirst().orElse(null);
                 if (match != null) {
                     chosen = match;
                 } else {
@@ -122,11 +133,14 @@ public final class QuotationCalculator {
                     priceWarnings++;
                 }
             }
+            boolean fromLast = chosen != null && chosen == last;
             Item item = new Item(kind, row.bomCode(), row.productCode(), row.lineNo(), row.level(),
                     row.materialCode(), row.materialName(), row.spec(), row.unit(), row.materialClass(), perUnit,
-                    orderQty, totalQty, offers, chosen == null ? null : chosen.supplierCode(),
-                    chosen == null ? null : chosen.supplierName(), unitPrice, amount,
-                    offers.isEmpty() ? null : offers.get(0).price(), row.basePrice(), check);
+                    orderQty, totalQty, offers, chosen == null ? null : chosen.key(),
+                    chosen == null ? null : chosen.supplierCode(), chosen == null ? null : chosen.supplierName(),
+                    unitPrice, amount, strategy.isEmpty() ? null : strategy.get(0).price(), row.basePrice(), check,
+                    chosen == null ? null : chosen.source(), fromLast ? last.purchaseDate() : null,
+                    fromLast ? last.poNo() : null);
             (KIND_PACKAGING.equals(kind) ? packaging : product).add(item);
         }
 
@@ -283,14 +297,25 @@ public final class QuotationCalculator {
         return chosen;
     }
 
-    /** Valid prices per material, one per supplier (the lowest), cheapest first. */
+    /** The material's last purchase price as an offer; null when it was never bought (or the supplier is unknown). */
+    static SupplierPrice lastPurchaseOffer(BomLineRow row) {
+        LastPurchase lp = row.lastPurchase();
+        if (lp == null || lp.supplierCode() == null || row.basePrice() == null || row.basePrice().signum() <= 0) {
+            return null;
+        }
+        return new SupplierPrice(SupplierPrice.LAST_PURCHASE_KEY, QuotationViews.PRICE_SOURCE_LAST_PURCHASE,
+                lp.supplierCode(), lp.supplierName(), row.basePrice(), lp.taxRate(), lp.currency(), null, null,
+                lp.date(), lp.poNo());
+    }
+
+    /** Valid purchase strategy prices per material, one per supplier (the lowest), cheapest first. */
     static Map<String, List<SupplierPrice>> suppliersByMaterial(List<PriceRow> rows) {
         Map<String, Map<String, SupplierPrice>> best = new LinkedHashMap<>();
         for (PriceRow r : rows) {
             if (r.materialCode() == null || r.supplierCode() == null || r.price() == null || r.price().signum() <= 0) {
                 continue;
             }
-            SupplierPrice p = new SupplierPrice(r.supplierCode(), r.supplierName(), r.price(), r.taxRate(),
+            SupplierPrice p = SupplierPrice.strategy(r.supplierCode(), r.supplierName(), r.price(), r.taxRate(),
                     r.currency(), r.validFrom(), r.validTo());
             best.computeIfAbsent(r.materialCode(), k -> new LinkedHashMap<>())
                     .merge(r.supplierCode(), p, (a, b) -> b.price().compareTo(a.price()) < 0 ? b : a);

@@ -20,7 +20,10 @@ class JdbcLegacyQuotationReaderRowsTest {
             SELECT 'PRODUCT' AS bom_kind, 'B1' AS bom_code, line_id, 'P1' AS product_code, 1 AS order_qty,
                    n AS line_no, 1 AS bom_level, 'M' || n AS material_code, 'name' AS material_name,
                    '' AS spec, 'PCS' AS unit, 'C' AS material_class, 2 AS qty_per_unit, 1 AS leaf,
-                   1.5 AS base_price, 'P' || n AS line_key, NULL AS parent_key
+                   1.5 AS base_price, 'P' || n AS line_key, NULL AS parent_key,
+                   CASE WHEN n = 1 THEN 'S7' END AS last_supplier_code, 'S7 Ltd' AS last_supplier_name,
+                   DATE '2026-10-03' AS last_purchase_date, 'P2611' AS last_po_no, 13 AS last_tax_rate,
+                   'RMB' AS last_currency
             FROM t WHERE line_id IN (:lineIds) ORDER BY n
             """;
     private static final String PRICE = """
@@ -50,6 +53,9 @@ class JdbcLegacyQuotationReaderRowsTest {
         assertEquals(1, reader.orderLines(LocalDate.of(2026, 1, 1), 1).size());
         List<LegacyQuotationReader.BomLineRow> bom = reader.bomLines("O1", List.of("L1", "L2"));
         assertEquals(5, bom.size());
+        assertEquals(new LegacyQuotationReader.LastPurchase("S7", "S7 Ltd", LocalDate.of(2026, 10, 3), "P2611",
+                new java.math.BigDecimal("13.0"), "RMB"), bom.get(0).lastPurchase());
+        assertEquals(null, bom.get(1).lastPurchase(), "never bought: no supplier");
         assertEquals(5, reader.prices(bom.stream().map(LegacyQuotationReader.BomLineRow::materialCode).toList())
                 .size());
 

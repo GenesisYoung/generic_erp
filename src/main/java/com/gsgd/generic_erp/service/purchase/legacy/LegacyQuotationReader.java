@@ -54,12 +54,27 @@ public interface LegacyQuotationReader {
      * material class decides). {@code qtyPerUnit} is the quantity per ONE
      * parent ({@code parentKey}); the calculator multiplies it up the tree
      * ({@code lineKey} / {@code parentKey}) to get the quantity per finished
-     * product. {@code orderQty} is the order line quantity.
+     * product. {@code orderQty} is the order line quantity. {@code basePrice}
+     * is the price excluding tax of the material's most recent purchase order
+     * line, {@code lastPurchase} where it comes from (null when not known).
      */
     record BomLineRow(String bomKind, String bomCode, String lineId, String productCode, BigDecimal orderQty,
             Integer lineNo, Integer level, String materialCode, String materialName, String spec, String unit,
             String materialClass, BigDecimal qtyPerUnit, boolean leaf, BigDecimal basePrice, String lineKey,
-            String parentKey) {
+            String parentKey, LastPurchase lastPurchase) {
+
+        public BomLineRow(String bomKind, String bomCode, String lineId, String productCode, BigDecimal orderQty,
+                Integer lineNo, Integer level, String materialCode, String materialName, String spec, String unit,
+                String materialClass, BigDecimal qtyPerUnit, boolean leaf, BigDecimal basePrice, String lineKey,
+                String parentKey) {
+            this(bomKind, bomCode, lineId, productCode, orderQty, lineNo, level, materialCode, materialName, spec,
+                    unit, materialClass, qtyPerUnit, leaf, basePrice, lineKey, parentKey, null);
+        }
+    }
+
+    /** The most recent purchase order line of a material: supplier, date, PO no., tax rate %, currency. */
+    record LastPurchase(String supplierCode, String supplierName, LocalDate date, String poNo, BigDecimal taxRate,
+            String currency) {
     }
 
     /** One supplier's price for one material. */

@@ -23,6 +23,7 @@ import com.gsgd.generic_erp.dto.purchase.QuotationViews.Plan;
 import com.gsgd.generic_erp.dto.purchase.QuotationViews.Settings;
 import com.gsgd.generic_erp.enums.QuotationFeeCode;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.BomLineRow;
+import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.LastPurchase;
 import com.gsgd.generic_erp.service.purchase.legacy.LegacyQuotationReader.PriceRow;
 
 /**
@@ -191,5 +192,79 @@ class QuotationCalculatorTest {
         assertEquals(0, new BigDecimal("6").compareTo(q.get("E2")));
         assertEquals(0, new BigDecimal("4").compareTo(q.get("E4")));
         assertEquals(0, new BigDecimal("10").compareTo(q.get("E5")));
+    }
+
+    static BomLineRow bought(String material, String base, String supplier, LocalDate date) {
+        return new BomLineRow(null, "BOM-1", "L1", "P-1", null, 1, 1, material, material + " name", "spec", "PCS",
+                "202", BigDecimal.ONE, true, new BigDecimal(base), null, null,
+                new LastPurchase(supplier, supplier + " Ltd", date, "P2611", new BigDecimal("13"), "RMB"));
+    }
+
+    static Plan calcRows(List<BomLineRow> bom, List<PriceRow> prices, Map<String, String> selections) {
+        OrderSummary order = new OrderSummary("O", null, null, null, null, null, null, 1, BigDecimal.TEN, true,
+                false, "PRODUCT_ONLY", 0, 0);
+        List<OrderLine> lines = List.of(new OrderLine("L1", "P-1", "Lamp", null, BigDecimal.TEN, "PCS", "BOM-1",
+                null));
+        return QuotationCalculator.calculate(new QuotationCalculator.Input(order, lines, bom, prices, defaults(),
+                selections, null, List.of("3"), LocalDateTime.of(2026, 11, 26, 9, 0), EN));
+    }
+
+    @Test
+    void lastPurchasePriceComesFirstEvenWhenAStrategyPriceIsLower() {
+        LocalDate day = LocalDate.of(2026, 10, 3);
+        Plan p = calcRows(List.of(bought("A", "1.70", "S7", day)),
+                List.of(price("A", "S1", "1.50"), price("A", "S2", "1.80")), Map.of());
+
+        Item a = p.productItems().get(0);
+        assertEquals("LAST_PURCHASE", a.priceSource());
+        assertEquals("LAST_PURCHASE", a.selectedKey());
+        assertEquals("S7", a.selectedSupplierCode(), "supplier of the last purchase");
+        assertEquals(0, bd("1.70").compareTo(a.unitPrice()));
+        assertEquals(day, a.lastPurchaseDate());
+        assertEquals("P2611", a.lastPurchaseNo());
+        assertEquals(3, a.suppliers().size(), "last purchase + two strategy prices");
+        assertEquals("LAST_PURCHASE", a.suppliers().get(0).source());
+        assertEquals(day, a.suppliers().get(0).purchaseDate());
+        assertEquals("STRATEGY", a.suppliers().get(1).source());
+        assertEquals(0, bd("1.50").compareTo(a.cheapestPrice()), "cheapest strategy price still shown");
+        assertEquals("OK", a.priceCheck());
+        assertEquals(bd("17.00"), p.productMaterialCost());
+    }
+
+    @Test
+    void strategyPriceOnlyWhenTheMaterialWasNeverBought() {
+        Plan p = calcRows(List.of(bom(null, "N", "202", "1", true, null)),
+                List.of(price("N", "S2", "1.80"), price("N", "S1", "1.50")), Map.of());
+
+        Item n = p.productItems().get(0);
+        assertEquals("STRATEGY", n.priceSource());
+        assertEquals("S1", n.selectedSupplierCode(), "best strategy price");
+        assertEquals("S1", n.selectedKey());
+        assertNull(n.lastPurchaseDate());
+        assertEquals("NO_BASE", n.priceCheck());
+    }
+
+    @Test
+    void purchaserCanPickAStrategyPriceOfTheSameSupplierOrGoBack() {
+        LocalDate day = LocalDate.of(2026, 10, 3);
+        List<BomLineRow> bom = List.of(bought("A", "1.70", "S1", day));
+        List<PriceRow> prices = List.of(price("A", "S1", "1.50"));
+
+        Item picked = calcRows(bom, prices, Map.of("A", "S1")).productItems().get(0);
+        assertEquals("STRATEGY", picked.priceSource());
+        assertEquals(0, bd("1.50").compareTo(picked.unitPrice()));
+        assertNull(picked.lastPurchaseDate());
+
+        Item back = calcRows(bom, prices, Map.of("A", "LAST_PURCHASE")).productItems().get(0);
+        assertEquals("LAST_PURCHASE", back.priceSource());
+        assertEquals(0, bd("1.70").compareTo(back.unitPrice()));
+    }
+
+    @Test
+    void noPriceWithoutPurchaseOrStrategy() {
+        Item x = calcRows(List.of(bom(null, "X", "202", "1", true, null)), List.of(), Map.of()).productItems()
+                .get(0);
+        assertNull(x.priceSource());
+        assertEquals("NO_PRICE", x.priceCheck());
     }
 }

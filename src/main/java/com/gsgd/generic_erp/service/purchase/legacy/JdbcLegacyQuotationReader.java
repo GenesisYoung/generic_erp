@@ -83,7 +83,7 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
                 num(rs, "order_qty"), integer(rs, "line_no"), integer(rs, "bom_level"), str(rs, "material_code"),
                 str(rs, "material_name"), str(rs, "spec"), str(rs, "unit"), str(rs, "material_class"),
                 num(rs, "qty_per_unit"), rs.getInt("leaf") != 0, num(rs, "base_price"),
-                blankToNull(str(rs, "line_key")), blankToNull(str(rs, "parent_key"))));
+                blankToNull(str(rs, "line_key")), blankToNull(str(rs, "parent_key")), lastPurchase(rs)));
     }
 
     private static Map<String, Object> bomParams(String orderNo, Collection<String> lineIds) {
@@ -159,6 +159,32 @@ public class JdbcLegacyQuotationReader implements LegacyQuotationReader {
     private static Integer integer(ResultSet rs, String col) throws SQLException {
         int v = rs.getInt(col);
         return rs.wasNull() ? null : v;
+    }
+
+    /** The last purchase columns; null when the query leaves them out or the material was never bought. */
+    private static LegacyQuotationReader.LastPurchase lastPurchase(ResultSet rs) throws SQLException {
+        if (!hasColumn(rs, "last_supplier_code")) {
+            return null;
+        }
+        String supplier = blankToNull(str(rs, "last_supplier_code"));
+        if (supplier == null) {
+            return null;
+        }
+        return new LegacyQuotationReader.LastPurchase(supplier,
+                hasColumn(rs, "last_supplier_name") ? blankToNull(str(rs, "last_supplier_name")) : null,
+                hasColumn(rs, "last_purchase_date") ? date(rs, "last_purchase_date") : null,
+                hasColumn(rs, "last_po_no") ? blankToNull(str(rs, "last_po_no")) : null,
+                hasColumn(rs, "last_tax_rate") ? num(rs, "last_tax_rate") : null,
+                hasColumn(rs, "last_currency") ? blankToNull(str(rs, "last_currency")) : null);
+    }
+
+    private static boolean hasColumn(ResultSet rs, String col) {
+        try {
+            rs.findColumn(col);
+            return true;
+        } catch (SQLException missing) {
+            return false;
+        }
     }
 
     /** Like {@link #integer} but null when a custom query leaves the column out. */

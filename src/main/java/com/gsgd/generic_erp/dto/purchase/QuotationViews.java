@@ -43,21 +43,50 @@ public final class QuotationViews {
             String unit, String productBomCode, String packagingBomCode) {
     }
 
-    public record SupplierPrice(String supplierCode, String supplierName, BigDecimal price, BigDecimal taxRate,
-            String currency, LocalDate validFrom, LocalDate validTo) {
+    /**
+     * One price a material can be bought at. {@code source} LAST_PURCHASE (the
+     * material's most recent purchase order line: {@code purchaseDate},
+     * {@code poNo}) or STRATEGY (purchase strategy 采购策略: {@code validFrom} /
+     * {@code validTo}). {@code key} is what {@link CalculateRequest#selections}
+     * names to choose it: {@link #LAST_PURCHASE_KEY} or the supplier code of a
+     * strategy price.
+     */
+    public record SupplierPrice(String key, String source, String supplierCode, String supplierName,
+            BigDecimal price, BigDecimal taxRate, String currency, LocalDate validFrom, LocalDate validTo,
+            LocalDate purchaseDate, String poNo) {
+
+        public static final String LAST_PURCHASE_KEY = "LAST_PURCHASE";
+
+        /** A purchase strategy price. */
+        public static SupplierPrice strategy(String supplierCode, String supplierName, BigDecimal price,
+                BigDecimal taxRate, String currency, LocalDate validFrom, LocalDate validTo) {
+            return new SupplierPrice(supplierCode, PRICE_SOURCE_STRATEGY, supplierCode, supplierName, price,
+                    taxRate, currency, validFrom, validTo, null, null);
+        }
     }
 
+    public static final String PRICE_SOURCE_LAST_PURCHASE = "LAST_PURCHASE";
+    public static final String PRICE_SOURCE_STRATEGY = "STRATEGY";
+
     /**
-     * One priced BOM line. {@code kind} PRODUCT or PACKAGING. {@code suppliers}
-     * cheapest first. {@code priceCheck}: OK, HIGH, LOW (selected price
-     * outside the band around {@code basePrice}, the last purchase price),
-     * NO_BASE (no earlier purchase) or NO_PRICE (no supplier price).
+     * One priced BOM line. {@code kind} PRODUCT or PACKAGING. {@code suppliers}:
+     * the last purchase price first (when the material was bought before),
+     * then the purchase strategy prices, cheapest first. Without a choice of
+     * the purchaser the last purchase price is used, and the cheapest strategy
+     * price only when there is none. {@code priceSource} says which one the
+     * line uses (LAST_PURCHASE / STRATEGY, null without a price);
+     * {@code lastPurchaseDate} is set when it is LAST_PURCHASE.
+     * {@code cheapestPrice} is the cheapest strategy price. {@code priceCheck}:
+     * OK, HIGH, LOW (selected price outside the band around {@code basePrice},
+     * the last purchase price), NO_BASE (no earlier purchase) or NO_PRICE (no
+     * price at all).
      */
     public record Item(String kind, String bomCode, String productCode, Integer lineNo, Integer level,
             String materialCode, String materialName, String spec, String unit, String materialClass,
             BigDecimal qtyPerUnit, BigDecimal orderQty, BigDecimal totalQty, List<SupplierPrice> suppliers,
-            String selectedSupplierCode, String selectedSupplierName, BigDecimal unitPrice, BigDecimal amount,
-            BigDecimal cheapestPrice, BigDecimal basePrice, String priceCheck) {
+            String selectedKey, String selectedSupplierCode, String selectedSupplierName, BigDecimal unitPrice,
+            BigDecimal amount, BigDecimal cheapestPrice, BigDecimal basePrice, String priceCheck,
+            String priceSource, LocalDate lastPurchaseDate, String lastPurchaseNo) {
     }
 
     /** {@code amount} = {@code baseAmount} x {@code ratePercent} / 100. */
@@ -84,7 +113,9 @@ public final class QuotationViews {
 
     /**
      * Changes the purchaser makes on the quotation page. {@code selections}:
-     * material code to supplier code (missing = cheapest). {@code fees}: rate
+     * material code to the {@link SupplierPrice#key} of the price to use
+     * (LAST_PURCHASE or a strategy supplier code; missing = last purchase,
+     * else cheapest strategy price). {@code fees}: rate
      * overrides by code for this quotation only. {@code marginRate}: fixed
      * margin instead of the tier (null = tier).
      */
