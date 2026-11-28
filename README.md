@@ -1,134 +1,116 @@
 # Generic ERP — Backend
 
-The backend service of the **Generic ERP System**, designed and developed by Genesis Young. Built with Spring Boot, it exposes a RESTful JSON API consumed by the Vue 3 frontend ([Generic-Front](../Generic-Front)). It currently provides authentication, authorization (RBAC), user management, and permission-gated navigation menus. Additional ERP business modules (inventory, purchasing, HR, etc.) will be layered on top of this foundation.
+The Spring Boot backend of the **Generic ERP** system. It serves a JSON REST API and a STOMP
+WebSocket to the Vue 3 frontend ([generic-front](https://github.com/GenesisYoung/generic-front)).
 
-## Tech Stack
+The new ERP works **next to** the old ERP (高格 VEPRO, SQL Server). The old ERP stays the system of
+record: this backend reads customer orders and purchase orders from it (read-only sync) and adds
+the work the old system does not do: purchase follow-up, placement tasks, quotations, purchasing
+exceptions with PMC approval, PMC order audit, dashboards and notifications.
+
+> **Where to go next**
+> - Deploy on a server: [deploy/README.md](deploy/README.md)
+> - Develop locally, architecture, conventions: [DEVELOPMENT.md](DEVELOPMENT.md)
+> - Per-feature SQL migrations and design notes: [`Implementation Doc/`](Implementation%20Doc) and [`docs/`](docs)
+
+## What it does
+
+| Area | What the user gets | API base path |
+|---|---|---|
+| Login and sessions | Username + password login, JWT access token, refresh token in an HttpOnly cookie, account lock after failed attempts | `/api/auth` |
+| Users, departments, roles | User management, one role per department, page overrides per user | `/api/root`, `/api/admin/departments`, `/api/admin/roles` |
+| Permissions and menus | Permission codes, sidebar menus, who can see what | `/api/admin/permissions`, `/api/permission`, `/api/manager/menu`, `/api/users` |
+| Product master data | Products and product categories | `/api/product`, `/api/admin/product` |
+| Customer orders | Sales orders synced from the old ERP | `/api/customer-orders` |
+| Purchase orders and follow-up | POs synced from the old ERP, follow-up records, templates, plan groups, reminders | `/api/purchase-orders`, `/api/followups`, `/api/followup-templates`, `/api/followup-plan-groups` |
+| Placement tasks | "Place the purchase order" tasks with deadlines and reminders | `/api/placement-tasks` |
+| Quotations (报价方案) | Cost quotation per sales order from BOM + purchase prices, Excel export | `/api/quotations` |
+| Purchasing exceptions | Report an exception, PMC approves or rejects it | `/api/purchase-exceptions` |
+| PMC order audit | Order review tasks, rules and evidence files | `/api/pmc/...` |
+| Dashboards | Purchasing and PMC dashboard tiles | `/api/dashboards` |
+| Notifications | Stored notifications, pushed live over WebSocket | `/api/notifications`, `/ws` |
+| Files | Chunked upload and merge | `/api/uploads`, `/api/file/merge` |
+
+Every response uses the same envelope (`BasicResponse<T>`, or `BasicPageResponse<T>` for pages).
+Every message the backend returns is localized (Simplified Chinese or English) and follows the
+frontend's language, which the frontend sends in `Accept-Language`.
+
+## How it fits together
+
+```mermaid
+flowchart LR
+    U[Browser] -->|"page, /api, /ws<br/>one origin"| N["nginx<br/>(frontend image)"]
+    N -->|"/api/* REST"| B["Spring Boot backend<br/>:8080"]
+    N -->|"/ws STOMP"| B
+    B -->|"JPA / JDBC"| M[("MySQL 8.4<br/>ERP data")]
+    B -->|"cache, refresh tokens"| R[("Redis 7")]
+    B -. "read-only sync<br/>every 15 min" .-> L[("Old ERP<br/>SQL Server (VEPRO)")]
+```
+
+## Tech stack
 
 | Category | Technology | Version |
 |---|---|---|
-| Language | Java | 17 |
-| Framework | Spring Boot | 4.0.5 |
-| Security | Spring Security + JWT (JJWT 0.12.6) | Boot-managed |
-| Password Hashing | Argon2 (BouncyCastle) | 1.78.1 |
-| ORM | Spring Data JPA / Hibernate | Boot-managed |
-| Database | MySQL (prod) / H2 (test) | — |
-| Messaging (planned) | Apache Kafka | Boot-managed |
-| Env Vars | Spring Dotenv | 5.1.0 |
-| Build | Maven (wrapper included) | — |
+| Language | Java | 18 in `pom.xml` (the Docker image builds and runs on 21) |
+| Framework | Spring Boot (Web MVC, Security, Data JPA, Data JDBC, WebSocket, Cache, AOP, Actuator) | 4.0.5 |
+| Authentication | JWT with JJWT, Argon2 password hashing (BouncyCastle) | 0.12.6 / 1.78.1 |
+| Database | MySQL (ERP data), H2 (some tests) | 8.4 |
+| Cache and token store | Redis (Lettuce pool) | 7 |
+| Old ERP access | Microsoft SQL Server JDBC driver, read-only | Boot-managed |
+| Excel export | Apache POI | 5.3.0 |
+| Configuration | `.env` file via spring-dotenv | 5.1.0 |
+| Build | Maven (wrapper included) | 3.9 |
 
-## Quick Start
+## Quick start
 
-### 1. Configure environment variables
+### Option A: run the whole system with Docker Compose (recommended for a server)
 
-Create a `.env` file at the project root (loaded by Spring Dotenv), or export them as system environment variables:
-
-```env
-DB_URL=jdbc:mysql://localhost:3306/erp
-DB_USERNAME=root
-DB_PASSWORD=root
-DB_DRIVER_CLASS_NAME=com.mysql.cj.jdbc.Driver
-ACCESS_TIMEOUT=900000            # access token TTL in ms (15 min)
-REFRESH_TIMEOUT=604800000        # refresh token TTL in ms (7 days)
-AUTHENTICATION_SECRET_KEY_ACCESS=<hmac-secret-for-access-tokens>
-AUTHENTICATION_SECRET_KEY_REFRESH=<hmac-secret-for-refresh-tokens>
-AUTH_COOKIE_SECURE=false         # local HTTP only; keep true in production
-CORS_ALLOWED_ORIGINS=http://localhost:5173
-LANGUAGE=EN                      # default language (EN / CN)
-```
-
-### 2. Start MySQL
+Clone both repositories next to each other, then:
 
 ```bash
-docker run -d --name erp-mysql \
-  -e MYSQL_ROOT_PASSWORD=root \
-  -e MYSQL_DATABASE=erp \
-  -p 3306:3306 mysql:latest
+cd generic_erp/deploy
+cp .env.example .env          # replace every "change-me"; secrets: openssl rand -base64 48
+docker compose up -d --build
+docker compose ps             # wait until all four services are "healthy"
 ```
 
-Hibernate is configured with `ddl-auto: update`, so tables are created/updated automatically on startup.
+Open `http://<server>:8088` and log in as **root / ChangeMe@2026**. Change the password at once.
+Ports, backups, HTTPS and other details are in [deploy/README.md](deploy/README.md).
 
-### 3. Run
+### Option B: run the backend from your IDE (development)
+
+You need JDK 21 (18 or newer works), Docker for MySQL and Redis, and a `.env` file in the project
+root. The full step-by-step guide, including the `.env` template, is in
+[DEVELOPMENT.md → Local development](DEVELOPMENT.md#5-local-development).
 
 ```bash
-./mvnw spring-boot:run
-# API available at http://localhost:8080
+./mvnw spring-boot:run        # API at http://localhost:8080/api
+./mvnw test                   # 215 tests; no MySQL or Redis needed (mocks + in-memory H2)
 ```
 
-### Tests
-
-```bash
-./mvnw test
-```
-
-Tests run against an in-memory H2 database via the `test` Spring profile (`application-test.yml`) — no environment variables required.
-
-### Production Build
-
-```bash
-./mvnw clean package -DskipTests
-java -jar target/generic_erp-*.jar
-```
-
-## Architecture
-
-Classic three-tier layered architecture with a stateless JWT security filter in front:
+## Project layout
 
 ```
-Request → JwtAuthenticationFilter → Controller → Service → Repository (JPA) → MySQL
+generic_erp/
+├── src/main/java/com/gsgd/generic_erp/
+│   ├── configuration/    security (JWT, permission checks), i18n, WebSocket, scheduling, exceptions
+│   ├── controller/       REST endpoints, one package per module
+│   ├── service/          business logic and scheduled sync / reminder jobs
+│   ├── repository/       Spring Data JPA repositories
+│   ├── entity/  dto/     database entities and API objects (entities never leave the service layer)
+│   ├── pmc/              PMC order audit module (tasks, rules, evidence)
+│   └── aop/              audit-record aspect and events
+├── src/main/resources/
+│   ├── application.yml           all settings; values come from environment variables
+│   ├── application-docker.yml    overrides used inside the Docker image
+│   ├── i18n/messages*.properties backend texts in English and Simplified Chinese
+│   └── db/*.sql                  extra migrations (order audit, evidence, menus)
+├── Implementation Doc/   per-feature design notes and V*.sql migrations
+├── docs/                 module requirements and fix write-ups
+├── deploy/               Docker Compose stack, .env.example, database init script
+└── Dockerfile            backend image (Maven build → Temurin 21 JRE)
 ```
 
-**Security flow:**
+## License and ownership
 
-1. Client logs in via `POST /api/auth/login`; the Argon2-hashed password is verified.
-2. On success, `JWTUtil` issues an access token and a refresh token (TTLs configurable via env vars).
-3. Every subsequent request carries `Authorization: Bearer <access token>`; `JwtAuthenticationFilter` validates it and populates the Spring Security context.
-4. Expired access tokens are renewed via `POST /api/auth/refresh/access`; refresh tokens can themselves be rotated via `POST /api/auth/refresh/refresh`. Refresh tokens are persisted (`UserRefreshToken`) for validation and rotation.
-5. Consecutive failed logins lock the account; login events are audit-logged.
-
-## API Overview
-
-| Area | Base Path | Endpoints |
-|---|---|---|
-| Authentication | `/api/auth` | `POST /login`, `POST /refresh/access`, `POST /refresh/refresh` |
-| User (self) | `/api/users` | `GET /fetch/sidebar/menu` — sidebar items for the authenticated user |
-| User management | `/api/root` | `GET /user/fetch`, `GET /user/detail`, `/users`, `DELETE /delete/{id}` |
-| Menu management | `/api/manager/menu` | `GET /fetch`, `GET /fetch/valid`, `POST /save`, `POST /delete` |
-| Permissions (admin) | `/api/admin/permissions` | `GET /fetch`, `POST /save`, `POST /delete`, `POST /deleteRoot` |
-| Permission queries | `/api/permission` | `POST /fetch`, `GET /menu/{navId}/users`, `GET /menu/permission`, `GET /menu/registration` |
-| Permission assignment | `/api/permission/manipulate` | `POST /user`, `POST /permission`, `POST /registration` |
-
-All responses are wrapped in a consistent envelope (`BasicResponse<T>` / paginated `BasicPageResponse<T>`).
-
-## Project Structure
-
-```
-src/main/java/com/gsgd/generic_erp/
-├── GenericErpApplication.java     # Spring Boot entry point
-├── configuration/security/        # JWT util, auth filter, security config, Argon2 auth impl
-├── controller/
-│   ├── auth/                      # /api/auth, /api/users
-│   └── admin/                     # user / menu / permission management endpoints
-├── service/                       # business logic (auth, admin)
-├── repository/                    # Spring Data JPA repositories (auth, admin)
-├── entity/auth/                   # JPA entities: User, Role, Permission, NavigationMenu, join tables…
-├── dto/                           # data transfer objects (entities are never exposed directly)
-├── spec/                          # JPA Specifications for dynamic filtering
-├── view/                          # database view mappings
-├── enums/                         # Language (EN / CN) i18n enums
-└── util/                          # BasicResponse, pagination helpers, global variables
-```
-
-## Data Model (RBAC)
-
-Users are assigned roles (`UserRole`); roles carry permissions (`RolePermission`); permissions map to fine-grained actions (`ActionPermission`). Navigation menu visibility is controlled per user (`UserNavMenu`) and driven by the same permission model. Supporting entities cover departments, extended user profiles, login audit logs, and persisted refresh tokens.
-
-## Conventions
-
-- New ERP modules follow the `entity/<module>/`, `controller/<module>/` package pattern.
-- DTOs for all data leaving the service layer — never expose raw entities.
-- Lombok `@Data`, `@Builder`, `@RequiredArgsConstructor` are the approved annotations.
-- `ddl-auto: update` is for development only; introduce Flyway/Liquibase before shared production use.
-
-## Further Reading
-
-See [DEVELOPMENT.md](DEVELOPMENT.md) for the full development process document, module completion status, and roadmap.
+Designed and developed by Genesis Young. Private project.
