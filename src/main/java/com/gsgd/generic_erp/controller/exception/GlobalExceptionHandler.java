@@ -9,8 +9,11 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.gsgd.generic_erp.configuration.exception.AuthenticationException;
 import com.gsgd.generic_erp.configuration.exception.DuplicateValueException;
@@ -75,6 +78,26 @@ public class GlobalExceptionHandler {
                 log.warn("Invalid request: {}", e.getMessage());
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                                 .body(new SimpleResponse(400, I18n.t(e.getMessage())));
+        }
+
+        // A URL that no controller maps (for example a wrong prefix such as /api/api/...).
+        // Spring treats it as a missing static file; it is the caller's mistake, not a
+        // server bug, so answer 404 instead of letting the catch-all below make it a 500.
+        @ExceptionHandler({ NoResourceFoundException.class, NoHandlerFoundException.class })
+        public ResponseEntity<SimpleResponse> handleNotFound(Exception e, HttpServletRequest request) {
+                log.warn("No endpoint: {} {}", request.getMethod(), request.getRequestURI());
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                                .body(new SimpleResponse(404, I18n.t("error.notFound", request.getRequestURI())));
+        }
+
+        // The URL exists but not for this HTTP method (for example DELETE on a GET-only path).
+        @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+        public ResponseEntity<SimpleResponse> handleMethodNotAllowed(HttpRequestMethodNotSupportedException e,
+                        HttpServletRequest request) {
+                log.warn("Method not allowed: {} {}", request.getMethod(), request.getRequestURI());
+                return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                                .body(new SimpleResponse(405, I18n.t("error.methodNotAllowed",
+                                                request.getMethod() + " " + request.getRequestURI())));
         }
 
         // Unexpected: a bug. ERROR level, full stack trace, generic message to the
