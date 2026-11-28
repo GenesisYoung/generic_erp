@@ -63,6 +63,8 @@ public class WebSecurityConfiurer {
                         .requestMatchers("/api/auth/login", "/api/auth/refresh/access")
                         .permitAll()
                         .requestMatchers("/ws/**").permitAll() // handshake only; CONNECT is still authenticated
+                        // Container health check (status only, no details). Not proxied by nginx.
+                        .requestMatchers("/actuator/health").permitAll()
                         .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD)
                         .permitAll()
                         // Everything else requires a login; what the caller may do is decided
