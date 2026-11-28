@@ -119,13 +119,66 @@ class QuotationCalculatorTest {
     }
 
     @Test
-    void fromThreeThousandUsesTenPercent() {
+    void tierIsChosenByTheCostPerUnitNotByTheOrderTotal() {
+        // 1000 products: 6,655 before profit for the order, but 6.655 per unit -> lowest tier (15%).
         Plan p = calc("1000", Map.of(), defaults(), null);
         assertEquals(bd("6655.00"), p.costBeforeProfit());
-        assertEquals(0, bd("10").compareTo(p.marginRate()));
-        assertEquals(0, bd("3000").compareTo(p.marginTierMin()));
-        assertEquals(bd("665.50"), p.profit());
-        assertEquals(bd("7759.73"), p.totalPrice());
+        assertEquals(0, bd("15").compareTo(p.marginRate()));
+        assertEquals(1, p.units().size());
+        var u = p.units().get(0);
+        assertEquals(bd("5.5000"), u.bomUnitCost(), "BOM cost of one product: 2 x 1.50 + 2.00 + 0.50");
+        assertEquals(bd("6.6550"), u.costBeforeProfit());
+        assertEquals(bd("5.5000"), u.fees().get(0).baseAmount(), "fee base = BOM cost per unit");
+        assertEquals(0, u.unitPrice().multiply(bd("1000")).compareTo(u.totalPrice()));
+        assertEquals(u.totalPrice(), p.totalPrice());
+
+        // A product whose cost before profit reaches 3,000 PER UNIT gets 10%.
+        List<BomLineRow> dear = List.of(bom(null, "D", "202", "1", true, null));
+        Plan big = calcRows(dear, List.of(price("D", "S1", "2500")), Map.of());
+        var bu = big.units().get(0);
+        assertEquals(0, bd("3025.0000").compareTo(bu.costBeforeProfit()), "2500 + 21% fees");
+        assertEquals(0, bd("10").compareTo(bu.marginRate()));
+        assertEquals(0, bd("3000").compareTo(bu.marginTierMin()));
+    }
+
+    @Test
+    void unitTotalPriceIsPriceTimesUsageAndAddsUpToTheBomCostPerUnit() {
+        Plan p = calc("100", Map.of(), defaults(), null);
+        Item a = p.productItems().get(0);
+        assertEquals(bd("3.000000"), a.unitTotalPrice(), "1.50 x 2 per product");
+        assertEquals(bd("2.000000"), p.productItems().get(1).unitTotalPrice());
+        assertEquals(bd("0.500000"), p.packagingItems().get(0).unitTotalPrice());
+        var u = p.units().get(0);
+        assertEquals(bd("5.0000"), u.productUnitCost());
+        assertEquals(bd("0.5000"), u.packagingUnitCost());
+        assertEquals(bd("5.5000"), p.lines().get(0).bomUnitCost());
+        assertEquals(u.unitPrice(), p.lines().get(0).unitPrice());
+    }
+
+    @Test
+    void outsourcedProcessingPartAddsItsProcessingFeeOnTopOfItsMaterials() {
+        BomLineRow part = new BomLineRow(null, "B", "L1", "P-1", null, 1, 1, "501-X", "frame", null, "PCS", "501",
+                bd("2"), false, null, "P1", null, null, true);
+        BomLineRow child = new BomLineRow(null, "B", "L1", "P-1", null, 2, 2, "201-Y", "steel", null, "PCS", "201",
+                bd("1"), true, null, "P2", "P1");
+        BomLineRow selfMade = new BomLineRow(null, "B", "L1", "P-1", null, 3, 1, "603-Z", "kit", null, "PCS", "603",
+                bd("1"), false, null, "P3", null, null, false);
+        List<PriceRow> prices = List.of(
+                new PriceRow("501-X", "5051", "Processor", bd("1.00"), bd("13"), "RMB", null, null, true),
+                new PriceRow("501-X", "S9", "Seller", bd("9.00"), bd("13"), "RMB", null, null, false),
+                price("201-Y", "S1", "0.50"));
+        Plan p = calcRows(List.of(part, child, selfMade), prices, Map.of());
+
+        assertEquals(2, p.productItems().size(), "processed part + its material; the in-house kit is not priced");
+        Item fee = p.productItems().get(0);
+        assertEquals("PROCESSING", fee.itemType());
+        assertEquals("5051", fee.selectedSupplierCode(), "only the processing fee, not the whole part");
+        assertEquals(1, fee.suppliers().size());
+        assertEquals(bd("2.000000"), fee.unitTotalPrice(), "1.00 x 2 per product");
+        Item steel = p.productItems().get(1);
+        assertEquals("MATERIAL", steel.itemType());
+        assertEquals(bd("1.000000"), steel.unitTotalPrice(), "0.50 x (1 x 2) per product");
+        assertEquals(bd("3.0000"), p.units().get(0).bomUnitCost());
     }
 
     @Test

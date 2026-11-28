@@ -134,9 +134,10 @@ public class QuotationService {
             bomLines = reader.bomLines(orderNo.strip(), lineIds);
             long leaves = bomLines.stream().filter(BomLineRow::leaf).count();
             long withMaterial = bomLines.stream().filter(b -> b.leaf() && b.materialCode() != null).count();
+            long processed = bomLines.stream().filter(b -> b.processing() && !b.leaf()).count();
             log.info("Quotation: order {} -> {} BOM rows from the old ERP, {} leaf rows, {} leaf rows with a"
-                    + " material code (order lines {}, BOM codes {})", orderNo.strip(), bomLines.size(), leaves,
-                    withMaterial, rows.size(),
+                    + " material code, {} outsourced processing parts (order lines {}, BOM codes {})",
+                    orderNo.strip(), bomLines.size(), leaves, withMaterial, processed, rows.size(),
                     rows.stream().map(r -> r.productBomCode() + "/" + r.packagingBomCode()).toList());
             if (bomLines.isEmpty()) {
                 log.warn("Quotation: no BOM rows for order {} (line ids {}). Check: {}", orderNo.strip(), lineIds,
@@ -144,7 +145,7 @@ public class QuotationService {
             }
             Set<String> materials = new LinkedHashSet<>();
             for (BomLineRow b : bomLines) {
-                if (b.leaf() && b.materialCode() != null) {
+                if ((b.leaf() || b.processing()) && b.materialCode() != null) {
                     materials.add(b.materialCode());
                 }
             }
