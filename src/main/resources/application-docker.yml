@@ -1,0 +1,36 @@
+# Profile used inside the Docker image (SPRING_PROFILES_ACTIVE=docker).
+# Everything else still comes from environment variables, see deploy/.env.example.
+server:
+  port: 8080
+  # nginx sends X-Forwarded-*; lets redirects, same-origin and cookie checks see the public URL.
+  forward-headers-strategy: framework
+  shutdown: graceful
+
+spring:
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        "[format_sql]": false
+        "[use_sql_comments]": false
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  file:
+    name: /app/logs/generic_erp.log
+  logback:
+    rollingpolicy:
+      max-file-size: 50MB
+      max-history: 14
+  level:
+    root: INFO
+    web: INFO
+    "[org.hibernate.SQL]": WARN
+    "[org.hibernate.type.descriptor.sql.BasicBinder]": WARN
+    "[org.hibernate]": ERROR
+    "[org.springframework.jdbc.core.JdbcTemplate]": INFO
+    "[org.springframework.jdbc.core.StatementCreatorUtils]": INFO
