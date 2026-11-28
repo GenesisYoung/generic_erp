@@ -1,0 +1,7 @@
+# Optional: reach the ERP MySQL from the server itself (e.g. Navicat over an SSH tunnel).
+#   docker compose -f docker-compose.yml -f docker-compose.db-port.yml up -d
+# Bound to 127.0.0.1 only, so it is not open to the network.
+services:
+  db:
+    ports:
+      - "127.0.0.1:${ERP_MYSQL_HOST_PORT:-3308}:3306"
